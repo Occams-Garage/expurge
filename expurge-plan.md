@@ -30,8 +30,10 @@ Stack:
 - **Background script**: holds run state and profile, iterates the dataset, opens broker
   tabs in paced batches, collects verdicts, runs draft generation, manages dataset
   fetch/verify.
-- **Content scripts**: injected only on broker domains. Read the result page DOM, run the
-  deterministic matcher, paint the on-page overlay, send the verdict back to background.
+- **Content scripts**: injected only on broker domains. Classify the page (challenge /
+  load-error / normal), paint the on-page overlay telling the human what to look for, and
+  send the verdict back to background. (v1 is shallow-first: no per-site field extraction on
+  the page; the human is the matcher. See section 7.)
 - **Popup / options page**: profile form, run dashboard, coverage report, export/import.
 
 What carried over untouched from the pre-pivot work (the expensive thinking survives,
@@ -95,8 +97,15 @@ order field). Each channel:
 - `kind`: `dedicated_optout | general_contact | form_required`. This is the safety field.
   It separates a real removal address from a footer "contact us" address from a
   form-only site, so email-as-fallback never silently mails PII to a `sales@` inbox.
+- `subject` (optional, email channels): an exact subject line some brokers require for
+  opt-out emails. Present -> used verbatim in mailto/.eml/copy-paste; absent -> the
+  template supplies a default. Kept as a structured field, NOT folded into a custom
+  template, so one shared template serves many brokers and the requirement stays
+  machine-checkable. (First instance of a broader "broker-specific request constraint"
+  pattern; add a field rather than a custom template when the next one appears.)
 - `template`: named body template (email channels).
-- `verified`, `last_checked`, `source`: verification is **per-channel**, not per-broker.
+- `verified`, `last_checked`, `source`, `verified_by`: verification is **per-channel**, not
+  per-broker. All four are project-assigned and never honored from a PR (see 5a).
 
 **identity sub-block** (at optout level, applies to whichever channel is used):
 - `required` (default false), `accepted[]`, `redact[]`, `notes`. Encodes withhold-by-
@@ -145,17 +154,139 @@ demands.
 Protects the user from the project's own dataset. Per-channel.
 
 - Lifecycle: records/channels start `unverified` (LLM-drafted at dev time, or PR'd).
-  Become `verified` only when a human opens the real opt-out page and confirms method,
-  target, and ID requirements, then stamps `last_checked` + `source` (the receipt). A
-  changed site flips to `broken` and drops out of active use.
+  Become `verified` only when a human opens the real opt-out page, runs the checklist (5a),
+  and the project stamps `last_checked` + `source` + `verified_by` (the receipt). A changed
+  site flips to `broken` and drops out of active use.
 - **Check step is lenient**: a wrong search URL just wastes a click. Skip unverified by
   default; a setting allows including them.
 - **Draft step is strict**: only a verified channel can produce a draft. No override. A
   wrong opt-out address mails PII to the wrong place.
-- Stale tracking: a verified channel untouched ~6 months gets flagged for re-verification.
+- Note the two distinct status axes, kept separate deliberately: `status` (operational:
+  attempt or not) vs channel `verified` (trust: act or not).
+- **Re-verification: hard expiry, long window, graded warning.** A `verified` claim has a
+  shelf life, because the strict-gate logic (a wrong opt-out address causes real harm) only
+  strengthens with time as the address grows more likely to have drifted. "Verified 14
+  months ago and untouched" is epistemically close to unverified, so it must stop unlocking
+  the gate. Soft expiry (keep working, just flag it) was rejected: it keeps the flag
+  looking honest while the truth decays silently, the exact failure to prevent.
+  - **Warn at 6 months, expire at 12.** The warning window surfaces the work with runway
+    (maintainer view + coverage flag "verified 7mo ago, expires in 5") so re-checks happen
+    before the cliff.
+  - **Expiry is computed live from `last_checked`, not a written state.** The gate's check
+    is "verified AND `last_checked` within shelf life." No background job flips flags;
+    staleness is derived on every gate evaluation, so it can never get out of sync. An
+    expired channel is NOT deleted or reset to `unverified` (that would lose provenance and
+    the prior `source`); it simply stops satisfying the gate until re-checked.
+  - **User-facing**: an expired broker shows in coverage as "needs re-checking, temporarily
+    unavailable" (a maintenance state), never a silent vanish, never an alarm.
+  - **Two triggers**: approaching-expiry (time), and observed-in-the-wild failure (the run
+    model's `load_error` / `challenge` skips in aggregate signal drift BEFORE the calendar
+    would; the better trigger, already collected).
+  - **Re-verification is the same checklist** (5a). Its load is the signal for when to
+    activate the deferred trusted-verifier tier: delegation turns on when re-check cost
+    crosses what one person can carry, not on a guess.
 
-Note the two distinct status axes, kept separate deliberately: `status` (operational:
-attempt or not) vs channel `verified` (trust: act or not).
+**Verification mechanics (how the act is performed and recorded).** Verification is
+*judgment* (eyes on the live page), not data entry; tooling can capture verdicts but can't
+do the looking. So v1 keeps it manual and adds correctness guardrails rather than a guided
+app:
+- **v1: hand-edit the JSON.** The ~25-site launch pass is itself the requirements-gathering
+  for any future tooling; building a guided tool first would target imagined friction.
+- **CI schema validator from day one (double duty):**
+  - *Correctness*: rejects malformed records (a `verified: true` with no `source`, a future
+    or malformed `last_checked`, an `email` channel missing `target`, an unknown `kind`,
+    etc.).
+  - *Trust enforcement*: gates on the PR's diff and author. If a diff touches the trust
+    bits (`verified` / `source` / `last_checked` / `verified_by`) and the author isn't the
+    maintainer (or a future trusted-verifier identity), CI fails it. Contributed records
+    must carry `verified: false`/absent and null trust fields; anything else from a non-
+    privileged author is rejected with a clear "verification is maintainer-set; leave these
+    blank" message. This makes "the project assigns verification, never a PR" mechanically
+    unmergeable rather than a review-time promise.
+- **Optional one-line stamp helper** (`verify <broker-id> <channel>`): sets `last_checked`
+  to today, `verified_by` to the maintainer, prompts for the `source` URL, flips
+  `verified: true`. Removes the error-prone clerical bit (typo'd date in the gate's key
+  field) without being the guided-checklist tool. Build only if hand-stamping chafes during
+  the launch pass.
+- **Deferred to v2 (with a hard caveat): wider, easier submission intake.** A web form so
+  non-technical people can submit brokers without PR knowledge, with LLM-agent/script
+  pre-filtering for spam and plausibility. CAVEAT, load-bearing: automated vetting filters
+  the FRONT of the funnel (volume, plausibility, spam) but CANNOT perform verification,
+  which is the human act of looking at the real page. A lower-friction, identity-less intake
+  is a more attractive vector for malicious records (a plausible site with an attacker-
+  controlled "opt-out email"), so submissions from any source land `unverified`, and a human
+  still does the checklist before anything unlocks the gate. The web form and agents may
+  widen and pre-filter intake; they must NEVER assign trust. The full guided-checklist tool
+  also belongs here, built when the trusted-verifier tier activates (when consistency across
+  multiple verifiers becomes the actual problem).
+
+### 5a. Verification workflow (the human act the draft gate trusts)
+
+Verification is the pre-launch critical path: the draft gate generates nothing from
+unverified channels, so the launch blocker is a human verifying ~25 sites. It must be a
+**fixed, written checklist, identical for the maintainer and every contributor**, or
+`verified` degrades into "someone glanced at it once" and the gate's guarantee rots.
+
+Principle: a verifier confirms **exactly the fields the draft step mechanically trusts, and
+nothing it ignores.** Not display name, not tier (a wrong tier just misorders). Only the
+fields that, if wrong, cause a real-world bad send. That keeps the checklist short, focused
+on harm, and repeatable.
+
+**Channel verification checklist** (open the broker's real opt-out page beside its record;
+if any item can't be confirmed, the channel stays `unverified`):
+1. **Opt-out target correct and current** — `target` matches the live page, typed
+   character-for-character (the dangerous field; check it first).
+2. **`kind` is honest** — `dedicated_optout` vs `general_contact` vs `form_required`. If the
+   record says email but the site insists on the form, it's `form_required`; fix the record.
+3. **Method actually works as stated** — email channel genuinely accepts email removals;
+   web_form exists and loads.
+4. **Required subject, if any** — record an exact required subject in `subject`; else leave
+   empty (template default applies).
+5. **Requester requirements** — listing URL in body, reference number, request-from-listed-
+   email, etc., reflected in the record.
+6. **Identity requirements, checked honestly** — `required` true ONLY if the site truly
+   won't process without ID (offered/optional = false, withhold-by-default); `accepted` and
+   `redact` match the page.
+7. **Search template resolves (sanity check only)** — render the search URL for a test
+   identity, confirm a real results page. See asymmetry note below.
+8. **Stamp the receipt** — `source` = exact URL looked at; `last_checked` = today.
+
+A channel is `verified` only when 1-6 and 8 hold.
+
+**Who may verify, and how contributor trust works.** `verified` is exactly as security-
+critical as the opt-out field it unlocks: it is the flag that lets the draft gate act on a
+channel, so a false `verified` mails real PII to a wrong/attacker address. This is the same
+trust-assertion problem the signing keys solve, one layer up (signing = "is this dataset
+from the maintainer"; verification = "is this `verified` backed by a human who did the
+checklist").
+- **`verified`, `source`, `last_checked`, and `verified_by` are project-assigned, never
+  honored from a PR.** The dataset is open source, so a PR can set any field; the project
+  ignores a contributed `verified: true`. Contributed records ALWAYS land `unverified`
+  regardless of what the PR claims. Contributors can submit everything else (broker, search
+  template, opt-out channel, notes); the trust bits are stamped by the project's own
+  verification act.
+- **v1 is maintainer-only verification.** At ~25 sites the maintainer verifies personally,
+  so delegation buys nothing yet and every delegation model adds human-trust overhead
+  (vetting, granting, revoking) that is pure cost until contributors actually arrive.
+- **`verified_by` is recorded from day one** (provenance), even though it just says the
+  maintainer on every v1 record. This is the cheap-now-expensive-later hedge: when a
+  trusted-verifier tier is added later, provenance already exists, so a now-distrusted
+  verifier's records can be found and re-checked (the human analogue of key rotation).
+  Without the field, widening the circle later means you can't audit who vouched for what.
+- Future tiers, designed-for-not-built: a **trusted-verifier** set (vetted contributors who
+  may verify, like maintainers with merge rights) and, only if ever justified,
+  **two-person ratification** (a second trusted human re-runs the checklist). Both are
+  policy changes later, not schema migrations, because `verified_by` is already present.
+
+**Search is a sanity check in v1, not a second formal flag.** Opt-out and search fail
+independently and have different fixes, so they are conceptually separate verification acts.
+But the harm is asymmetric: a wrong opt-out target mails PII to the wrong place (strict,
+gated `verified`), while a wrong search URL just shows a dead page the user notices instantly
+and a self-correcting false "not listed." So search gets a quick does-it-resolve glance
+during the same pass plus `status: broken` as its safety valve, NOT its own `verified` flag.
+Promote search to a formal flag only if search-rot later becomes a frequent, costly problem.
+General rule this illustrates: build heavy trust machinery only for the failure that
+actually causes harm.
 
 ---
 
@@ -390,7 +521,9 @@ the aka-indexed listing. Coverage still counts brokers, not searches.
 - Hand-curated ~25 people-search sites, all verified.
 - Open-and-confirm with on-page overlay; content-script DOM read + deterministic matcher.
 - Paced batched tab opening (default 5).
-- `.eml` draft generation + form/general-contact instruction cards, behind the draft gate.
+- Draft generation behind the draft gate: three send surfaces (mailto default / .eml /
+  copy-paste) for email channels, plus instruction cards for form-required and
+  general-contact channels.
 - Per-channel verification model.
 - Coverage report.
 - Enumerated optional per-domain host permissions with runtime consent.
@@ -430,19 +563,19 @@ the aka-indexed listing. Coverage still counts brokers, not searches.
 
 ## 12. Open decisions (still to resolve)
 
-1. **Draft output mechanism in the extension**: how a generated `.eml` reaches the user's
-   mail client from inside Firefox (downloads API vs `mailto:` vs other), and what
-   send-it-yourself feels like in practice. Next branch.
-2. **Dataset fetch specifics** (trigger is decided: user-chosen, default manual,
+1. **Dataset fetch specifics** (trigger is decided: user-chosen, default manual,
    consent-gated first fetch): the schedule cadence for automatic mode and the exact
    consent-prompt copy still need pinning.
-3. **Local-LLM extraction in an extension** (folded into the v2 automation note): reaching a
+2. **Local-LLM extraction in an extension** (folded into the v2 automation note): reaching a
    localhost model endpoint from a content/background script needs a localhost host
    permission and CORS config. Deferred to v2; viability to confirm.
-4. **Number of body templates**: lean 2-3 (generic CCPA, California-specific).
-5. **MV2 vs MV3 on Firefox / current AMO review policy for content-reading extensions**:
+3. **Number of body templates**: lean 2-3 (generic CCPA, California-specific). Connects to
+   the send mechanism: templates fill the mailto/.eml/copy-paste body.
+4. **MV2 vs MV3 on Firefox / current AMO review policy for content-reading extensions**:
    verify against current AMO docs before fixing the manifest shape (knowledge here may be
    stale).
 
-Resolved since last consolidation: run model (section 7, fully designed) and the
-auto/manual update trigger (section 8).
+Resolved since last consolidation: the entire verification branch (5/5a: checklist,
+verifier-trust model, `verified_by`, hard-expiry re-verification, hand-edit + CI-validator
+mechanics, v2 submission-intake caveat), the `subject` field (section 3), and the draft
+output / send-mechanism (section 10).
