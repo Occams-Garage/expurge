@@ -26,10 +26,17 @@ Why the extension is the right shape, not just a UX preference:
   sitting right there in their own session. Then the overlay appears.
 
 Stack:
-- TypeScript + WebExtensions API.
-- **Background script**: holds run state and profile, iterates the dataset, opens broker
-  tabs in paced batches, collects verdicts, runs draft generation, manages dataset
-  fetch/verify.
+- TypeScript + WebExtensions API. **Manifest V3**, targeting **Firefox 140+** so the
+  extension can use Firefox's built-in data-collection consent experience and declare its
+  data practices in the manifest via Mozilla's data-classification taxonomy (including the
+  explicit "no data collection" declaration, AMO policy 6.2.1). MV3 locks: host patterns go
+  in `optional_host_permissions` (NOT `optional_permissions`); API permissions (downloads,
+  tabs, webNavigation) go in `permissions`/`optional_permissions`; ephemeral run state uses
+  `browser.storage.session` (survives event-page spindown, clears on browser close). Verify
+  the current taxonomy format against live Mozilla docs before writing the manifest.
+- **Background script**: holds run state and profile (in-memory by default, persisted only
+  under the storage opt-in, see 4a), iterates the dataset, opens broker tabs in paced
+  batches, collects verdicts, runs draft generation, manages dataset fetch/verify.
 - **Content scripts**: injected only on broker domains. Classify the page (challenge /
   load-error / normal), paint the on-page overlay telling the human what to look for, and
   send the verdict back to background. (v1 is shallow-first: no per-site field extraction on
@@ -87,8 +94,10 @@ instructions with ZERO broker-specific branching. Per record:
   dataset; quarantined by `status: broken` and verification when it drifts.
 - `requires[]`: RAW profile fields that must be present to attempt this broker. Missing
   any -> skip with reason `missing:<field>`, which feeds the coverage nudge.
-- `exposes[]`: data types the site publicly shows. Drives the confirm prompt and tells the
-  analyzer which fields to try to extract. Descriptive, never gates.
+- `exposes[]`: data types the site publicly shows. Drives the confirm prompt ("look for
+  your age, address, relatives"). In v1 this guides the human's eyes; with the deferred
+  extraction-hint enrichment it would also tell an extractor which fields to look for.
+  Descriptive, never gates.
 
 **optout block — an ORDERED LIST of channels** (list position = preference; no explicit
 order field). Each channel:
@@ -104,8 +113,12 @@ order field). Each channel:
   machine-checkable. (First instance of a broader "broker-specific request constraint"
   pattern; add a field rather than a custom template when the next one appears.)
 - `template`: named body template (email channels).
-- `verified`, `last_checked`, `source`, `verified_by`: verification is **per-channel**, not
-  per-broker. All four are project-assigned and never honored from a PR (see 5a).
+- `trust`: a THREE-VALUE enum, `unverified | verified | broken` (NOT a boolean), plus
+  `last_checked`, `source`, `verified_by`. Per-channel, not per-broker. `broken` preserves
+  provenance on a channel that was verified and later failed (distinct from `unverified`,
+  which means never-checked). All are project-assigned and never honored from a PR (see 5a).
+  NOTE: channel-level `broken` (the opt-out path failed) is distinct from broker-level
+  `status: broken` (the search failed) — the two halves of the search-vs-optout split.
 
 **identity sub-block** (at optout level, applies to whichever channel is used):
 - `required` (default false), `accepted[]`, `redact[]`, `notes`. Encodes withhold-by-
@@ -147,16 +160,84 @@ Split-field vs combined-field sites need no special handling: templates referenc
 atoms (`{first}`, `{last}`) or derived combinations (`{name}`, `{name_full}`) as the site
 demands.
 
+### 4a. Intake UX and persistence
+
+The intake screen is the first thing the user sees: a privacy tool asking a worried person
+for the exact data they're worried about. The design problem is "ask for personal data in a
+way that feels like the opposite of what the brokers did." This governs the whole flow.
+
+**First run is value-first, minimal-first, trust-before-sensitive-data:**
+- First screen is NOT a form and NOT a manifesto. It states the bargain plainly (finds where
+  you're listed, helps you ask for removal), the deal that makes it safe (nothing is stored
+  or sent unless you choose), and ONE verifiable claim, not a vibe: the extension can only
+  talk to broker domains you approve, checkable in Firefox's permissions and network tools.
+  The local-only promise is a checkable architectural property, not marketing.
+- Then a minimal core (first, last, city, state) runs a real tier-1 search and shows actual
+  results. Small ask, immediate proof. The user sees the tool find them BEFORE being asked
+  for anything sensitive. This deliberately undersells coverage on the first run; that's
+  accepted, because a shallow run that earns trust beats a thorough one that scares the user
+  off.
+
+**Enrichment is "expand your coverage," never a second form:**
+- Optional fields (age, zip, emails, phones, relatives, aka) are surfaced in-context via the
+  coverage report's existing missing-field computation, each justified by the specific
+  brokers/capability it unlocks ("9 more sites need your ZIP — add it?"), and only when it
+  actually buys something for this user.
+- NO-NAG RULE: the prompt states what's available to unlock and stops. A four-field user can
+  stay a four-field user indefinitely; the gap is shown honestly but never pushed. Resist
+  "improve activation" pressure later — the restraint is the product.
+
+**Persistence: nothing is kept unless the user opts in. Three independent choices, all
+default OFF.** Out of the box expurge persists nothing and transmits nothing (no asterisk).
+1. **Profile storage** ("remember my info on this device"): default OFF. By default the
+   profile lives in memory for the run and is gone when the run ends or the browser closes,
+   re-entered per session. Opting in stores it in `browser.storage.local` (OS-protected, NOT
+   extension-encrypted in v1 — do not imply encryption; passphrase-at-rest is a clean v2
+   upgrade scoped to this opt-in). This same toggle enables **cross-session run resume**,
+   because resuming requires the profile to persist; the run model's persisted-state /
+   rehydrate / resume design (section 7) applies to opt-in users, while ephemeral users get
+   a session-scoped run.
+2. **Run metadata** (per broker: last-checked date + last result, NO PII): a SEPARATE,
+   lighter opt-in, default OFF, offered AFTER the first run when it's concrete ("remember
+   which brokers you checked and what you found — just dates and results, never your personal
+   info"). Kept separate so a user can have progress-memory without storing their identity.
+3. **Rich hits/drafts history**: session-scoped for ephemeral users, persists only under the
+   profile-storage opt-in.
+
+**The one intentional exit point, disclosed proactively**: data leaves the device only when
+the user SENDS an opt-out request, which necessarily contains their info and goes to the
+broker — that's the purpose, not a leak. Stated plainly rather than discovered: "your data
+stays on your device; the only thing that ever leaves is the removal request you choose to
+send, to the broker you're asking to remove you." Run metadata is NEVER transmitted
+regardless of toggle; "store locally" must never become "send us." Consequence accepted: the
+in-the-wild drift signal (section 5 re-verification) only comes from opt-in-metadata users
+who choose to report it, never silent telemetry.
+
+**Editing and deletion:**
+- Core-field edits just update raw atoms; derived fields recompute at runtime (no stored
+  derived state to invalidate — the purity rule paying off).
+- A trivial, single-confirmation **"delete all my data"** wipes everything, as a deliberate
+  contrast to broker deletion friction; this is the one place the tool makes deletion EASIER
+  than the brokers do. Export pairs with it (export, then wipe, both one click). For the
+  ephemeral default user this is nearly a no-op, which is the strongest version of the story.
+- Profile edits never silently rewrite history but make stale history visible: a *widening*
+  edit (add ZIP/aka/relative) leaves old hits and lets coverage show the new opportunity; a
+  *correcting* edit (wrong city, moved) flags affected past hits as superseded ("your city
+  changed since these results; re-run to refresh") rather than deleting or hiding them. (This
+  applies to hits that still exist, i.e. within the session for everyone, and across sessions
+  only for persisted users; the ephemeral default simply has no cross-session hits to flag.)
+
 ---
 
 ## 5. Verification model
 
 Protects the user from the project's own dataset. Per-channel.
 
-- Lifecycle: records/channels start `unverified` (LLM-drafted at dev time, or PR'd).
-  Become `verified` only when a human opens the real opt-out page, runs the checklist (5a),
-  and the project stamps `last_checked` + `source` + `verified_by` (the receipt). A changed
-  site flips to `broken` and drops out of active use.
+- Lifecycle (the `trust` enum): channels start `unverified` (LLM-drafted at dev time, or
+  PR'd). Become `verified` only when a human opens the real opt-out page, runs the checklist
+  (5a), and the project stamps `last_checked` + `source` + `verified_by` (the receipt). A
+  channel that was verified and later fails flips to `broken` (preserving provenance),
+  distinct from `unverified`. Only `verified` (and unexpired) passes the draft gate.
 - **Check step is lenient**: a wrong search URL just wastes a click. Skip unverified by
   default; a setting allows including them.
 - **Draft step is strict**: only a verified channel can produce a draft. No override. A
@@ -179,9 +260,13 @@ Protects the user from the project's own dataset. Per-channel.
     the prior `source`); it simply stops satisfying the gate until re-checked.
   - **User-facing**: an expired broker shows in coverage as "needs re-checking, temporarily
     unavailable" (a maintenance state), never a silent vanish, never an alarm.
-  - **Two triggers**: approaching-expiry (time), and observed-in-the-wild failure (the run
-    model's `load_error` / `challenge` skips in aggregate signal drift BEFORE the calendar
-    would; the better trigger, already collected).
+  - **Triggers**: v1 ships TIME-BASED EXPIRY as the SOLE re-verification trigger (self-
+    contained, needs nothing from users, keeps the dataset honest on its own). The
+    observed-in-the-wild failure trigger (aggregate `load_error`/`challenge` signalling drift
+    before the calendar would) and its reporting mechanism are DEFERRED TO v2 — leaning
+    toward a user-initiated "report this failure" button (explicit, no PII, no silent
+    telemetry). v1 has no implementation path for it and shouldn't build one; it activates
+    alongside the trusted-verifier tier at the same scale point.
   - **Re-verification is the same checklist** (5a). Its load is the signal for when to
     activate the deferred trusted-verifier tier: delegation turns on when re-check cost
     crosses what one person can carry, not on a guess.
@@ -193,19 +278,19 @@ app:
 - **v1: hand-edit the JSON.** The ~25-site launch pass is itself the requirements-gathering
   for any future tooling; building a guided tool first would target imagined friction.
 - **CI schema validator from day one (double duty):**
-  - *Correctness*: rejects malformed records (a `verified: true` with no `source`, a future
-    or malformed `last_checked`, an `email` channel missing `target`, an unknown `kind`,
-    etc.).
+  - *Correctness*: rejects malformed records (a `trust: verified` with no `source`, a future
+    or malformed `last_checked`, an `email` channel missing `target`, an unknown `kind` or
+    `trust` value, etc.).
   - *Trust enforcement*: gates on the PR's diff and author. If a diff touches the trust
-    bits (`verified` / `source` / `last_checked` / `verified_by`) and the author isn't the
+    bits (`trust` / `source` / `last_checked` / `verified_by`) and the author isn't the
     maintainer (or a future trusted-verifier identity), CI fails it. Contributed records
-    must carry `verified: false`/absent and null trust fields; anything else from a non-
-    privileged author is rejected with a clear "verification is maintainer-set; leave these
-    blank" message. This makes "the project assigns verification, never a PR" mechanically
-    unmergeable rather than a review-time promise.
+    must carry `trust: unverified` and null `source`/`last_checked`/`verified_by`; anything
+    else from a non-privileged author is rejected with a clear "verification is
+    maintainer-set; leave these blank" message. This makes "the project assigns
+    verification, never a PR" mechanically unmergeable rather than a review-time promise.
 - **Optional one-line stamp helper** (`verify <broker-id> <channel>`): sets `last_checked`
-  to today, `verified_by` to the maintainer, prompts for the `source` URL, flips
-  `verified: true`. Removes the error-prone clerical bit (typo'd date in the gate's key
+  to today, `verified_by` to the maintainer, prompts for the `source` URL, sets
+  `trust: verified`. Removes the error-prone clerical bit (typo'd date in the gate's key
   field) without being the guided-checklist tool. Build only if hand-stamping chafes during
   the launch pass.
 - **Deferred to v2 (with a hard caveat): wider, easier submission intake.** A web form so
@@ -259,12 +344,12 @@ channel, so a false `verified` mails real PII to a wrong/attacker address. This 
 trust-assertion problem the signing keys solve, one layer up (signing = "is this dataset
 from the maintainer"; verification = "is this `verified` backed by a human who did the
 checklist").
-- **`verified`, `source`, `last_checked`, and `verified_by` are project-assigned, never
+- **`trust`, `source`, `last_checked`, and `verified_by` are project-assigned, never
   honored from a PR.** The dataset is open source, so a PR can set any field; the project
-  ignores a contributed `verified: true`. Contributed records ALWAYS land `unverified`
-  regardless of what the PR claims. Contributors can submit everything else (broker, search
-  template, opt-out channel, notes); the trust bits are stamped by the project's own
-  verification act.
+  ignores a contributed `trust: verified`. Contributed records ALWAYS land
+  `trust: unverified` regardless of what the PR claims. Contributors can submit everything
+  else (broker, search template, opt-out channel, notes); the trust bits are stamped by the
+  project's own verification act.
 - **v1 is maintainer-only verification.** At ~25 sites the maintainer verifies personally,
   so delegation buys nothing yet and every delegation model adds human-trust overhead
   (vetting, granting, revoking) that is pure cost until contributors actually arrive.
@@ -292,21 +377,35 @@ actually causes harm.
 
 ## 6. The draft gate
 
-A `.eml` (or instruction) is produced for a broker ONLY when, as one composed check:
+A `.eml` (or instruction card) is produced for a broker ONLY when, as one composed check:
 1. The broker is a confirmed hit.
-2. The selected optout channel is `verified`.
+2. The selected optout channel has `trust: verified` AND is not expired (12-month shelf
+   life, computed live from `last_checked`). No override.
 
-**Channel selection**: walk the optout list in order, take the first channel that is both
-usable in v1 (email) and verified. A verified `form_required` channel yields an
-instruction card (open this URL, paste these values), not an email. A verified
-`general_contact` email is usable but flagged best-effort. If nothing is verified, no
-draft; the broker shows in coverage as such.
+**Channel selection**: walk the optout list in order, take the first channel whose
+`trust` is `verified` (and unexpired). The channel's `method`/`kind` then determines the
+OUTPUT, not whether it's selected: an email channel yields a draft (mailto/.eml/copy-paste);
+a `form_required` channel yields an instruction card (open this URL, paste these values); a
+`general_contact` email yields a draft flagged best-effort. So a verified web_form-only
+broker IS handled in v1 (as an instruction card), not skipped. If no channel is verified
+(all `unverified`/`broken`/expired), no draft; the broker shows in coverage as such.
 
 **ID handling shapes the draft body, never gates it.** The tool NEVER stores, redacts,
 attaches, or reads an ID document. `required: false` -> draft doesn't mention ID.
 `required: true` -> draft instructs the user to attach their own self-redacted copy
 (black out `redact[]`, include only `accepted[]`) from their own client. No local
 redaction helper is built.
+
+**Body templates: two for v1.** A general US opt-out/deletion template, and a California
+CCPA template citing CA deletion rights. Selection is auto-by-`state`: California gets the
+CCPA template plus a **DROP informational notice** (California's free state tool removes you
+from registered data brokers in one request; expurge covers the public people-search sites,
+a different and overlapping set, so a Californian may want both — DROP and expurge are
+complementary, not redundant). Everyone else gets the general template. A channel's optional
+`subject` field overrides the template's default subject. Per-broker or per-state templates
+are avoided (maintenance sprawl); add a third only with a concrete reason. PRE-LAUNCH
+VERIFY: the CCPA template's legal language against current statute, and the ~25 sites
+cross-referenced against the public DROP registry to size overlap for the notice wording.
 
 ---
 
@@ -317,13 +416,24 @@ terminal, no separate app. A "run" expands the profile across enabled brokers (a
 variants), opens search URLs as tabs in paced batches, lets the content script classify
 and overlay each page, collects verdicts, and ends with the coverage report.
 
-**Run state lives in `browser.storage.local`, not in memory.** The MV3 background is an
-event page that can spin down mid-run, so run state is a persisted, first-class object
-keyed per run. The unit of work is the **(broker x name-variant)** item, each with status
-(pending / open / verdicted / errored), rendered URL, tab id when open, and verdict. The
-background script is a **stateless coordinator**: on any event it rehydrates from storage,
-acts, writes back. This makes runs crash-resilient and **resumable** for free, which
-matters because a 25-site run with aka fan-out is a multi-session activity.
+**Run state survives background spindown; cross-session resume is opt-in.** The MV3
+background is an event page that can spin down mid-run, so run state is a first-class object
+(not just a background variable) and the background is a **stateless coordinator** that
+rehydrates and writes back on every event. The unit of work is the **(broker x name-variant)**
+item, each with status (pending / open / verdicted / errored), rendered URL, tab id when
+open, and verdict. Two persistence scopes, matching 4a: for the ephemeral default user, run
+state is session-scoped (survives a spindown so the run isn't lost mid-session, but dies with
+the browser, consistent with "nothing persisted"); for the profile-storage opt-in user, run
+state persists to `storage.local` so a 25-site multi-session run is **resumable** after a
+browser close. Resume-across-sessions is part of what the storage opt-in buys.
+
+**Run identity and tab handling.** A run is identified by a UUID generated at creation plus
+a separate `created_at` timestamp (not a sequential integer). `tab_id` is live-session
+scratch ONLY: it is never written to durable storage. On any resume, `open` items drop
+their tab and revert to `pending` to be reopened fresh, while verdicted items keep their
+verdicts. The work-item list is the durable truth; tabs are disposable. This makes
+recycled-tab-id hazards (acting on a tab id reassigned to an unrelated page in a new
+session) structurally impossible.
 
 **Pacing: paced-automatic with a one-batch ceiling.** Batches (default 5, tunable) open
 automatically, but the next batch never opens until the current one is fully **cleared**.
@@ -362,9 +472,13 @@ only two CROSS-SITE automatic classifications:
 
 Every other loaded page gets NO deep parsing. The overlay appears and tells the human what
 to look for, pulled from the broker's `exposes[]` ("look for your age, home address,
-relatives. Listed?"), then hit / clear / skip. No auto "no results" detection; the human
-says clear. This collapses the old friendly/hostile tier distinction entirely: every
-broker is just "a tab the human can see."
+relatives. Listed?"), then offers FOUR verdicts: **yes (hit) / no (clear) / not sure
+(unknown) / skip**. `unknown` is a real, distinct verdict ("I looked and genuinely can't
+tell if this is me"), separate from skip; it feeds a disambiguation nudge in the coverage
+report ("3 you couldn't tell on — add your middle name or ZIP to disambiguate"), which is
+how the age-not-DOB ambiguity stays recoverable. No auto "no results" detection; the human
+says clear. This collapses the old friendly/hostile tier distinction entirely: every broker
+is just "a tab the human can see."
 
 **Reserved enrichment (optional, later)**: the schema reserves a per-broker
 extraction-hint block. When present AND verified, the content script may pre-extract fields
@@ -379,9 +493,10 @@ one-click remedy, framed as "what's left to finish", never as failure:
 - `challenge` ("showed a verify-you're-human page") -> reopen; the user can solve it now.
 - `load_error` ("didn't load") -> reopen to retry; repeated failures hint at a `broken`
   record (a maintainer signal in aggregate).
-  The completed run stays queryable/persisted, so "reopen just the skipped ones" is simply a
-  new run seeded from the prior run's skipped subset. Headline coverage stays in
-  broker-units; only brokers with no verdict under ANY variant appear here.
+  The completed run stays queryable so "reopen just the skipped ones" is simply a new run
+  seeded from the prior run's skipped subset (within the session for everyone; across a
+  browser close only for profile-storage opt-in users, per 4a/section 7). Headline coverage
+  stays in broker-units; only brokers with no verdict under ANY variant appear here.
 
 ---
 
@@ -389,11 +504,14 @@ one-click remedy, framed as "what's left to finish", never as failure:
 
 **No `<all_urls>`.** A privacy tool requesting "read your data on all websites" is
 self-defeating and lands on exactly the anxious user. Instead:
-- **Optional, per-domain host permissions.** Declared as `optional_permissions`, requested
-  at runtime via `browser.permissions.request()`. A new broker domain triggers Firefox's
-  native per-domain consent prompt. Decline -> that broker is "available but not enabled"
-  in the coverage report, never checked. Store listing can honestly say the extension only
-  reads the broker sites the user approved.
+- **Optional, per-domain host permissions.** Host patterns are declared in
+  `optional_host_permissions` (MV3; NOT `optional_permissions`, which is for API
+  permissions), requested at runtime via `browser.permissions.request()`. A new broker
+  domain triggers Firefox's native per-domain consent prompt. Decline -> that broker is
+  "available but not enabled" in the coverage report, never checked. Store listing can
+  honestly say the extension only reads the broker sites the user approved. VERIFY whether
+  `permissions.request()` requires a user gesture in current Firefox; if so, the consent
+  flow must be triggered from a click, not an on-load handler or timer.
 
 **Dataset distribution is a hybrid:**
 - A known-good dataset is **bundled** in the extension (signed and reviewed as a unit, so a
@@ -419,6 +537,28 @@ reads permissions will notice if it does.
   only timing and who-initiates change. Caveat to remember: a user who disables Firefox's
   add-on code updates also opts out of security fixes, including a signing-key rotation,
   which is a reason not to conflate the two in the UI.
+
+### 8a. AMO compliance constraints (policy verified Apr 2026)
+
+The design is well-aligned with Mozilla's privacy-first policies (no surprises, opt-in
+data, minimal permissions, no remote code). The concrete build-time constraints:
+- **Consent UI must be unmissable and single-page**: use a focused tab or the options page,
+  NEVER a popup window (popups are auto-rejected). Declining must never be harder than
+  accepting (no multi-step decline, no deceptive patterns). Applies to every consent /
+  opt-in surface (first-fetch consent, persistence opt-ins).
+- **The opt-out SEND likely qualifies for "implicit consent for self-evident single-use"**
+  (policy 6.2.2.2): a user-initiated transmission from a single deliberate click on a
+  clearly-labeled control. Do NOT add a separate consent dialog around the send — the
+  labeled button plus a self-evident UI is the consent. Keep listing/UI self-evident about
+  what is sent and to whom.
+- **The overlay must NEVER inject the user's profile/identifying data into the page DOM**
+  (policy 6.3: no leaking user-specific info to web content). The overlay shows generic
+  guidance ("look for your age, address, relatives"), NOT the user's actual name/values
+  rendered into the broker page where the page's own scripts could read them.
+- Request only necessary permissions (policy 4); no `<all_urls>`. No remote code execution
+  (the remote dataset is data, not code). Nothing from private-browsing sessions persists.
+- Data-practices declared in the manifest via Mozilla's data-classification taxonomy,
+  including the "no data collection" declaration (policy 6.2.1, requires Firefox 140+).
 
 ---
 
@@ -466,11 +606,16 @@ accepting older generations, narrowing the revocation window without a release.
 
 ## 10. Storage, files, coverage
 
-**Storage**: `browser.storage.local`. The profile and hits live here, never transmitted.
-Because storage is bound to the browser profile, **export/import is a v1 feature** so users
-can back up and move their data.
+**Storage**: nothing is persisted by default (see 4a). By default the profile and rich
+hits/drafts history are in-memory and session-scoped; nothing is ever transmitted. Three
+independent opt-ins (all default off) govern persistence to `browser.storage.local`:
+profile storage (also enables cross-session run resume), run metadata (minimal: per-broker
+last-checked date + result, no PII), and rich hits/drafts history (rides the profile opt-in).
+Export/import is a v1 feature for the users who persist; "delete all my data" is trivial and
+single-confirmation (and nearly a no-op for the ephemeral default user).
 
-**Hits**: keyed by runs so re-checks stack over time. Each result has an outcome from a
+**Hits**: session-scoped by default; persisted only under the profile-storage opt-in (4a).
+Keyed by runs so re-checks stack over time. Each result has an outcome from a
 closed set: `hit | clear | unknown | skipped` (with reason, e.g. `missing:zip`,
 `unverified`, `not_enabled`). Carries `matched_as` (which name variant produced the hit).
 The draft step reads only `hit` rows.
@@ -519,7 +664,9 @@ the aka-indexed listing. Coverage still counts brokers, not searches.
 
 **v1 (Firefox extension):**
 - Hand-curated ~25 people-search sites, all verified.
-- Open-and-confirm with on-page overlay; content-script DOM read + deterministic matcher.
+- Open-and-confirm with on-page overlay (four verdicts: hit/clear/unknown/skip); shallow-
+  first page classification (challenge / load-error / normal), human is the matcher (no
+  per-site extraction in v1).
 - Paced batched tab opening (default 5).
 - Draft generation behind the draft gate: three send surfaces (mailto default / .eml /
   copy-paste) for email channels, plus instruction cards for form-required and
@@ -528,7 +675,8 @@ the aka-indexed listing. Coverage still counts brokers, not searches.
 - Coverage report.
 - Enumerated optional per-domain host permissions with runtime consent.
 - Bundled dataset baseline + signed remote update layer (Ed25519, dual-key).
-- Export/import for backup.
+- Ephemeral-by-default profile; three independent persistence opt-ins (all default off);
+  export/import and trivial delete-all for users who persist.
 
 **v2:**
 - **Firefox mobile (Android).** The engine (dataset, matcher, storage, signing, draft
@@ -563,19 +711,22 @@ the aka-indexed listing. Coverage still counts brokers, not searches.
 
 ## 12. Open decisions (still to resolve)
 
-1. **Dataset fetch specifics** (trigger is decided: user-chosen, default manual,
-   consent-gated first fetch): the schedule cadence for automatic mode and the exact
+1. **Dataset fetch cadence + consent copy**: trigger is decided (user-chosen, default
+   manual, consent-gated first fetch); the automatic-mode schedule cadence and exact
    consent-prompt copy still need pinning.
-2. **Local-LLM extraction in an extension** (folded into the v2 automation note): reaching a
-   localhost model endpoint from a content/background script needs a localhost host
-   permission and CORS config. Deferred to v2; viability to confirm.
-3. **Number of body templates**: lean 2-3 (generic CCPA, California-specific). Connects to
-   the send mechanism: templates fill the mailto/.eml/copy-paste body.
-4. **MV2 vs MV3 on Firefox / current AMO review policy for content-reading extensions**:
-   verify against current AMO docs before fixing the manifest shape (knowledge here may be
-   stale).
+2. **Local-LLM extraction in an extension** (v2): reaching a localhost model endpoint from a
+   content/background script needs a localhost host permission and CORS config. Viability to
+   confirm.
 
-Resolved since last consolidation: the entire verification branch (5/5a: checklist,
-verifier-trust model, `verified_by`, hard-expiry re-verification, hand-edit + CI-validator
-mechanics, v2 submission-intake caveat), the `subject` field (section 3), and the draft
-output / send-mechanism (section 10).
+**Verify against live docs (agent tasks, not from memory):**
+- Mozilla data-classification taxonomy format for the manifest declaration (before M0).
+- Whether `browser.permissions.request()` needs a user gesture in current Firefox (before
+  the M6 permissions flow).
+- Pre-launch: CCPA template legal language vs current statute; ~25 sites cross-referenced
+  against the public California DROP registry (sizes DROP overlap for the notice wording).
+
+Resolved this session: MV3 + Firefox-140+/data-taxonomy; four-button overlay with `unknown`;
+channel `trust` enum (replaces boolean); two templates (general + CA CCPA) + DROP notice,
+auto-by-state; run identity (UUID + `created_at`) and stale-tab-id rule; drift mechanism
+deferred to v2 (time-expiry sole v1 trigger); AMO compliance constraints (8a); template
+count (was open, now 2). Build prompt scoped to M0–M3 vertical slice generated.
