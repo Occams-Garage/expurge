@@ -1,0 +1,131 @@
+# expurge — build progress
+
+---
+
+## What exists today
+
+**M0–M3 vertical slice is complete and buildable.** The codebase is a working
+end-to-end skeleton: one broker (TruePeopleSearch), one profile variant (primary only),
+no persistence opt-ins, no options page, no challenge/load-error handling, no batch pacing.
+
+### Files in place
+
+| File | What it does |
+|------|--------------|
+| `manifest.json` | MV3, Firefox 140+, data-taxonomy declaration, optional_host_permissions for TruePeopleSearch, permissions: storage/tabs/webNavigation/downloads |
+| `package.json` | webextension-polyfill, esbuild, typescript; scripts: build / dev (--watch) / typecheck |
+| `tsconfig.json` | ES2022 target, moduleResolution: bundler, noEmit: true |
+| `build.mjs` | esbuild; three IIFE bundles (background, content, popup); copies popup.html and style.css to dist/ |
+| `src/shared/types.ts` | Verdict, WorkItem (tabId as scratch-only), RunState, Profile, all message types |
+| `src/shared/brokers.ts` | ChannelTrust enum, BrokerChannel/Broker interfaces, BROKERS const (TruePeopleSearch only; trust stubbed as 'verified') |
+| `src/shared/transforms.ts` | Four transforms (slug/q/upper/raw), deriveFields(), renderUrl() |
+| `src/shared/gate.ts` | evaluateGate(), channelExpiryState(), WARN_MONTHS=6, EXPIRE_MONTHS=12 |
+| `src/shared/templates.ts` | buildDraft(), mailtoUrl(), toEml() (RFC 5322), toCopyText(); US general + CA CCPA templates (copy TBD Q-010) |
+| `src/background/index.ts` | Stateless coordinator; saveRun() strips tabIds; expurge_tab_{tabId} session keys; handles START_RUN/GET_RUN_STATE/GET_ITEM/VERDICT/GET_DRAFT; tabs.onRemoved → tab_closed; webNavigation.onErrorOccurred → load_error |
+| `src/content/index.ts` | Shadow DOM overlay; GET_ITEM on load; sendVerdict() with 6s timeout + 3 retries; three overlay states (unjudged/saving/recorded) |
+| `src/popup/index.html` | Three sections: profile form, run status, draft send surfaces |
+| `src/popup/index.ts` | handleFormSubmit(); permissions.request() from click handler; renderDraftSection(); init() |
+| `src/popup/style.css` | Popup styles; badge variants for all verdict/status states |
+
+### Prototype vs. target architecture
+
+The popup currently contains the profile form and draft surfaces. Per the design interview,
+these move to the options page in M4+. The popup becomes a compact run control panel only.
+
+---
+
+## Milestones
+
+### Done
+
+- **M0** — Manifest + build skeleton (esbuild, TS, webextension-polyfill, dist/)
+- **M1** — Profile form → URL render → open tab (popup form, permissions.request, START_RUN)
+- **M2** — Content script overlay + four-way verdict + ACK contract (shadow DOM, retry logic, tab_closed skip)
+- **M3** — Draft gate + three send surfaces (evaluateGate, buildDraft, mailto/.eml/copy-paste in popup)
+
+### Remaining
+
+#### M4 — Single-broker robustness
+- Challenge detection in content script (Cloudflare/Turnstile/hCaptcha/reCAPTCHA/DataDome via shared signals; MutationObserver re-shows overlay after solve)
+- Load-error path verified (webNavigation.onErrorOccurred already wired; add test)
+- Pause/stop controls in popup (currently no controls beyond Refresh)
+- Stop → `run_stopped` skip reason for open/pending items
+- Verify no-wedge rule across all three clearing paths (verdict, skip-by-button, tab-closed)
+
+#### M5 — Multi-broker paced batching + AKA fan-out
+- Background: batch opening (default 5), next batch waits for full clear
+- `also_known_as[]` expansion in buildItems() — one item per (broker × name-variant)
+- `matched_as` field on WorkItem, populated on hit verdict
+- Run monitor: one row per broker with AKAs folded in
+- Badge: hit count during active run (browser.action.setBadgeText)
+- Coverage report: broker-unit counts, missing-field breakdown, unverified/broken/not-enabled
+- `missing:<field>` skip reason when requires[] not satisfied
+
+#### M6 — Options page (primary UI) + popup redesign
+- `options_ui.open_in_tab: true` in manifest
+- `browser.runtime.onInstalled` → `browser.runtime.openOptionsPage()`
+- Options page: four-section persistent nav (Run / Results / Profile / Settings)
+- **Run section**: four states (welcome/pitch → ready → active → done)
+- **Profile section**: all fields (first/last/city/state/middle/zip/age/emails[]/phones[]/relatives[]/also_known_as[]), first-fetch consent prompt
+- **Results section**: four verdict groups (Listed / Couldn't tell / Skipped / Not checked), clear collapsed, nudge cards, mini-run button, per-run history
+- **Settings section**: four sub-sections (Storage / Preferences / Broker list / Your data); preferred-send-method radio; delete-all with inline confirmation; export JSON; import JSON
+- Popup redesigned to run-control-panel only (badge, pause/resume, "Open dashboard →")
+- Profile form, draft surfaces, results all moved out of popup and into options page
+- "Mark as sent / submitted" on draft panels
+- `general_contact` amber callout on draft panels
+- `form_required` instruction card (URL + copy-paste field values + steps)
+- `opted_out_at` timestamp on WorkItem
+
+#### M7 — Signed remote dataset (Ed25519)
+- Keypair generation + key management docs
+- `TRUSTED_PUBKEYS` constant baked into build (primary + backup)
+- `crypto.subtle.verify` on fetch; reject-and-fallback on signature failure
+- Remote fetch UI: "Check for updates" button in Settings → Broker list
+- Auto-fetch: lazy-triggered when options page opens and ≥ 7 days elapsed
+- First-fetch consent prompt in Profile section (copy TBD Q-006)
+- New-domain permission request flow after verified dataset arrives
+- Bundled dataset signed and shipped with extension
+
+#### M8 — Persistence opt-ins
+- Three independent toggles in Settings → Storage (all default OFF):
+  1. Profile storage → `storage.local` (enables cross-session run resume)
+  2. Run metadata (per-broker last-checked + result, no PII)
+  3. Rich hits/drafts history (rides profile opt-in)
+- Contextual first-exposure banners (Run done → run-metadata opt-in; Results → rich-history opt-in; Profile → profile-storage opt-in)
+- Background: loadRun() / saveRun() promote to `storage.local` when profile-storage opt-in is active; cross-session resume on reopen
+- Export: JSON (no draft bodies, raw data only), download via downloads API
+- Import: read JSON, warn-and-overwrite if profile exists (no merge)
+- Delete-all: inline single-confirmation panel, wipes all `storage.local` expurge keys
+
+#### M9 — Full dataset + launch polish
+- ~25 verified people-search brokers in brokers.json (all channels personally verified, trust bits stamped)
+- Pre-launch verify: CCPA template legal language; DROP registry cross-reference (Q-010)
+- CI schema validator: rejects malformed records, enforces trust-bit hygiene (contributed records must be `trust: unverified`)
+- Optional stamp helper: `verify <broker-id> <channel>` CLI sets last_checked / verified_by / trust
+- Full run on real brokers, bugs fixed
+- AMO submission prep: screenshots, description, privacy notice, data-practices declaration
+
+---
+
+## Open design questions
+
+| ID | Status | Question |
+|----|--------|----------|
+| Q-003 | open | Can a content/background script reach a localhost Ollama endpoint? (v2 concern) |
+| Q-006 | partial | Weekly lazy cadence resolved; **exact consent-prompt copy still needs legal review** |
+| Q-010 | open | CCPA template legal language + DROP registry overlap — pre-launch verify required |
+
+---
+
+## Known code TODOs
+
+| Location | TODO |
+|----------|------|
+| `src/shared/brokers.ts` | TruePeopleSearch channel trust stubbed as `verified` + `last_checked: '2026-06-01'` — replace with real verification stamp |
+| `src/shared/templates.ts` | Both email template bodies marked `// TODO Q-010` — legal review before launch |
+| `src/shared/brokers.ts` | Only one broker. M9 expands to ~25. |
+| `src/popup/index.ts` | Profile form and draft surfaces are in popup — move to options page in M6 |
+| `src/background/index.ts` | No batch pacing — opens one tab, no batch ceiling — add in M5 |
+| `src/background/index.ts` | No AKA fan-out in buildItems() — add in M5 |
+| `src/content/index.ts` | No challenge detection — add in M4 |
+| `manifest.json` | No `options_ui` entry — add in M6 |

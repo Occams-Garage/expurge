@@ -41,7 +41,7 @@ Stack:
   load-error / normal), paint the on-page overlay telling the human what to look for, and
   send the verdict back to background. (v1 is shallow-first: no per-site field extraction on
   the page; the human is the matcher. See section 7.)
-- **Popup / options page**: profile form, run dashboard, coverage report, export/import.
+- **Popup / options page**: the toolbar popup is a compact **run control panel** only (current run status, hit-count badge, pause/resume button, "Open dashboard →" link). The **options page** (`options_ui.open_in_tab: true`) is the primary UI, opened as a full browser tab with persistent top navigation across four sections: **Run** (run control and live monitor), **Results** (post-run findings browser), **Profile** (identity fields, AKA management, dataset update preference), **Settings** (Storage / Preferences / Broker list / Your data). `browser.runtime.onInstalled` opens the options page on first install; new users land on Run, which shows a welcome/pitch state before any profile is set. Settings sub-sections: *Storage* (three persistence opt-in toggles with inline privacy-boundary descriptions and contextual first-exposure banners); *Preferences* (preferred send method, default: mailto); *Broker list* (per-broker status, last-checked, trust state, manual update button, auto-update toggle); *Your data* (export JSON / delete-all with inline single-confirmation / import).
 
 What carried over untouched from the pre-pivot work (the expensive thinking survives,
 because it all lives downstream of "human at the gate," and the human is still the gate):
@@ -435,12 +435,20 @@ verdicts. The work-item list is the durable truth; tabs are disposable. This mak
 recycled-tab-id hazards (acting on a tab id reassigned to an unrelated page in a new
 session) structurally impossible.
 
-**Pacing: paced-automatic with a one-batch ceiling.** Batches (default 5, tunable) open
+**Run section states** (options page, Run tab):
+- **Welcome/pitch** (no profile set): pitch + verifiable privacy claim + "Set up your profile →" CTA navigates to Profile. No form in Run.
+- **Ready** (profile set, no active run): profile summary + "Start run" button. No auto-start. Shows link to prior results if any.
+- **Active run**: run monitor + pause/stop controls (see below). Progress indicator "N of M checked."
+- **Done**: summary ("Found on X, not found on Y, Z couldn't be checked" — in broker-units) + "View Results →" + "Run again" button. Includes low-key dataset-age notice if auto-update is disabled and list is > 30 days old.
+
+**Run monitor** (active state): one row per broker (not per work item). AKA name-variants fold into the broker's row. Rows ordered: currently checking first, then pending, then completed. Full list always visible; no "current batch only" truncation.
+
+**Toolbar badge**: shows hit count (integer) during an active run. Zero hits: no badge. Run complete: badge clears.
+
+**Pacing: paced-automatic with a one-batch ceiling.** Batches (default 5, fixed in v1) open
 automatically, but the next batch never opens until the current one is fully **cleared**.
 So at most one batch of tabs is ever open; the system never races ahead of the user or
-piles up tabs while they're away. A persistent run control (popup + indicator) shows
-progress with **pause** (stop opening new, keep open tabs, stays resumable) and **stop**
-(end run, offer to close the run's open tabs).
+piles up tabs while they're away. **Pause**: stops opening new batches; current open batch finishes naturally; run stays paused — does NOT auto-unpause when the batch clears. **Stop**: immediately marks all `open` and `pending` items `skipped/run_stopped`; shows "Close open tabs?" inline (not modal).
 
 **No-wedge rule**: an item counts as cleared by a verdict OR a skip OR a park (error /
 challenge). Nothing can wedge a run on a stuck item.
@@ -486,16 +494,27 @@ and show a confidence score on that specific site. Same graceful-degradation pat
 LLM: hints present -> richer overlay; absent -> human reads. Added later to the few
 highest-value sites only; never blocks a broker.
 
+**Permissions at run start.** All optional host permissions needed for a run are requested in a **single `browser.permissions.request()` call** at run start, not lazily per-broker. Firefox presents one dialog covering all needed domains. Denied domains are skipped that run with reason `permission_denied` (satisfies the no-wedge rule). Previously-granted permissions persist in Firefox and are not re-requested. `permissions.request()` requires a user gesture; the "Start run" click IS that gesture, so the call happens directly from the handler — no workaround needed. (Q-009 resolved by design.)
+
+**Skip reasons**: `tab_closed`, `load_error`, `challenge`, `permission_denied`, `run_stopped`, `missing:<field>`.
+
+**Results section** (options page, Results tab): four verdict groups.
+- **Listed on** (hit): sites where the user was found. Action available: draft opt-out. Shown first.
+- **Couldn't tell** (unknown): visited but unresolved. Not the same as clear; feeds the disambiguation nudge.
+- **Skipped** (skipped): with per-item sub-reason. "Check skipped items (N)" button seeds a mini-run — a new run (new UUID), not a resume, using the skipped items as its list. Button label is reason-aware when all skips share one reason.
+- **Not checked** (never opened): with per-item missing-field note pointing to Profile.
+- **"Not listed" (clear) is collapsed by default**: for most users clears are the majority; surfacing 22 clears before 3 hits buries the actionable results. Toggle to expand.
+- **Most recent run expanded**, prior runs collapsed and labeled by date. Prior run history visible only under the profile-storage opt-in.
+- **Nudge pattern**: inline cards within "Not checked" tied to specific missing fields, each showing which brokers the field would unlock + "Add to profile →" CTA navigating directly to Profile. Shown at most once per gap; no-nag rule applies.
+
 **End-of-run surfacing of skips.** Skips are grouped BY REASON, each with a tailored
 one-click remedy, framed as "what's left to finish", never as failure:
-- `tab_closed` ("you closed these 6 before deciding") -> one-click "reopen these" starts a
-  mini-run over just that set.
-- `challenge` ("showed a verify-you're-human page") -> reopen; the user can solve it now.
-- `load_error` ("didn't load") -> reopen to retry; repeated failures hint at a `broken`
+- `tab_closed` ("you closed these 6 before deciding") -> mini-run seeded from those items.
+- `challenge` ("showed a verify-you're-human page") -> mini-run; the user can solve it now.
+- `load_error` ("didn't load") -> mini-run to retry; repeated failures hint at a `broken`
   record (a maintainer signal in aggregate).
-  The completed run stays queryable so "reopen just the skipped ones" is simply a new run
-  seeded from the prior run's skipped subset (within the session for everyone; across a
-  browser close only for profile-storage opt-in users, per 4a/section 7). Headline coverage
+- `permission_denied` -> mini-run; the permissions dialog will re-prompt for denied domains.
+  Mini-run is always a NEW run seeded from the prior run's skipped subset. Headline coverage
   stays in broker-units; only brokers with no verdict under ANY variant appear here.
 
 ---
@@ -506,12 +525,12 @@ one-click remedy, framed as "what's left to finish", never as failure:
 self-defeating and lands on exactly the anxious user. Instead:
 - **Optional, per-domain host permissions.** Host patterns are declared in
   `optional_host_permissions` (MV3; NOT `optional_permissions`, which is for API
-  permissions), requested at runtime via `browser.permissions.request()`. A new broker
-  domain triggers Firefox's native per-domain consent prompt. Decline -> that broker is
-  "available but not enabled" in the coverage report, never checked. Store listing can
-  honestly say the extension only reads the broker sites the user approved. VERIFY whether
-  `permissions.request()` requires a user gesture in current Firefox; if so, the consent
-  flow must be triggered from a click, not an on-load handler or timer.
+  permissions). At run start, all needed domains are requested in a single
+  `browser.permissions.request()` call from the "Start run" click handler (which IS the
+  required user gesture — Q-009 resolved by design). Firefox shows one dialog for all
+  domains. Denied domains are skipped with reason `permission_denied`. Previously-granted
+  permissions persist in Firefox and are not re-prompted. Store listing can honestly say the
+  extension only reads the broker sites the user approved.
 
 **Dataset distribution is a hybrid:**
 - A known-good dataset is **bundled** in the extension (signed and reviewed as a unit, so a
@@ -530,7 +549,15 @@ opt-in**, because a privacy tool should not phone home by default; the kind of u
 reads permissions will notice if it does.
 - The **first** fetch is gated behind an explicit consent prompt that also sets the
   auto/manual preference and discloses, in plain words, that the request sends nothing
-  about the user. The bundled baseline means the extension works fully offline until then.
+  about the user. This prompt appears in the **Profile section** during initial profile
+  setup (after the form fields, before the save CTA) — not in run-done state — so the user
+  can fetch fresh data before their first run rather than after it. Prompt copy still needs
+  legal review (Q-006). The bundled baseline means the extension works fully offline until then.
+- **Auto-fetch cadence**: weekly, **lazy-triggered** — fires when the user opens the
+  options page and ≥ 7 days have elapsed since the last fetch. No background fetch, no
+  wake-on-schedule; the user must be present. After a completed run where auto-update is
+  disabled and the broker list is > 30 days old, a single quiet line in the Run done state
+  surfaces the staleness with a link to Settings. No repeated banner, no modal.
 - The setting's label is scoped specifically to "broker list updates" and kept DISTINCT
   from Firefox's own auto-update of the extension **code** (managed by the user in Firefox,
   not by expurge). The signature verification path is identical regardless of the toggle;
@@ -625,6 +652,20 @@ ends at "here is the request, ready for you to send"; the actual send always hap
 user's own mail surface, which is what keeps v1 in send-it-yourself territory and out of
 authorized-agent obligations. The extension never touches an attachment in any path.
 
+**Opt-out status tracking** ("Mark as sent / submitted"): below the send surfaces, a
+lightweight tracking button records an `opted_out_at` timestamp on the hit record.
+- Email channels: "Mark as sent" → "Sent — [date]" + reversible "Unmark." Applies to all
+  email channels regardless of kind.
+- form_required channels: an **instruction card** is generated instead of a draft email.
+  The card shows the opt-out URL, copy-paste field values, and step-by-step instructions.
+  "Mark form as submitted" → same timestamp semantics.
+- `general_contact` channels: **amber callout at the top of the draft panel** before the
+  draft body: "This site doesn't have a dedicated opt-out address. This goes to their
+  general contact — results may vary and follow-up may be needed." Send surfaces still fully
+  available; this is a disclosure, not a blocker.
+- The timestamp is a display-only memory aid, not a legal record. Stored under the
+  rich-history opt-in; ephemeral-default users see it for the current session only.
+
 Three send surfaces are ALWAYS available per request, with the default chosen by a
 **per-user "preferred send method" setting** (default `mailto:`):
 - `mailto:`: opens the user's compose window pre-filled (to / subject / body). Smoothest
@@ -711,22 +752,30 @@ the aka-indexed listing. Coverage still counts brokers, not searches.
 
 ## 12. Open decisions (still to resolve)
 
-1. **Dataset fetch cadence + consent copy**: trigger is decided (user-chosen, default
-   manual, consent-gated first fetch); the automatic-mode schedule cadence and exact
-   consent-prompt copy still need pinning.
-2. **Local-LLM extraction in an extension** (v2): reaching a localhost model endpoint from a
+1. **Dataset fetch consent copy**: cadence resolved (weekly, lazy-triggered); the exact
+   consent-prompt copy still needs legal review before shipping (Q-006).
+2. **CCPA template legal language** and ~25-site cross-reference against California DROP
+   registry — pre-launch verify (Q-010).
+3. **Local-LLM extraction in an extension** (v2): reaching a localhost model endpoint from a
    content/background script needs a localhost host permission and CORS config. Viability to
-   confirm.
+   confirm (Q-003).
 
 **Verify against live docs (agent tasks, not from memory):**
-- Mozilla data-classification taxonomy format for the manifest declaration (before M0).
-- Whether `browser.permissions.request()` needs a user gesture in current Firefox (before
-  the M6 permissions flow).
+- ~~Mozilla data-classification taxonomy format~~ — verified against MDN before M0;
+  implemented as `browser_specific_settings.gecko.data_collection_permissions: { required: ["none"] }` (Q-008 resolved).
+- ~~`browser.permissions.request()` user gesture~~ — requires gesture; resolved by design
+  (Start button click IS the gesture; Q-009 resolved).
 - Pre-launch: CCPA template legal language vs current statute; ~25 sites cross-referenced
-  against the public California DROP registry (sizes DROP overlap for the notice wording).
+  against the public California DROP registry (Q-010, still open).
 
-Resolved this session: MV3 + Firefox-140+/data-taxonomy; four-button overlay with `unknown`;
-channel `trust` enum (replaces boolean); two templates (general + CA CCPA) + DROP notice,
-auto-by-state; run identity (UUID + `created_at`) and stale-tab-id rule; drift mechanism
-deferred to v2 (time-expiry sole v1 trigger); AMO compliance constraints (8a); template
-count (was open, now 2). Build prompt scoped to M0–M3 vertical slice generated.
+Resolved in design phase: MV3 + Firefox-140+/data-taxonomy (Q-008); four-button overlay
+with `unknown`; channel `trust` enum (three-value, not boolean); two templates (general +
+CA CCPA) + DROP notice auto-by-state; run identity (UUID + `created_at`) and stale-tab-id
+rule; drift deferred to v2 (time-expiry sole v1 trigger); AMO compliance constraints (§8a);
+permissions.request() by design (Q-009); UX split (popup = control panel, options page =
+primary UI, four nav sections); run section four states (welcome/pitch/ready/active/done);
+run monitor (one row per broker, AKAs folded); results section (four verdict groups, clear
+collapsed, nudge-to-Profile, mini-run from skipped items); opt-out status tracking
+("Mark as sent/submitted"), form_required instruction card, general_contact amber callout;
+all-at-once permissions at run start; first-fetch consent in Profile section; weekly
+lazy auto-fetch cadence (Q-006 cadence half).
