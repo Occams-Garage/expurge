@@ -1,0 +1,33 @@
+{
+  "manifest_version": 3,
+  "name": "expurge",
+  "version": "0.1.0",
+  "description": "Find where your personal data appears on people-search sites and generate opt-out requests. Nothing leaves your device.",
+  "background": {
+    "scripts": ["dist/background.js"]
+  },
+  "content_scripts": [
+    {
+      "matches": ["*://*.truepeoplesearch.com/*"],
+      "js": ["dist/content.js"],
+      "run_at": "document_end"
+    }
+  ],
+  "action": {
+    "default_popup": "dist/popup.html",
+    "default_title": "expurge"
+  },
+  "permissions": ["storage", "tabs", "webNavigation", "downloads"],
+  "optional_host_permissions": [
+    "*://*.truepeoplesearch.com/*"
+  ],
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "expurge@expurge.dev",
+      "strict_min_version": "140.0",
+      "data_collection_permissions": {
+        "required": ["none"]
+      }
+    }
+  }
+}

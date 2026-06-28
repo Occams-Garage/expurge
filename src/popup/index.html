@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>expurge</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="app">
+    <header>
+      <h1>expurge</h1>
+      <p class="tagline">Find and remove your data from people-search sites</p>
+    </header>
+
+    <!-- M1: Profile form -->
+    <section id="section-profile">
+      <h2>Your info</h2>
+      <p class="note">
+        Nothing is stored or sent unless you choose.
+        Your info is used only to search broker sites in your browser.
+      </p>
+      <form id="profile-form" novalidate>
+        <div class="field">
+          <label for="first">First name</label>
+          <input type="text" id="first" name="first" autocomplete="off" required>
+        </div>
+        <div class="field">
+          <label for="last">Last name</label>
+          <input type="text" id="last" name="last" autocomplete="off" required>
+        </div>
+        <div class="field">
+          <label for="city">City</label>
+          <input type="text" id="city" name="city" autocomplete="off" required>
+        </div>
+        <div class="field">
+          <label for="state">State (2-letter, e.g. CA)</label>
+          <input type="text" id="state" name="state" maxlength="2" autocomplete="off" required>
+        </div>
+        <button type="submit" id="btn-start" class="btn-primary">Check for my data</button>
+        <p id="form-error" class="error-msg hidden"></p>
+      </form>
+    </section>
+
+    <!-- M2: Run status -->
+    <section id="section-run" class="hidden">
+      <h2>Run in progress</h2>
+      <div id="run-items"></div>
+      <button id="btn-refresh" class="btn-secondary">Refresh status</button>
+    </section>
+
+    <!-- M3: Draft + send surfaces -->
+    <section id="section-draft" class="hidden">
+      <h2>Opt-out request ready</h2>
+      <div id="draft-summary" class="draft-box"></div>
+      <div class="send-buttons">
+        <button id="btn-mailto" class="btn-send btn-mailto">Open in mail app</button>
+        <button id="btn-eml"    class="btn-send btn-eml">Download .eml file</button>
+        <button id="btn-copy"   class="btn-send btn-copy">Copy to clipboard</button>
+      </div>
+      <div class="copy-area hidden" id="copy-area">
+        <textarea id="copy-text" readonly></textarea>
+        <p class="copy-note">Select all and copy, or use the button above.</p>
+      </div>
+      <button id="btn-back" class="btn-ghost">← Back to run status</button>
+    </section>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
