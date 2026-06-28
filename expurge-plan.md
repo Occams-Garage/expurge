@@ -344,8 +344,31 @@ closed set: `hit | clear | unknown | skipped` (with reason, e.g. `missing:zip`,
 `unverified`, `not_enabled`). Carries `matched_as` (which name variant produced the hit).
 The draft step reads only `hit` rows.
 
-**Drafts**: generated in JS, one per hit, saved via the `downloads` API or handed off via
-`mailto:`. The extension never touches an attachment.
+**Drafts (send mechanism)**: generated in JS, one per confirmed hit. The extension's job
+ends at "here is the request, ready for you to send"; the actual send always happens in the
+user's own mail surface, which is what keeps v1 in send-it-yourself territory and out of
+authorized-agent obligations. The extension never touches an attachment in any path.
+
+Three send surfaces are ALWAYS available per request, with the default chosen by a
+**per-user "preferred send method" setting** (default `mailto:`):
+- `mailto:`: opens the user's compose window pre-filled (to / subject / body). Smoothest
+  desktop handoff when a default mail client exists. Cannot carry attachments; bodies have
+  practical length/encoding limits across clients.
+- `.eml` download (RFC 5322, via downloads API): opens in a desktop mail client as a
+  ready-to-send draft, attachments and arbitrarily long bodies supported. Robust, but inert
+  for webmail-only users (a file they may not know what to do with).
+- copy-paste: composed address + subject + body with copy buttons. Ugliest but UNIVERSAL,
+  the only surface that works for the Gmail-in-a-browser user. Always one click away as the
+  floor.
+
+ID-required brokers: `mailto:` works IF the user attaches their own self-redacted ID in
+their compose window before sending. To avoid the trap of redacting a sensitive document
+and then hitting a dead `mailto:` (webmail user, no handler), the instructions are
+**sequenced: open the request first and confirm the compose window opened, THEN redact and
+attach.** `.eml` is kept available as the robust alternative for the longer ID-broker
+bodies. Attach instructions appear in BOTH the draft body (a bracketed line near the top,
+so they survive copy-paste into webmail) and the extension UI next to the send buttons
+(with the specific `redact[]` fields).
 
 **Coverage report**: counts BROKERS, not searches (aka fan-out is invisible at the headline
 level). Shows checked X of Y; listed / clear / couldn't-tell; and a not-checked breakdown:
@@ -375,6 +398,14 @@ the aka-indexed listing. Coverage still counts brokers, not searches.
 - Export/import for backup.
 
 **v2:**
+- **Firefox mobile (Android).** The engine (dataset, matcher, storage, signing, draft
+  generation) is built portable in v1, so mobile is an additive layer, not a rebuild. What
+  needs a mobile-specific design is the run/confirm UX: phones are one-tab-at-a-time, so the
+  batched-parallel-tabs desktop flow likely becomes a sequential one-site-at-a-time flow,
+  and the overlay must be thumb-reachable without covering the content used to decide.
+  Deferred so the desktop confirm UX (the most iteration-heavy part) isn't designed for two
+  interaction shapes at once. NOTE: the mobile-specific `.eml`-fallback guardrail is NOT
+  built in v1 (phantom requirement until mobile exists).
 - Chrome port.
 - Registered-brokers list with its own blind-send flow.
 - **Easier / more automated matching** (explicit interest, with one hard caveat). Two
