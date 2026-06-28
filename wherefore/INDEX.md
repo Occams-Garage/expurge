@@ -1,0 +1,30 @@
+# wherefore index
+
+- 2026-06-28 | 2026-06-28-firefox-extension-pivot | Firefox extension as delivery platform | areas: run-model, permissions | topics: webextensions, privacy | stories: [] | active
+- 2026-06-28 | 2026-06-28-broker-dataset-schema | Broker dataset schema design | areas: broker-dataset | topics: data-model, verification | stories: [] | active
+- 2026-06-28 | 2026-06-28-profile-model | User profile field model | areas: profile | topics: data-model, privacy | stories: [] | active
+- 2026-06-28 | 2026-06-28-verification-draft-gate | Verification model and draft gate | areas: opt-out-drafts | topics: verification, data-model, privacy | stories: [] | active
+- 2026-06-28 | 2026-06-28-permissions-distribution-signing | Permissions, distribution, and dataset signing | areas: permissions, broker-dataset | topics: security-signing, dataset-distribution, webextensions, privacy | stories: [] | active
+- 2026-06-28 | 2026-06-28-run-model-storage-coverage | Run model, overlay UX, and storage | areas: run-model, coverage-report | topics: webextensions, data-model | stories: [] | superseded -> 2026-06-28-persistence-inversion
+- 2026-06-28 | 2026-06-28-dataset-update-preference | Dataset update preference: manual-by-default | areas: broker-dataset, permissions | topics: dataset-distribution, privacy | stories: [] | active
+- 2026-06-28 | 2026-06-28-run-model-mechanics | Run model mechanics and execution contract | areas: run-model, coverage-report | topics: webextensions, data-model | stories: [] | superseded -> 2026-06-28-persistence-inversion
+- 2026-06-28 | 2026-06-28-page-classification | Page classification: shallow-first, human matcher | areas: matching-overlay, broker-dataset | topics: data-model | stories: [] | active
+- 2026-06-28 | 2026-06-28-draft-send-mechanism | Draft send mechanism: three surfaces, user-preferred | areas: opt-out-drafts | topics: webextensions, privacy | stories: [] | active
+- 2026-06-28 | 2026-06-28-mobile-deferred | Firefox mobile deferred to v2 | areas: run-model, opt-out-drafts | topics: webextensions | stories: [] | active
+- 2026-06-28 | 2026-06-28-broker-subject-field | Subject line as structured field, not template | areas: broker-dataset | topics: data-model | stories: [] | active
+- 2026-06-28 | 2026-06-28-verification-workflow | Verification workflow, trust model, and CI enforcement | areas: broker-dataset | topics: verification, security-signing | stories: [] | active
+- 2026-06-28 | 2026-06-28-profile-intake-ux | Profile intake: value-first, no-nag, trust-first | areas: profile | topics: privacy | stories: [] | active
+- 2026-06-28 | 2026-06-28-persistence-inversion | Persistence inverted to opt-in, ephemeral by default | areas: profile, run-model | topics: privacy, data-model | stories: [] | active
+- 2026-06-28 | 2026-06-28-mv3-and-manifest | MV3, Firefox 140+, and manifest declarations | areas: permissions | topics: webextensions, privacy | stories: [] | active
+- 2026-06-28 | 2026-06-28-overlay-unknown-verdict | Four-button overlay with unknown verdict | areas: matching-overlay | topics: data-model | stories: [] | active
+- 2026-06-28 | 2026-06-28-channel-trust-enum | Channel trust: three-value enum, not boolean | areas: broker-dataset | topics: verification, data-model | stories: [] | active
+- 2026-06-28 | 2026-06-28-email-templates | Two templates: US general and California CCPA | areas: opt-out-drafts | topics: verification | stories: [] | active
+- 2026-06-28 | 2026-06-28-run-identity | Run identity: UUID plus scratch tab_id | areas: run-model | topics: data-model, privacy | stories: [] | active
+- 2026-06-28 | 2026-06-28-drift-v1-scope | Drift detection: time-only in v1, failure deferred | areas: broker-dataset | topics: verification | stories: [] | active
+- 2026-06-28 | 2026-06-28-amo-compliance | AMO compliance review: four build constraints | areas: permissions | topics: webextensions, privacy | stories: [] | active
+- 2026-06-28 | 2026-06-28-ux-architecture | Popup as run control panel; options page as primary UI with four nav sections | areas: run-model, profile, coverage-report, opt-out-drafts | topics: webextensions, ux | stories: [] | active
+- 2026-06-28 | 2026-06-28-run-section-states | Run section: four states, pause/stop controls, one-row-per-broker monitor | areas: run-model | topics: webextensions, ux, data-model | stories: [] | active
+- 2026-06-28 | 2026-06-28-results-section | Results section: four verdict groups, clear collapsed, nudge pattern, mini-run | areas: coverage-report, run-model | topics: ux, data-model | stories: [] | active
+- 2026-06-28 | 2026-06-28-draft-opt-out-status | Draft panels: opt-out status tracking, form instruction cards, general_contact callout | areas: opt-out-drafts | topics: ux, data-model | stories: [] | active
+- 2026-06-28 | 2026-06-28-permissions-flow | Permissions: all-at-once at run start, denied brokers skipped | areas: permissions, run-model | topics: webextensions, ux | stories: [] | active
+- 2026-06-28 | 2026-06-28-first-fetch-consent | First-fetch consent in Profile section at setup; weekly lazy auto-cadence | areas: broker-dataset, profile | topics: dataset-distribution, ux, privacy | stories: [] | active
