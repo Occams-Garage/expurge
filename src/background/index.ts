@@ -134,7 +134,7 @@ async function handleSkip(itemId: string, skipReason: SkipReason, tabId?: number
   const updated: RunState = {
     ...run,
     items: run.items.map(i =>
-      i.id === itemId
+      i.id === itemId && i.status !== 'verdicted'
         ? { ...i, status: 'verdicted' as WorkItemStatus, verdict: 'skipped', skipReason }
         : i
     ),
@@ -162,6 +162,14 @@ async function handleStopRun(): Promise<void> {
     ),
   };
   await saveRun(updated);
+
+  // Remove all tab session keys so tabs.onRemoved can't fire after stop and overwrite
+  // run_stopped → tab_closed for each still-open broker tab.
+  const all = await browser.storage.session.get(null) as Record<string, unknown>;
+  const tabKeys = Object.keys(all).filter(k => k.startsWith('expurge_tab_'));
+  if (tabKeys.length > 0) {
+    await browser.storage.session.remove(tabKeys);
+  }
 }
 
 async function itemIdForTab(tabId: number): Promise<string | null> {
@@ -231,12 +239,17 @@ browser.runtime.onMessage.addListener(
     if (m.type === 'REINJECT_OVERLAY') {
       const existingTabId = await findActiveBrokerTab();
       if (existingTabId !== null) {
-        await browser.tabs.update(existingTabId, { active: true });
-        await reinjectIfMissing(existingTabId);
-        return { ok: true };
+        try {
+          await browser.tabs.update(existingTabId, { active: true });
+          await reinjectIfMissing(existingTabId);
+          return { ok: true };
+        } catch {
+          await browser.storage.session.remove(`expurge_tab_${existingTabId}`);
+          // Fall through to open-next-item logic.
+        }
       }
 
-      // No live broker tab — open the next item that still needs one.
+      // No live broker tab (or tab closed between find and update) — open the next item.
       const run = await loadRun();
       if (!run) return { ok: false };
       const item =
@@ -304,13 +317,33 @@ browser.webNavigation.onErrorOccurred.addListener(async (details) => {
 // ── overlay re-injection ─────────────────────────────────────────────────────
 
 async function findActiveBrokerTab(): Promise<number | null> {
-  const all = await browser.storage.session.get(null) as Record<string, unknown>;
+  const [all, run] = await Promise.all([
+    browser.storage.session.get(null) as Promise<Record<string, unknown>>,
+    loadRun(),
+  ]);
   for (const key of Object.keys(all)) {
     if (!key.startsWith('expurge_tab_')) continue;
     const tabId = parseInt(key.slice('expurge_tab_'.length), 10);
     if (isNaN(tabId)) continue;
     try {
-      await browser.tabs.get(tabId);
+      const tab = await browser.tabs.get(tabId);
+      if (run && tab.url) {
+        const itemId = all[key] as string;
+        const item = run.items.find(i => i.id === itemId);
+        if (item) {
+          try {
+            const brokerHost = new URL(item.renderedUrl).hostname;
+            const tabHost    = new URL(tab.url).hostname;
+            if (tabHost !== brokerHost && !tabHost.endsWith('.' + brokerHost)) {
+              await browser.storage.session.remove(key); // tab navigated away
+              continue;
+            }
+          } catch {
+            await browser.storage.session.remove(key); // URL parse failed
+            continue;
+          }
+        }
+      }
       return tabId;
     } catch {
       await browser.storage.session.remove(key); // stale — tab was closed
