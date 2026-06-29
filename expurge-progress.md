@@ -4,10 +4,10 @@
 
 ## What exists today
 
-**M0–M4 is complete and buildable.** The codebase is a working end-to-end skeleton
-with single-broker robustness: challenge detection, stop control, no-wedge run management,
-and a working Restore overlay button. One broker (TruePeopleSearch), one profile variant
-(primary only), no persistence opt-ins, no options page, no batch pacing.
+**M0–M5 is complete and buildable.** The codebase supports multi-broker paced
+batching and AKA name-variant fan-out. One broker (TruePeopleSearch), up to
+BATCH_SIZE=5 concurrent tabs, `also_known_as[]` expansion, serial write queue,
+badge, run monitor, and coverage note. No persistence opt-ins, no options page.
 
 ### Files in place
 
@@ -17,15 +17,15 @@ and a working Restore overlay button. One broker (TruePeopleSearch), one profile
 | `package.json` | webextension-polyfill, esbuild, typescript; scripts: build / dev (--watch) / typecheck |
 | `tsconfig.json` | ES2022 target, moduleResolution: bundler, noEmit: true |
 | `build.mjs` | esbuild; three IIFE bundles (background, content, popup); copies popup.html and style.css to dist/ |
-| `src/shared/types.ts` | Verdict, WorkItem (tabId as scratch-only), RunState, Profile, all message types; StopRunMsg; ReinjMsg.tabId optional |
+| `src/shared/types.ts` | Verdict, WorkItem (tabId scratch-only, matchedAs on hit), RunState, Profile (also_known_as optional), all message types; StopRunMsg; ReinjMsg.tabId optional |
 | `src/shared/brokers.ts` | ChannelTrust enum, BrokerChannel/Broker interfaces, BROKERS const (TruePeopleSearch only; trust stubbed as 'verified') |
 | `src/shared/transforms.ts` | Four transforms (slug/q/upper/raw), deriveFields(), renderUrl() |
 | `src/shared/gate.ts` | evaluateGate(), channelExpiryState(), WARN_MONTHS=6, EXPIRE_MONTHS=12 |
 | `src/shared/templates.ts` | Draft discriminated union (EmailDraft \| FormDraft); buildDraft() dispatches on channel.kind; buildFormCard() generates form instruction card; mailtoUrl/toEml/toCopyText on EmailDraft; US general + CA CCPA templates (copy TBD Q-010) |
-| `src/background/index.ts` | Stateless coordinator; saveRun() strips tabIds; expurge_tab_{tabId} session keys; handles START_RUN/GET_RUN_STATE/GET_ITEM/VERDICT/GET_DRAFT/STOP_RUN/REINJECT_OVERLAY; handleStopRun() marks open+pending as run_stopped; findActiveBrokerTab() walks session keys to find a live broker tab; REINJECT_OVERLAY switches to live tab or opens next pending item; tabs.onRemoved → tab_closed; webNavigation.onErrorOccurred → load_error |
-| `src/content/index.ts` | Shadow DOM overlay; CHALLENGE_SELECTORS + detectChallenge(); buildChallengePanel() with MutationObserver (auto-transitions to verdict panel on solve, skip button for manual skip); showMainPanel() (results page: guidance panel with paste fallback; details page: full verdict panel); page detection via pathname comparison; sendVerdict() with 6s timeout + 3 retries |
-| `src/popup/index.html` | Profile form, run-active-view (stop button + restore overlay + view drafts), draft content |
-| `src/popup/index.ts` | handleFormSubmit(); permissions.request() from click handler; showRunActive() toggles stop button visibility; STOP_RUN fires on stop click; REINJECT_OVERLAY sends without tabId, shows "Nothing left to check" on ok:false; renderDraftSection() dispatches on draft.kind |
+| `src/background/index.ts` | Stateless coordinator; serialWrite queue (prevents TOCTOU); saveRun() strips tabIds; expurge_tab_{tabId} session keys; handles START_RUN/GET_RUN_STATE/GET_ITEM/VERDICT/GET_DRAFT/STOP_RUN/REINJECT_OVERLAY; buildItems() fans out across primary + AKA variants, pre-verdicts missing-field items; matchedAs populated on hit; updateBadge() (hit count); handleStopRun() marks open+pending as run_stopped + removes tab keys; findActiveBrokerTab() walks session keys, checks URL against broker domain; REINJECT_OVERLAY switches to live tab or opens next pending item; tabs.onRemoved → tab_closed; webNavigation.onErrorOccurred → load_error |
+| `src/content/index.ts` | Shadow DOM overlay; PING listener guarded by window.__expurgePingBound; CHALLENGE_SELECTORS + detectChallenge(); buildChallengePanel() with debounced MutationObserver (250 ms guard against transient reflows); showMainPanel() (results page: guidance panel with paste fallback; details page: full verdict panel); page detection via pathname comparison; sendVerdict() with 6s timeout + 3 retries |
+| `src/popup/index.html` | Profile form (also_known_as textarea), run-active-view (broker table + coverage note + stop + restore overlay + view drafts), draft content |
+| `src/popup/index.ts` | handleFormSubmit() parses also_known_as textarea; permissions.request() from click handler; showRunActive() renders broker table + coverage note, toggles stop/view-drafts visibility; STOP_RUN fires on stop click; REINJECT_OVERLAY sends without tabId, shows "Nothing left to check" on ok:false; renderDraftSection() dispatches on draft.kind |
 | `src/popup/style.css` | Popup styles; badge variants; form card styles (fields table, steps list, open-form button) |
 
 ### Prototype vs. target architecture
@@ -46,17 +46,9 @@ these move to the options page in M4+. The popup becomes a compact run control p
 - **M3+** — Listing URL capture: results-page guidance panel, navigate-to-details flow, paste fallback, post-ACK "open expurge" cue, listingUrl in draft body
 - **M3+** — TPS form_required opt-out: corrected channel record, Draft discriminated union, buildFormCard(), form card in popup (fields table, 7-step walkthrough, open-form button)
 - **M4** — Single-broker robustness: challenge detection (10 selectors covering Cloudflare/Turnstile/hCaptcha/reCAPTCHA/DataDome; MutationObserver auto-transitions to verdict panel on solve; Skip button sends skipped verdict); stop control (STOP_RUN marks all open+pending as run_stopped; popup stop button hidden on completion); no-wedge verified across all three clearing paths (verdict, skip, tab-closed all call openNextBatch); Restore overlay fixed (findActiveBrokerTab walks session keys to find live broker tab, switches to it; falls back to opening next pending item; correct dist/content.js inject path)
+- **M5** — Multi-broker batching + AKA fan-out: buildItems() expands primary + also_known_as[] variants across all active brokers (one item per broker × name-variant); missing required field → pre-verdicted skip with `missing:<field>` reason; serialWrite queue prevents TOCTOU races when multiple browser tabs return verdicts concurrently; matchedAs field populated on hit verdict; browser.action badge shows hit count; popup run monitor renders per-broker table with rolled-up status badge + AKA count; coverage note shows brokers not in the run and missing-field skip count; PING listener guarded by window flag (deduplicates across executeScript reinjections); MutationObserver dismissal debounced 250 ms; challenge skip button checks sendVerdict return value
 
 ### Remaining
-
-#### M5 — Multi-broker paced batching + AKA fan-out
-- Background: batch opening (default 5), next batch waits for full clear
-- `also_known_as[]` expansion in buildItems() — one item per (broker × name-variant)
-- `matched_as` field on WorkItem, populated on hit verdict
-- Run monitor: one row per broker with AKAs folded in
-- Badge: hit count during active run (browser.action.setBadgeText)
-- Coverage report: broker-unit counts, missing-field breakdown, unverified/broken/not-enabled
-- `missing:<field>` skip reason when requires[] not satisfied
 
 #### M6 — Options page (primary UI) + popup redesign
 - `options_ui.open_in_tab: true` in manifest
@@ -123,8 +115,8 @@ these move to the options page in M4+. The popup becomes a compact run control p
 | `src/shared/templates.ts` | `buildFormCard()` fields are TPS-specific (role dropdown step, hCaptcha step); generalize when adding more form_required brokers |
 | `src/popup/index.ts` | Profile form and draft surfaces are in popup — move to options page in M6 |
 | `src/popup/index.ts` | `isGeneralContact` wired in EmailDraft but amber callout not yet rendered — add in M6 |
-| `src/background/index.ts` | No batch pacing — opens one tab, no batch ceiling — add in M5 |
-| `src/background/index.ts` | No AKA fan-out in buildItems() — add in M5 |
+| `src/background/index.ts` | AKA parsing splits on first space only — "Mary Jane Smith" gives first="Mary", last="Jane Smith"; smarter parsing (e.g. last-space split) deferred |
+| `src/popup/index.ts` | "View opt-out requests" routes to first hit only — multi-hit navigation needs M6 Results section |
 | `manifest.json` | No `options_ui` entry — add in M6 |
 
 ---
@@ -136,9 +128,7 @@ fixed. Recorded here so the decision isn't re-litigated in future sessions.
 
 | Finding | Deferred to | Rationale |
 |---------|-------------|-----------|
-| TOCTOU race in `handleVerdict` (`loadRun` → mutate → `saveRun` not atomic) | M5 | Batching makes concurrent verdicts from two open tabs more likely; fixing the race correctly requires a queued-write or mutex pattern that's easier to introduce alongside batch work |
-| Duplicate PING listener registered on every overlay re-inject | M5 | Each `executeScript` reinject adds another `onMessage` listener; harmless (all respond identically) but accumulates. Reinject path was exercised in M4 and confirmed still present — fix properly in M5 alongside the batching work |
-| Popup routes to first hit only; subsequent hits unreachable | M5/M6 | Requires the Results section (options page, M6) or a multi-hit picker (M5); not worth hacking around in the popup |
+| Popup routes to first hit only; subsequent hits unreachable | M6 | Requires the Results section (options page, M6); the popup run monitor added in M5 shows per-broker status but does not support navigating to a second hit's draft |
 | `buildFormCard()` steps are TPS-specific (role dropdown, hCaptcha step) | M5 | Generalise when a second `form_required` broker is added; premature abstraction with one data point |
 | Background PING handler always returns `hasOverlay: false` | M6 | Content script is authoritative for overlay presence; background stub is incorrect but harmless until REINJECT_OVERLAY is wired into the options page |
 | SPA / History API navigation not handled (overlay disappears on client-side route change) | M5 | No current broker in the set is a SPA; revisit when adding brokers that use pushState |

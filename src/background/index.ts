@@ -7,6 +7,25 @@ import { buildDraft } from '../shared/templates';
 
 const BATCH_SIZE = 5;
 
+// ── serial write queue ────────────────────────────────────────────────────────
+// Prevents TOCTOU: loadRun → mutate → saveRun is not atomic; concurrent verdicts
+// from two open tabs can each read the same snapshot and one will overwrite the other.
+// The queue serializes all state-mutating handlers so each waits for the previous to finish.
+
+let writeQueue: Promise<void> = Promise.resolve();
+
+function serialWrite(fn: () => Promise<void>): Promise<void> {
+  const p = writeQueue.then(
+    () => fn(),
+    () => fn(),
+  );
+  writeQueue = p.then(
+    () => undefined,
+    () => undefined,
+  );
+  return p;
+}
+
 // ── session storage keys ─────────────────────────────────────────────────────
 // browser.storage.session: survives event-page spindown, cleared on browser close.
 // tab_id is NEVER written to durable storage — only held live in session.
@@ -40,24 +59,61 @@ async function saveProfile(profile: Profile): Promise<void> {
   await browser.storage.session.set({ [KEY_PROFILE]: profile });
 }
 
+// ── badge ─────────────────────────────────────────────────────────────────────
+
+async function updateBadge(run: RunState): Promise<void> {
+  const hits = run.items.filter(i => i.verdict === 'hit').length;
+  await browser.action.setBadgeText({ text: hits > 0 ? String(hits) : '' });
+  if (hits > 0) {
+    await browser.action.setBadgeBackgroundColor({ color: '#B25C3C' }); // accent
+  }
+}
+
 // ── work-item construction ───────────────────────────────────────────────────
 
 function buildItems(profile: Profile): WorkItem[] {
   const items: WorkItem[] = [];
+
+  // Name variants: primary name first, then each AKA split on the first space.
+  const variants: Array<{ nameVariant: string; first: string; last: string }> = [
+    { nameVariant: 'primary', first: profile.first, last: profile.last },
+    ...(profile.also_known_as ?? []).map((aka, i) => {
+      const sp = aka.indexOf(' ');
+      return {
+        nameVariant: `aka_${i}`,
+        first: sp >= 0 ? aka.slice(0, sp) : aka,
+        last:  sp >= 0 ? aka.slice(sp + 1) : '',
+      };
+    }),
+  ];
+
   for (const broker of BROKERS) {
     if (broker.status !== 'active') continue;
-    const profileMap = profile as unknown as Record<string, string>;
-    const hasAll = broker.search.requires.every(
-      f => Boolean(profileMap[f]?.trim())
-    );
-    if (!hasAll) continue;
-    items.push({
-      id: `${broker.id}:primary`,
-      brokerId: broker.id,
-      nameVariant: 'primary',
-      renderedUrl: renderUrl(broker.search.url, profile),
-      status: 'pending',
-    });
+    for (const variant of variants) {
+      const vProfile = { ...profile, first: variant.first, last: variant.last };
+      const profileMap = vProfile as unknown as Record<string, string>;
+      const missingField = broker.search.requires.find(f => !profileMap[f]?.trim());
+      if (missingField) {
+        // Pre-verdicted: count toward progress total but open no tab.
+        items.push({
+          id: `${broker.id}:${variant.nameVariant}`,
+          brokerId: broker.id,
+          nameVariant: variant.nameVariant,
+          renderedUrl: '',
+          status: 'verdicted',
+          verdict: 'skipped',
+          skipReason: `missing:${missingField}` as SkipReason,
+        });
+        continue;
+      }
+      items.push({
+        id: `${broker.id}:${variant.nameVariant}`,
+        brokerId: broker.id,
+        nameVariant: variant.nameVariant,
+        renderedUrl: renderUrl(broker.search.url, vProfile),
+        status: 'pending',
+      });
+    }
   }
   return items;
 }
@@ -96,80 +152,92 @@ async function openNextBatch(run: RunState, focusFirst = false): Promise<void> {
 
 async function handleStartRun(profile: Profile): Promise<void> {
   await saveProfile(profile);
-
-  const runId = crypto.randomUUID();
-  const items = buildItems(profile);
-  const run: RunState = { runId, createdAt: new Date().toISOString(), items };
-
-  // Persist before opening tabs so content scripts can find their items on load.
-  await saveRun(run);
-  await openNextBatch(run, true);
+  return serialWrite(async () => {
+    const runId = crypto.randomUUID();
+    const items = buildItems(profile);
+    const run: RunState = { runId, createdAt: new Date().toISOString(), items };
+    // Persist before opening tabs so content scripts can find their items on load.
+    await saveRun(run);
+    await updateBadge(run);
+    await openNextBatch(run, true);
+  });
 }
 
 async function handleVerdict(itemId: string, verdict: Verdict, listingUrl?: string, tabId?: number): Promise<void> {
-  const run = await loadRun();
-  if (!run) return;
+  return serialWrite(async () => {
+    const run = await loadRun();
+    if (!run) return;
 
-  const updated: RunState = {
-    ...run,
-    items: run.items.map(i =>
-      i.id === itemId ? { ...i, status: 'verdicted' as WorkItemStatus, verdict, listingUrl } : i
-    ),
-  };
-  await saveRun(updated);
+    const updated: RunState = {
+      ...run,
+      items: run.items.map(i => {
+        if (i.id !== itemId) return i;
+        return {
+          ...i,
+          status: 'verdicted' as WorkItemStatus,
+          verdict,
+          listingUrl,
+          ...(verdict === 'hit' ? { matchedAs: i.nameVariant } : {}),
+        };
+      }),
+    };
+    await saveRun(updated);
 
-  // Clean up tab mapping.
-  if (tabId !== undefined) {
-    await browser.storage.session.remove(`expurge_tab_${tabId}`);
-  }
+    if (tabId !== undefined) {
+      await browser.storage.session.remove(`expurge_tab_${tabId}`);
+    }
 
-  // Auto-advance: fill available batch slots.
-  await openNextBatch(updated);
+    await updateBadge(updated);
+    await openNextBatch(updated);
+  });
 }
 
 async function handleSkip(itemId: string, skipReason: SkipReason, tabId?: number): Promise<void> {
-  const run = await loadRun();
-  if (!run) return;
+  return serialWrite(async () => {
+    const run = await loadRun();
+    if (!run) return;
 
-  const updated: RunState = {
-    ...run,
-    items: run.items.map(i =>
-      i.id === itemId && i.status !== 'verdicted'
-        ? { ...i, status: 'verdicted' as WorkItemStatus, verdict: 'skipped', skipReason }
-        : i
-    ),
-  };
-  await saveRun(updated);
+    const updated: RunState = {
+      ...run,
+      items: run.items.map(i =>
+        i.id === itemId && i.status !== 'verdicted'
+          ? { ...i, status: 'verdicted' as WorkItemStatus, verdict: 'skipped', skipReason }
+          : i
+      ),
+    };
+    await saveRun(updated);
 
-  if (tabId !== undefined) {
-    await browser.storage.session.remove(`expurge_tab_${tabId}`);
-  }
+    if (tabId !== undefined) {
+      await browser.storage.session.remove(`expurge_tab_${tabId}`);
+    }
 
-  // Auto-advance: same as handleVerdict — skips count as cleared slots.
-  await openNextBatch(updated);
+    await openNextBatch(updated);
+  });
 }
 
 async function handleStopRun(): Promise<void> {
-  const run = await loadRun();
-  if (!run) return;
+  return serialWrite(async () => {
+    const run = await loadRun();
+    if (!run) return;
 
-  const updated: RunState = {
-    ...run,
-    items: run.items.map(i =>
-      i.status === 'pending' || i.status === 'open'
-        ? { ...i, status: 'verdicted' as WorkItemStatus, verdict: 'skipped' as Verdict, skipReason: 'run_stopped' as SkipReason }
-        : i
-    ),
-  };
-  await saveRun(updated);
+    const updated: RunState = {
+      ...run,
+      items: run.items.map(i =>
+        i.status === 'pending' || i.status === 'open'
+          ? { ...i, status: 'verdicted' as WorkItemStatus, verdict: 'skipped' as Verdict, skipReason: 'run_stopped' as SkipReason }
+          : i
+      ),
+    };
+    await saveRun(updated);
 
-  // Remove all tab session keys so tabs.onRemoved can't fire after stop and overwrite
-  // run_stopped → tab_closed for each still-open broker tab.
-  const all = await browser.storage.session.get(null) as Record<string, unknown>;
-  const tabKeys = Object.keys(all).filter(k => k.startsWith('expurge_tab_'));
-  if (tabKeys.length > 0) {
-    await browser.storage.session.remove(tabKeys);
-  }
+    // Remove all tab session keys so tabs.onRemoved can't fire after stop and overwrite
+    // run_stopped → tab_closed for each still-open broker tab.
+    const all = await browser.storage.session.get(null) as Record<string, unknown>;
+    const tabKeys = Object.keys(all).filter(k => k.startsWith('expurge_tab_'));
+    if (tabKeys.length > 0) {
+      await browser.storage.session.remove(tabKeys);
+    }
+  });
 }
 
 async function itemIdForTab(tabId: number): Promise<string | null> {

@@ -102,7 +102,8 @@ label {
   margin-bottom: var(--s-1);
 }
 
-input[type="text"] {
+input[type="text"],
+textarea {
   display: block;
   width: 100%;
   padding: var(--s-2) var(--s-3);
@@ -116,9 +117,28 @@ input[type="text"] {
   transition: border-color 0.12s, box-shadow 0.12s;
 }
 
-input[type="text"]:focus {
+input[type="text"]:focus,
+textarea:focus {
   border-color: var(--focus-ring);
   box-shadow: 0 0 0 3px var(--focus-ring-shadow);
+}
+
+textarea {
+  resize: vertical;
+  min-height: 58px;
+  line-height: var(--lh-body);
+}
+
+.label-optional {
+  font-weight: var(--fw-regular);
+  color: var(--text-faint);
+}
+
+.field-hint {
+  display: block;
+  font-size: 11px;
+  color: var(--text-faint);
+  margin-top: var(--s-1);
 }
 
 /* ── buttons ─────────────────────────────────────────────────────────────── */
@@ -177,7 +197,9 @@ input[type="text"]:focus {
 .btn-quiet:hover { background: var(--fill); }
 .btn-quiet:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--focus-ring-shadow); }
 
-/* ── run items ───────────────────────────────────────────────────────────── */
+/* ── run monitor ─────────────────────────────────────────────────────────── */
+
+.broker-table { margin-bottom: var(--s-2); }
 
 .run-item {
   display: flex;
@@ -191,6 +213,23 @@ input[type="text"]:focus {
 .run-item:last-child { border-bottom: none; }
 
 .broker-name { font-weight: var(--fw-medium); color: var(--text); }
+
+.aka-count {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-faint);
+  margin-left: var(--s-1);
+  letter-spacing: var(--tracking-mono);
+}
+
+.coverage-note {
+  font-family: var(--font-mono);
+  font-size: var(--fs-mono);
+  color: var(--text-faint);
+  letter-spacing: var(--tracking-mono);
+  text-transform: uppercase;
+  margin-bottom: var(--s-2);
+}
 
 .badge {
   font-family: var(--font-mono);

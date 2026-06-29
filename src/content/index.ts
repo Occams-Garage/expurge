@@ -513,17 +513,23 @@ async function sendVerdict(
 }
 
 // ── PING handler (background → content) ─────────────────────────────────────
+// Guarded by a window flag so each executeScript reinject doesn't stack another
+// listener — all would respond identically but they accumulate across reinjections.
 
-browser.runtime.onMessage.addListener((msg: unknown) => {
-  const m = msg as Record<string, unknown>;
-  if (m.type === 'PING') {
-    return Promise.resolve({
-      type: 'PONG',
-      hasOverlay: !!document.getElementById('expurge-host'),
-    });
-  }
-  return undefined;
-});
+const w = window as Window & { __expurgePingBound?: boolean };
+if (!w.__expurgePingBound) {
+  w.__expurgePingBound = true;
+  browser.runtime.onMessage.addListener((msg: unknown) => {
+    const m = msg as Record<string, unknown>;
+    if (m.type === 'PING') {
+      return Promise.resolve({
+        type: 'PONG',
+        hasOverlay: !!document.getElementById('expurge-host'),
+      });
+    }
+    return undefined;
+  });
+}
 
 // ── challenge detection ──────────────────────────────────────────────────────
 

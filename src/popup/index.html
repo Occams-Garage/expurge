@@ -41,6 +41,12 @@
             <label for="state">State (2-letter, e.g. CA)</label>
             <input type="text" id="state" name="state" maxlength="2" autocomplete="off" required>
           </div>
+          <div class="field">
+            <label for="also_known_as">Other names to search <span class="label-optional">(optional)</span></label>
+            <textarea id="also_known_as" name="also_known_as" rows="2"
+                      placeholder="One name per line&#10;e.g. Jane Smith"></textarea>
+            <span class="field-hint">Maiden names, middle-name variants, nicknames</span>
+          </div>
           <p class="note-mono">Stored only on this device · never uploaded</p>
           <button type="submit" id="btn-start" class="btn-primary">Check for my data</button>
           <p id="form-error" class="error-msg hidden"></p>
@@ -51,6 +57,8 @@
       <div id="run-active-view" class="hidden">
         <h2 id="run-active-heading">Run in progress</h2>
         <p id="run-active-text" class="note"></p>
+        <div id="broker-table" class="broker-table"></div>
+        <p id="coverage-note" class="coverage-note hidden"></p>
         <button id="btn-restore-overlay" class="btn-secondary">Restore overlay</button>
         <button id="btn-stop-run" class="btn-secondary hidden">Stop run</button>
         <button id="btn-view-drafts" class="btn-primary hidden">View opt-out requests</button>

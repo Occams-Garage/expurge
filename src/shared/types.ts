@@ -18,6 +18,7 @@ export interface WorkItem {
   verdict?: Verdict;
   skipReason?: SkipReason;
   listingUrl?: string;     // direct profile page URL captured at verdict time
+  matchedAs?: string;      // nameVariant that produced a hit (populated on hit verdict)
 }
 
 export interface RunState {
@@ -31,6 +32,7 @@ export interface Profile {
   last: string;
   city: string;
   state: string;
+  also_known_as?: string[];  // additional names to search, each as "First Last"
 }
 
 // ── messages popup/content → background ─────────────────────────────────────
