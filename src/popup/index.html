@@ -4,21 +4,24 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>expurge</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600&family=IBM+Plex+Mono&family=Newsreader:opsz,wght@6..72,600&display=swap">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <div id="app">
     <header>
-      <h1>expurge</h1>
-      <p class="tagline">Find and remove your data from people-search sites</p>
+      <h1 class="xpg-wordmark">ex<span class="xpg-strip">pur</span>ge</h1>
+      <p class="tagline">Find your data on people-search sites and opt out</p>
     </header>
 
     <!-- M1: Profile form -->
     <section id="section-profile">
       <h2>Your info</h2>
       <p class="note">
-        Nothing is stored or sent unless you choose.
-        Your info is used only to search broker sites in your browser.
+        Your info stays in this browser only — nothing is sent anywhere
+        unless you choose to send an opt-out yourself.
       </p>
       <form id="profile-form" novalidate>
         <div class="field">
@@ -37,6 +40,7 @@
           <label for="state">State (2-letter, e.g. CA)</label>
           <input type="text" id="state" name="state" maxlength="2" autocomplete="off" required>
         </div>
+        <p class="note-mono">Stored only on this device · never uploaded</p>
         <button type="submit" id="btn-start" class="btn-primary">Check for my data</button>
         <p id="form-error" class="error-msg hidden"></p>
       </form>
@@ -44,16 +48,16 @@
 
     <!-- M2: Run status -->
     <section id="section-run" class="hidden">
-      <h2>Run in progress</h2>
+      <h2>Checking for listings</h2>
       <div id="run-items"></div>
-      <button id="btn-refresh" class="btn-secondary">Refresh status</button>
+      <button id="btn-refresh" class="btn-secondary">Refresh</button>
     </section>
 
     <!-- M3: Draft + send surfaces (email or form card, rendered by JS) -->
     <section id="section-draft" class="hidden">
       <h2>Opt-out request ready</h2>
       <div id="draft-content"></div>
-      <button id="btn-back" class="btn-ghost">← Back to run status</button>
+      <button id="btn-back" class="btn-quiet">← Back to results</button>
     </section>
   </div>
 
