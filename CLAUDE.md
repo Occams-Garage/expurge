@@ -90,4 +90,4 @@ The seven ethics invariants in `STYLEGUIDE.md §0` are non-negotiable and overri
 
 ## Project state
 
-Design phase. No source files yet. `expurge-plan.md` is the canonical design document. `wherefore/` contains the discussion log and open questions index.
+`expurge-plan.md` is the canonical design document (overall plan, architecture, milestones). `expurge-progress.md` tracks current implementation progress (what's done, what's in flight, what's next). `wherefore/` contains the discussion log and open questions index.
