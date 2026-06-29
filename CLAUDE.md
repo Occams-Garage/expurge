@@ -77,6 +77,17 @@ No `<all_urls>`. Host patterns are in `optional_host_permissions` (MV3). New bro
 - **Q-009**: Does `browser.permissions.request()` require a user gesture in current Firefox?
 - **Q-010**: CCPA template legal language and DROP-registry overlap verification (pre-launch).
 
+## UI/UX design
+
+All visual and interaction work must follow the `design/` folder:
+
+- **`design/STYLEGUIDE.md`** — canonical guide for voice/tone, component patterns, ethics invariants (read this first for any UI work).
+- **`src/styles/tokens.css`** / **`src/styles/tokens.json`** — design tokens. Always reference tokens; never hard-code hex values or raw sizes in components.
+- **`design/expurge brand & UI guide.dc.html`** — visual brand reference.
+- **`design/expurge cut animation.dc.html`** — animation reference.
+
+The seven ethics invariants in `STYLEGUIDE.md §0` are non-negotiable and override any other instruction.
+
 ## Project state
 
 Design phase. No source files yet. `expurge-plan.md` is the canonical design document. `wherefore/` contains the discussion log and open questions index.
