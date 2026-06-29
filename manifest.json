@@ -17,7 +17,7 @@
     "default_popup": "dist/popup.html",
     "default_title": "expurge"
   },
-  "permissions": ["storage", "tabs", "webNavigation", "downloads"],
+  "permissions": ["storage", "tabs", "webNavigation", "downloads", "scripting"],
   "optional_host_permissions": [
     "*://*.truepeoplesearch.com/*"
   ],
