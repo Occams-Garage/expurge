@@ -95,14 +95,14 @@ async function handleStartRun(profile: Profile): Promise<void> {
   }
 }
 
-async function handleVerdict(itemId: string, verdict: Verdict, tabId?: number): Promise<void> {
+async function handleVerdict(itemId: string, verdict: Verdict, listingUrl?: string, tabId?: number): Promise<void> {
   const run = await loadRun();
   if (!run) return;
 
   const updated: RunState = {
     ...run,
     items: run.items.map(i =>
-      i.id === itemId ? { ...i, status: 'verdicted' as WorkItemStatus, verdict } : i
+      i.id === itemId ? { ...i, status: 'verdicted' as WorkItemStatus, verdict, listingUrl } : i
     ),
   };
   await saveRun(updated);
@@ -169,6 +169,7 @@ browser.runtime.onMessage.addListener(
         itemId: item.id,
         brokerId: item.brokerId,
         exposes: broker?.search.exposes ?? [],
+        renderedUrl: item.renderedUrl,
       };
     }
 
@@ -177,6 +178,7 @@ browser.runtime.onMessage.addListener(
       await handleVerdict(
         m.itemId as string,
         m.verdict as Verdict,
+        m.listingUrl as string | undefined,
         tabId,
       );
       return { type: 'ACK', itemId: m.itemId };
@@ -198,7 +200,7 @@ browser.runtime.onMessage.addListener(
       const gate = evaluateGate(broker, 'hit');
       if (!gate.pass) return { draft: null, reason: gate.reason };
 
-      const draft = buildDraft(profile, broker, gate.channel);
+      const draft = buildDraft(profile, broker, gate.channel, hitItem.listingUrl);
       return { draft };
     }
 

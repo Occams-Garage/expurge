@@ -1,6 +1,6 @@
 import browser from 'webextension-polyfill';
 import type { RunState } from '../shared/types';
-import type { Draft } from '../shared/templates';
+import type { Draft, EmailDraft, FormDraft } from '../shared/templates';
 import { mailtoUrl, toEml, toCopyText } from '../shared/templates';
 
 // ── section routing ──────────────────────────────────────────────────────────
@@ -59,60 +59,15 @@ function renderRunSection(run: RunState): void {
   }
 }
 
-// ── draft display (M3) ───────────────────────────────────────────────────────
+// ── html helper ──────────────────────────────────────────────────────────────
 
-function renderDraftSection(draft: Draft, brokerId: string): void {
-  showSection('draft');
+function escHtml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
 
-  const summary = document.getElementById('draft-summary')!;
-  summary.innerHTML = `
-    <div class="field-row"><strong>Broker:</strong> ${escHtml(brokerId)}</div>
-    <div class="field-row"><strong>To:</strong> ${escHtml(draft.to)}</div>
-    <div class="field-row"><strong>Subject:</strong> ${escHtml(draft.subject)}</div>
-  `;
+// ── back button (shared) ─────────────────────────────────────────────────────
 
-  const copyText = toCopyText(draft);
-  const copyArea = document.getElementById('copy-area')!;
-  const copyTextEl = document.getElementById('copy-text') as HTMLTextAreaElement;
-  copyTextEl.value = copyText;
-
-  const btnMailto = document.getElementById('btn-mailto')!;
-  const btnEml    = document.getElementById('btn-eml')!;
-  const btnCopy   = document.getElementById('btn-copy')!;
-
-  // "Open in mail app" — browser.tabs.create with a mailto: URL invokes the OS mail handler.
-  btnMailto.onclick = () => {
-    browser.tabs.create({ url: mailtoUrl(draft) });
-  };
-
-  // ".eml download" — encodes as a data: URL so browser.downloads can fetch it cross-context.
-  btnEml.onclick = async () => {
-    const content = toEml(draft);
-    const bytes   = new TextEncoder().encode(content);
-    let binary    = '';
-    bytes.forEach(b => { binary += String.fromCharCode(b); });
-    const b64     = btoa(binary);
-    const url     = `data:message/rfc822;base64,${b64}`;
-    await browser.downloads.download({
-      url,
-      filename: `expurge-optout-${brokerId}.eml`,
-      saveAs: false,
-    });
-  };
-
-  // "Copy to clipboard" — also reveals the textarea for manual selection.
-  btnCopy.onclick = async () => {
-    copyArea.classList.remove('hidden');
-    try {
-      await navigator.clipboard.writeText(copyText);
-      btnCopy.textContent = 'Copied!';
-      setTimeout(() => { btnCopy.textContent = 'Copy to clipboard'; }, 2000);
-    } catch {
-      // Clipboard API unavailable — the textarea fallback is already visible.
-      copyTextEl.select();
-    }
-  };
-
+function wireBackButton(): void {
   document.getElementById('btn-back')!.onclick = async () => {
     const res = await browser.runtime.sendMessage({ type: 'GET_RUN_STATE' });
     const run = (res as { run?: RunState }).run;
@@ -121,8 +76,118 @@ function renderDraftSection(draft: Draft, brokerId: string): void {
   };
 }
 
-function escHtml(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+// ── email draft display ──────────────────────────────────────────────────────
+
+function renderEmailDraftSection(draft: EmailDraft, brokerId: string): void {
+  showSection('draft');
+  wireBackButton();
+
+  const content = document.getElementById('draft-content')!;
+  content.innerHTML = `
+    <div class="draft-box">
+      <div class="field-row"><strong>Broker:</strong> ${escHtml(brokerId)}</div>
+      <div class="field-row"><strong>To:</strong> ${escHtml(draft.to)}</div>
+      <div class="field-row"><strong>Subject:</strong> ${escHtml(draft.subject)}</div>
+    </div>
+    <div class="send-buttons">
+      <button id="btn-mailto" class="btn-send btn-mailto">Open in mail app</button>
+      <button id="btn-eml"    class="btn-send btn-eml">Download .eml file</button>
+      <button id="btn-copy"   class="btn-send btn-copy">Copy to clipboard</button>
+    </div>
+    <div class="copy-area hidden" id="copy-area">
+      <textarea id="copy-text" readonly></textarea>
+      <p class="copy-note">Select all and copy, or use the button above.</p>
+    </div>
+  `;
+
+  const copyText = toCopyText(draft);
+  (document.getElementById('copy-text') as HTMLTextAreaElement).value = copyText;
+
+  // "Open in mail app" — browser.tabs.create with a mailto: URL invokes the OS mail handler.
+  document.getElementById('btn-mailto')!.onclick = () => {
+    browser.tabs.create({ url: mailtoUrl(draft) });
+  };
+
+  // ".eml download" — encodes as a data: URL so browser.downloads can fetch it cross-context.
+  document.getElementById('btn-eml')!.onclick = async () => {
+    const emlContent = toEml(draft);
+    const bytes      = new TextEncoder().encode(emlContent);
+    let binary       = '';
+    bytes.forEach(b => { binary += String.fromCharCode(b); });
+    const b64  = btoa(binary);
+    const url  = `data:message/rfc822;base64,${b64}`;
+    await browser.downloads.download({
+      url,
+      filename: `expurge-optout-${brokerId}.eml`,
+      saveAs: false,
+    });
+  };
+
+  // "Copy to clipboard" — reveals the textarea as a fallback.
+  const copyArea = document.getElementById('copy-area')!;
+  const btnCopy  = document.getElementById('btn-copy')!;
+  btnCopy.onclick = async () => {
+    copyArea.classList.remove('hidden');
+    try {
+      await navigator.clipboard.writeText(copyText);
+      btnCopy.textContent = 'Copied!';
+      setTimeout(() => { btnCopy.textContent = 'Copy to clipboard'; }, 2000);
+    } catch {
+      (document.getElementById('copy-text') as HTMLTextAreaElement).select();
+    }
+  };
+}
+
+// ── form card display ────────────────────────────────────────────────────────
+
+function renderFormDraftSection(draft: FormDraft): void {
+  showSection('draft');
+  wireBackButton();
+
+  const fieldsHtml = draft.fields.map(f => `
+    <tr>
+      <td class="form-field-label">${escHtml(f.label)}</td>
+      <td class="form-field-value">
+        ${f.value
+          ? `<span class="form-value-text">${escHtml(f.value)}</span>`
+          : `<em class="form-value-empty">you fill in</em>`}
+        ${f.note ? `<div class="form-field-note">${escHtml(f.note)}</div>` : ''}
+      </td>
+    </tr>
+  `).join('');
+
+  const stepsHtml = draft.steps.map(s => `<li>${escHtml(s)}</li>`).join('');
+
+  const content = document.getElementById('draft-content')!;
+  content.innerHTML = `
+    <div class="draft-box">
+      <div class="field-row"><strong>Broker:</strong> ${escHtml(draft.brokerName)}</div>
+      <div class="field-row form-channel-note">Opt-out is via web form — follow the steps below.</div>
+    </div>
+    <div class="form-card-section">
+      <p class="form-card-label">Fill in these fields</p>
+      <table class="form-fields-table">${fieldsHtml}</table>
+    </div>
+    <div class="form-card-section">
+      <p class="form-card-label">Steps</p>
+      <ol class="form-steps-list">${stepsHtml}</ol>
+    </div>
+    <button id="btn-open-form" class="btn-send btn-form">Open opt-out form →</button>
+  `;
+
+  document.getElementById('btn-open-form')!.onclick = () => {
+    browser.tabs.create({ url: draft.formUrl });
+  };
+}
+
+// ── draft dispatch ────────────────────────────────────────────────────────────
+
+function renderDraftSection(draft: Draft, brokerId: string): void {
+  if (draft.kind === 'form') {
+    renderFormDraftSection(draft);
+  } else {
+    renderEmailDraftSection(draft, brokerId);
+  }
 }
 
 // ── profile form submit (M1) ─────────────────────────────────────────────────
@@ -173,7 +238,7 @@ async function handleFormSubmit(e: Event): Promise<void> {
     const run = (res as { run?: RunState }).run;
     if (run) renderRunSection(run);
     else showSection('run');
-  } catch (err) {
+  } catch {
     showError('Something went wrong. Is the extension active?');
     btn.disabled = false;
     btn.textContent = 'Check for my data';
@@ -183,7 +248,6 @@ async function handleFormSubmit(e: Event): Promise<void> {
 // ── init ─────────────────────────────────────────────────────────────────────
 
 async function init(): Promise<void> {
-  // Check for an active run first.
   const res = await browser.runtime.sendMessage({ type: 'GET_RUN_STATE' });
   const run = (res as { run?: RunState }).run;
 
@@ -192,7 +256,6 @@ async function init(): Promise<void> {
     return;
   }
 
-  // If there's a hit, try to load the draft.
   const hitItem = run.items.find(i => i.verdict === 'hit');
   if (hitItem) {
     const draftRes = await browser.runtime.sendMessage({

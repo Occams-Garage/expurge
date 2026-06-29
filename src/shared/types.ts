@@ -11,6 +11,7 @@ export interface WorkItem {
   tabId?: number;          // live-session scratch only — never written to durable storage
   verdict?: Verdict;
   skipReason?: SkipReason;
+  listingUrl?: string;     // direct profile page URL captured at verdict time
 }
 
 export interface RunState {
@@ -32,7 +33,7 @@ export interface StartRunMsg    { type: 'START_RUN';    profile: Profile }
 export interface GetRunStateMsg { type: 'GET_RUN_STATE' }
 export interface GetDraftMsg    { type: 'GET_DRAFT';    brokerId: string }
 export interface GetItemMsg     { type: 'GET_ITEM' }
-export interface VerdictMsg     { type: 'VERDICT'; itemId: string; verdict: Verdict; skipReason?: SkipReason }
+export interface VerdictMsg     { type: 'VERDICT'; itemId: string; verdict: Verdict; skipReason?: SkipReason; listingUrl?: string }
 
 export type ToBackground =
   | StartRunMsg | GetRunStateMsg | GetDraftMsg | GetItemMsg | VerdictMsg;
@@ -44,5 +45,6 @@ export interface ItemInfoMsg {
   itemId: string;
   brokerId: string;
   exposes: string[];
+  renderedUrl: string;
 }
 export interface AckMsg { type: 'ACK'; itemId: string }

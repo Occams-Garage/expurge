@@ -1,5 +1,5 @@
 import * as esbuild from 'esbuild';
-import { copyFileSync, mkdirSync } from 'fs';
+import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 
 const watch = process.argv.includes('--watch');
 
@@ -20,6 +20,9 @@ const entries = [
 ];
 
 function copyStatics() {
+  // Strip "dist/" prefix from file paths — manifest lives inside dist/ so paths are relative to it.
+  const manifest = readFileSync('manifest.json', 'utf8').replaceAll('"dist/', '"');
+  writeFileSync('dist/manifest.json', manifest);
   copyFileSync('src/popup/index.html', 'dist/popup.html');
   copyFileSync('src/popup/style.css',  'dist/style.css');
 }
