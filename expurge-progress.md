@@ -132,3 +132,20 @@ these move to the options page in M4+. The popup becomes a compact run control p
 | `src/background/index.ts` | No AKA fan-out in buildItems() — add in M5 |
 | `src/content/index.ts` | No challenge detection — add in M4 |
 | `manifest.json` | No `options_ui` entry — add in M6 |
+
+---
+
+## Consciously deferred (code review, 2026-06-28)
+
+These findings were surfaced in the pre-M4 code review and explicitly deferred rather than
+fixed. Recorded here so the decision isn't re-litigated in future sessions.
+
+| Finding | Deferred to | Rationale |
+|---------|-------------|-----------|
+| TOCTOU race in `handleVerdict` (`loadRun` → mutate → `saveRun` not atomic) | M5 | Batching makes concurrent verdicts from two open tabs more likely; fixing the race correctly requires a queued-write or mutex pattern that's easier to introduce alongside batch work |
+| Duplicate PING listener registered on every overlay re-inject | M4 testing | Need the reinject path exercised with real challenge scenarios before the right fix is obvious; may resolve itself once reinject logic stabilises |
+| Popup routes to first hit only; subsequent hits unreachable | M5/M6 | Requires the Results section (options page, M6) or a multi-hit picker (M5); not worth hacking around in the popup |
+| `buildFormCard()` steps are TPS-specific (role dropdown, hCaptcha step) | M5 | Generalise when a second `form_required` broker is added; premature abstraction with one data point |
+| Background PING handler always returns `hasOverlay: false` | M6 | Content script is authoritative for overlay presence; background stub is incorrect but harmless until REINJECT_OVERLAY is wired into the options page |
+| SPA / History API navigation not handled (overlay disappears on client-side route change) | M5 | No current broker in the set is a SPA; revisit when adding brokers that use pushState |
+| `Profile` type has only 4 of 14 planned fields (`first`, `last`, `city`, `state`) | M5 | Remaining fields (`middle`, `zip`, `age`, `emails[]`, `phones[]`, `relatives[]`, `also_known_as[]`) are needed for AKA fan-out; premature to add fields with no consumers yet |
