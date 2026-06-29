@@ -17,6 +17,7 @@ const entries = [
   { entryPoints: ['src/background/index.ts'], outfile: 'dist/background.js' },
   { entryPoints: ['src/content/index.ts'],    outfile: 'dist/content.js'    },
   { entryPoints: ['src/popup/index.ts'],      outfile: 'dist/popup.js'      },
+  { entryPoints: ['src/popup/style.css'],     outfile: 'dist/style.css'     },
 ];
 
 function copyStatics() {
@@ -24,7 +25,6 @@ function copyStatics() {
   const manifest = readFileSync('manifest.json', 'utf8').replaceAll('"dist/', '"');
   writeFileSync('dist/manifest.json', manifest);
   copyFileSync('src/popup/index.html', 'dist/popup.html');
-  copyFileSync('src/popup/style.css',  'dist/style.css');
 }
 
 if (watch) {
