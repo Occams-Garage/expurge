@@ -229,7 +229,34 @@ browser.runtime.onMessage.addListener(
     }
 
     if (m.type === 'REINJECT_OVERLAY') {
-      await reinjectIfMissing(m.tabId as number);
+      const existingTabId = await findActiveBrokerTab();
+      if (existingTabId !== null) {
+        await browser.tabs.update(existingTabId, { active: true });
+        await reinjectIfMissing(existingTabId);
+        return { ok: true };
+      }
+
+      // No live broker tab — open the next item that still needs one.
+      const run = await loadRun();
+      if (!run) return { ok: false };
+      const item =
+        run.items.find(i => i.status === 'pending') ??
+        run.items.find(i => i.status === 'open');
+      if (!item) return { ok: false };
+
+      const tab = await browser.tabs.create({ url: item.renderedUrl, active: true });
+      if (tab.id !== undefined) {
+        await browser.storage.session.set({ [`expurge_tab_${tab.id}`]: item.id });
+        if (item.status === 'pending') {
+          const updated: RunState = {
+            ...run,
+            items: run.items.map(i =>
+              i.id === item.id ? { ...i, status: 'open' as WorkItemStatus } : i
+            ),
+          };
+          await saveRun(updated);
+        }
+      }
       return { ok: true };
     }
 
@@ -276,6 +303,22 @@ browser.webNavigation.onErrorOccurred.addListener(async (details) => {
 
 // ── overlay re-injection ─────────────────────────────────────────────────────
 
+async function findActiveBrokerTab(): Promise<number | null> {
+  const all = await browser.storage.session.get(null) as Record<string, unknown>;
+  for (const key of Object.keys(all)) {
+    if (!key.startsWith('expurge_tab_')) continue;
+    const tabId = parseInt(key.slice('expurge_tab_'.length), 10);
+    if (isNaN(tabId)) continue;
+    try {
+      await browser.tabs.get(tabId);
+      return tabId;
+    } catch {
+      await browser.storage.session.remove(key); // stale — tab was closed
+    }
+  }
+  return null;
+}
+
 async function reinjectIfMissing(tabId: number): Promise<void> {
   const TIMEOUT_MS = 2_000;
   try {
@@ -291,7 +334,7 @@ async function reinjectIfMissing(tabId: number): Promise<void> {
   }
 
   try {
-    await browser.scripting.executeScript({ target: { tabId }, files: ['content.js'] });
+    await browser.scripting.executeScript({ target: { tabId }, files: ['dist/content.js'] });
   } catch {
     // Tab may be on a restricted URL or closed — ignore
   }
