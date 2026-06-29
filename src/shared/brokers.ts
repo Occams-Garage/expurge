@@ -44,15 +44,12 @@ export const BROKERS: readonly Broker[] = [
     },
     optout: [
       {
-        method: 'email',
-        target: 'optout@truepeoplesearch.com',  // TODO: verify via §5a checklist before launch
-        kind: 'dedicated_optout',
-        subject: 'Opt-Out Request',
-        template: 'us_general',
-        // Stubbed trust bits for M0-M3. Real verification required before shipping.
+        method: 'web_form',
+        target: 'https://www.truepeoplesearch.com/removal',
+        kind: 'form_required',
         trust: 'verified',
-        last_checked: '2026-06-01',
-        source: 'https://www.truepeoplesearch.com/opt-out',  // TODO: confirm
+        last_checked: '2026-06-28',
+        source: 'https://www.truepeoplesearch.com/removal',
         verified_by: 'dustinrvk@gmail.com',
       },
     ],

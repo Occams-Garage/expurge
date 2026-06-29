@@ -28,3 +28,4 @@
 - 2026-06-28 | 2026-06-28-draft-opt-out-status | Draft panels: opt-out status tracking, form instruction cards, general_contact callout | areas: opt-out-drafts | topics: ux, data-model | stories: [] | active
 - 2026-06-28 | 2026-06-28-permissions-flow | Permissions: all-at-once at run start, denied brokers skipped | areas: permissions, run-model | topics: webextensions, ux | stories: [] | active
 - 2026-06-28 | 2026-06-28-first-fetch-consent | First-fetch consent in Profile section at setup; weekly lazy auto-cadence | areas: broker-dataset, profile | topics: dataset-distribution, ux, privacy | stories: [] | active
+- 2026-06-28 | 2026-06-28-listing-url-capture | Navigate-to-details flow: capture direct listing URL for opt-out draft; paste fallback for paywalled pages | areas: matching-overlay, run-model, opt-out-drafts | topics: ux, data-model | stories: [] | active
