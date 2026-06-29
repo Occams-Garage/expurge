@@ -89,6 +89,49 @@ const OVERLAY_STYLES = `
 }
 .status.saving   { color: #fbbf24; }
 .status.recorded { color: #34d399; font-weight: 600; }
+
+/* ── guidance panel (results page) ── */
+.guidance-msg {
+  font-size: 13px;
+  color: #cbd5e1;
+  margin: 0 0 12px 0;
+  line-height: 1.5;
+}
+.toggle-link {
+  font-size: 12px;
+  color: #64748b;
+  cursor: pointer;
+  background: none;
+  border: none;
+  padding: 0;
+  text-decoration: underline;
+  display: block;
+  margin-top: 4px;
+}
+.toggle-link:hover { color: #94a3b8; }
+.paste-section {
+  margin-top: 10px;
+}
+.paste-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 7px 9px;
+  background: #0f172a;
+  border: 1px solid #334155;
+  border-radius: 6px;
+  color: #f1f5f9;
+  font-size: 12px;
+  outline: none;
+  margin-bottom: 6px;
+}
+.paste-input:focus { border-color: #2563eb; }
+.paste-warning {
+  font-size: 11px;
+  color: #f59e0b;
+  margin-bottom: 6px;
+  display: none;
+}
+.paste-warning.visible { display: block; }
 `;
 
 type OverlayState = 'unjudged' | 'saving' | 'recorded';
@@ -116,7 +159,9 @@ function setOverlayState(refs: OverlayRefs, state: OverlayState, label = ''): vo
     '';
 }
 
-function buildOverlay(exposes: string[]): { host: HTMLElement; refs: OverlayRefs } {
+// ── verdict panel (details / profile page) ───────────────────────────────────
+
+function buildVerdictPanel(exposes: string[]): { host: HTMLElement; refs: OverlayRefs } {
   const host = document.createElement('div');
   host.id = 'expurge-host';
   const shadow = host.attachShadow({ mode: 'open' });
@@ -164,11 +209,117 @@ function buildOverlay(exposes: string[]): { host: HTMLElement; refs: OverlayRefs
   return { host, refs };
 }
 
+// ── guidance panel (results page) ────────────────────────────────────────────
+
+function buildGuidancePanel(
+  exposes: string[],
+  brokerHostname: string,
+  onVerdict: (verdict: Verdict, listingUrl: string) => void,
+): HTMLElement {
+  const host = document.createElement('div');
+  host.id = 'expurge-host';
+  const shadow = host.attachShadow({ mode: 'open' });
+
+  const style = document.createElement('style');
+  style.textContent = OVERLAY_STYLES;
+
+  const panel = document.createElement('div');
+  panel.className = 'panel';
+
+  // Exposes list HTML
+  const exposesHtml = exposes.map(e => `<li>${e}</li>`).join('');
+
+  panel.innerHTML = `
+    <div class="header">expurge</div>
+    <div class="label">Look for</div>
+    <ul class="exposes">${exposesHtml}</ul>
+    <p class="guidance-msg">
+      Found yourself? Click <strong>View Details →</strong> on your listing
+      to open your profile, then confirm there.
+    </p>
+    <button class="toggle-link" id="toggle-paste">Can't access the details page? →</button>
+    <div class="paste-section" id="paste-section" style="display:none">
+      <input class="paste-input" id="paste-input" type="text"
+             placeholder="Paste a link to your listing…" autocomplete="off">
+      <div class="paste-warning" id="paste-warning">
+        This doesn't look like a ${brokerHostname} URL — double-check before confirming.
+      </div>
+      <div class="buttons" id="paste-btns" style="display:none">
+        <button class="btn btn-hit"     id="btn-hit">Listed (Yes)</button>
+        <button class="btn btn-clear"   id="btn-clear">Not Listed (No)</button>
+        <button class="btn btn-unknown" id="btn-unknown">Not Sure</button>
+        <button class="btn btn-skip"    id="btn-skip">Skip</button>
+      </div>
+    </div>
+    <div class="status" id="overlay-status"></div>
+  `;
+
+  shadow.appendChild(style);
+  shadow.appendChild(panel);
+
+  const toggleBtn   = panel.querySelector('#toggle-paste')   as HTMLButtonElement;
+  const pasteSection = panel.querySelector('#paste-section') as HTMLElement;
+  const pasteInput  = panel.querySelector('#paste-input')    as HTMLInputElement;
+  const pasteWarn   = panel.querySelector('#paste-warning')  as HTMLElement;
+  const pasteBtns   = panel.querySelector('#paste-btns')     as HTMLElement;
+  const statusEl    = panel.querySelector('#overlay-status') as HTMLElement;
+
+  toggleBtn.addEventListener('click', () => {
+    pasteSection.style.display = pasteSection.style.display === 'none' ? 'block' : 'none';
+    toggleBtn.textContent = pasteSection.style.display === 'none'
+      ? 'Can\'t access the details page? →'
+      : 'Can\'t access the details page? ↓';
+  });
+
+  pasteInput.addEventListener('input', () => {
+    const val = pasteInput.value.trim();
+    if (!val) {
+      pasteBtns.style.display = 'none';
+      pasteWarn.classList.remove('visible');
+      return;
+    }
+
+    // Show verdict buttons as soon as field is non-empty.
+    pasteBtns.style.display = 'grid';
+
+    // Same-domain check — warning only, never blocks.
+    try {
+      const parsed = new URL(val);
+      const matches = parsed.hostname.endsWith(brokerHostname);
+      pasteWarn.classList.toggle('visible', !matches);
+    } catch {
+      pasteWarn.classList.add('visible');
+    }
+  });
+
+  const disableAll = () => {
+    [panel.querySelector('#btn-hit'), panel.querySelector('#btn-clear'),
+     panel.querySelector('#btn-unknown'), panel.querySelector('#btn-skip')]
+      .forEach(b => { if (b) (b as HTMLButtonElement).disabled = true; });
+  };
+
+  const castFromPaste = async (verdict: Verdict) => {
+    const listingUrl = pasteInput.value.trim();
+    disableAll();
+    statusEl.className = 'status saving';
+    statusEl.textContent = '⋯ Saving…';
+    onVerdict(verdict, listingUrl);
+  };
+
+  panel.querySelector('#btn-hit')!.addEventListener('click',     () => castFromPaste('hit'));
+  panel.querySelector('#btn-clear')!.addEventListener('click',   () => castFromPaste('clear'));
+  panel.querySelector('#btn-unknown')!.addEventListener('click', () => castFromPaste('unknown'));
+  panel.querySelector('#btn-skip')!.addEventListener('click',    () => castFromPaste('skipped'));
+
+  return host;
+}
+
 // ── verdict send + ack with retry ────────────────────────────────────────────
 
 async function sendVerdict(
   itemId: string,
   verdict: Verdict,
+  listingUrl: string,
   attempt = 0,
 ): Promise<boolean> {
   const TIMEOUT_MS = 6_000;
@@ -176,7 +327,7 @@ async function sendVerdict(
 
   try {
     const race = await Promise.race([
-      browser.runtime.sendMessage({ type: 'VERDICT', itemId, verdict }),
+      browser.runtime.sendMessage({ type: 'VERDICT', itemId, verdict, listingUrl }),
       new Promise<never>((_, rej) =>
         setTimeout(() => rej(new Error('timeout')), TIMEOUT_MS)
       ),
@@ -184,7 +335,7 @@ async function sendVerdict(
     return (race as { type?: string })?.type === 'ACK';
   } catch {
     if (attempt < MAX_ATTEMPTS - 1) {
-      return sendVerdict(itemId, verdict, attempt + 1);
+      return sendVerdict(itemId, verdict, listingUrl, attempt + 1);
     }
     return false;
   }
@@ -193,36 +344,75 @@ async function sendVerdict(
 // ── init ─────────────────────────────────────────────────────────────────────
 
 async function init(): Promise<void> {
-  // Ask the background which work item this tab belongs to.
   let info: ItemInfoMsg | null = null;
   try {
     info = await browser.runtime.sendMessage({ type: 'GET_ITEM' }) as ItemInfoMsg | null;
   } catch {
-    // Extension not reachable (e.g., disabled mid-load) — do nothing.
     return;
   }
 
-  if (!info) return;  // not a run tab
+  if (!info) return;
 
-  const { itemId, exposes } = info;
-  const { host, refs } = buildOverlay(exposes);
-  document.documentElement.appendChild(host);
+  const { itemId, exposes, renderedUrl } = info;
 
-  const onVerdict = async (verdict: Verdict) => {
-    setOverlayState(refs, 'saving');
-    const ok = await sendVerdict(itemId, verdict);
-    const label =
-      verdict === 'hit'     ? 'Listed'    :
-      verdict === 'clear'   ? 'Not Listed':
-      verdict === 'unknown' ? 'Not Sure'  :
-      'Skipped';
-    setOverlayState(refs, 'recorded', ok ? label : `${label} (retry failed — please reopen)`);
-  };
+  // Detect results page: current path matches the search URL's path.
+  const isResultsPage = (() => {
+    try {
+      return window.location.pathname === new URL(renderedUrl).pathname;
+    } catch {
+      return false;
+    }
+  })();
 
-  refs.btnHit.addEventListener('click',     () => onVerdict('hit'));
-  refs.btnClear.addEventListener('click',   () => onVerdict('clear'));
-  refs.btnUnknown.addEventListener('click', () => onVerdict('unknown'));
-  refs.btnSkip.addEventListener('click',    () => onVerdict('skipped'));
+  const brokerHostname = (() => {
+    try { return new URL(renderedUrl).hostname; } catch { return ''; }
+  })();
+
+  if (isResultsPage) {
+    const onVerdict = async (verdict: Verdict, listingUrl: string) => {
+      const host = document.getElementById('expurge-host')!;
+      const shadow = host.shadowRoot!;
+      const statusEl = shadow.querySelector('#overlay-status') as HTMLElement;
+
+      const label =
+        verdict === 'hit'     ? 'Listed'     :
+        verdict === 'clear'   ? 'Not Listed' :
+        verdict === 'unknown' ? 'Not Sure'   :
+        'Skipped';
+
+      const ok = await sendVerdict(itemId, verdict, listingUrl);
+      statusEl.className = 'status recorded';
+      statusEl.textContent = ok
+        ? `✓ ${label} — open expurge to send your opt-out request.`
+        : `✓ ${label} (retry failed — please reopen)`;
+    };
+
+    const host = buildGuidancePanel(exposes, brokerHostname, onVerdict);
+    document.documentElement.appendChild(host);
+  } else {
+    // Details / profile page — full verdict panel.
+    const { host, refs } = buildVerdictPanel(exposes);
+    document.documentElement.appendChild(host);
+
+    const onVerdict = async (verdict: Verdict) => {
+      setOverlayState(refs, 'saving');
+      const ok = await sendVerdict(itemId, verdict, window.location.href);
+      const label =
+        verdict === 'hit'     ? 'Listed'     :
+        verdict === 'clear'   ? 'Not Listed' :
+        verdict === 'unknown' ? 'Not Sure'   :
+        'Skipped';
+      const msg = ok
+        ? `${label} — open expurge to send your opt-out request.`
+        : `${label} (retry failed — please reopen)`;
+      setOverlayState(refs, 'recorded', msg);
+    };
+
+    refs.btnHit.addEventListener('click',     () => onVerdict('hit'));
+    refs.btnClear.addEventListener('click',   () => onVerdict('clear'));
+    refs.btnUnknown.addEventListener('click', () => onVerdict('unknown'));
+    refs.btnSkip.addEventListener('click',    () => onVerdict('skipped'));
+  }
 }
 
 init();

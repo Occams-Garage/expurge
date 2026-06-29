@@ -222,6 +222,95 @@ input[type="text"]:focus {
   margin-top: 4px;
 }
 
+/* ── form card ────────────────────────────────────────────────────────── */
+
+.form-channel-note {
+  margin-top: 2px;
+  font-style: italic;
+  color: #64748b;
+}
+
+.form-card-section {
+  margin-bottom: 12px;
+}
+
+.form-card-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: #64748b;
+  margin-bottom: 6px;
+}
+
+.form-fields-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.form-fields-table tr {
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.form-fields-table tr:last-child {
+  border-bottom: none;
+}
+
+.form-field-label {
+  padding: 5px 8px 5px 0;
+  color: #64748b;
+  font-weight: 600;
+  white-space: nowrap;
+  width: 38%;
+  vertical-align: top;
+}
+
+.form-field-value {
+  padding: 5px 0;
+  vertical-align: top;
+}
+
+.form-value-text {
+  font-family: ui-monospace, "Cascadia Code", Menlo, monospace;
+  font-size: 12px;
+  color: #0f172a;
+  background: #f1f5f9;
+  padding: 1px 5px;
+  border-radius: 4px;
+  display: inline-block;
+}
+
+.form-value-empty {
+  color: #94a3b8;
+  font-style: italic;
+  font-size: 12px;
+}
+
+.form-field-note {
+  font-size: 11px;
+  color: #94a3b8;
+  margin-top: 2px;
+}
+
+.form-steps-list {
+  padding-left: 18px;
+  margin: 0;
+  font-size: 12px;
+  color: #334155;
+  line-height: 1.6;
+}
+
+.form-steps-list li {
+  margin-bottom: 3px;
+}
+
+.btn-form {
+  background: #16a34a;
+  color: #fff;
+  border: none;
+}
+
 /* ── utility ──────────────────────────────────────────────────────────── */
 
 .error-msg {
