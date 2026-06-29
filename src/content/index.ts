@@ -12,94 +12,217 @@ const OVERLAY_STYLES = `
   bottom: 20px;
   right: 20px;
   z-index: 2147483647;
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  font-size: 14px;
-  line-height: 1.4;
+
+  /* ── tokens: light ── */
+  --surface:       #FBF6EE;
+  --fill:          #ECE3D4;
+  --border:        #ECE3D4;
+  --text:          #211D18;
+  --text-muted:    #6B6053;
+  --text-faint:    #A99B8A;
+  --primary:       #2C5446;
+  --primary-hover: #244839;
+  --on-primary:    #FBF6EE;
+  --accent:        #B25C3C;
+  --strip-bg:      #2C5446;
+  --strip-ko:      #FBF6EE;
+  --focus-shadow:  rgba(44,84,70,0.14);
+
+  --font-display: "Newsreader", Georgia, serif;
+  --font-ui:      "Hanken Grotesk", system-ui, sans-serif;
+  --font-mono:    "IBM Plex Mono", ui-monospace, monospace;
 }
+
+@media (prefers-color-scheme: dark) {
+  :host {
+    --surface:       #2A2620;
+    --fill:          #2E2A24;
+    --border:        #3A342C;
+    --text:          #FBF6EE;
+    --text-muted:    #C9C2B6;
+    --text-faint:    #9C9388;
+    --primary:       #7FB89C;
+    --primary-hover: #93C7AC;
+    --on-primary:    #211D18;
+    --accent:        #C9744E;
+    --strip-bg:      #7FB89C;
+    --strip-ko:      #211D18;
+    --focus-shadow:  rgba(127,184,156,0.2);
+  }
+}
+
+/* ── card ── */
+
 .panel {
-  background: #1e293b;
-  color: #f1f5f9;
-  border-radius: 12px;
-  padding: 16px;
+  background: var(--surface);
+  border-radius: 14px;
   width: 292px;
-  box-shadow: 0 8px 32px rgba(0,0,0,0.45), 0 2px 8px rgba(0,0,0,0.3);
+  overflow: hidden;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.18), 0 2px 8px rgba(0,0,0,0.10);
+  font-family: var(--font-ui);
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text);
 }
-.header {
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: #64748b;
-  margin-bottom: 12px;
+
+/* ── top strip (brand identifier) ── */
+
+.strip {
+  background: var(--strip-bg);
+  padding: 6px 14px 5px;
+  border-bottom: 1.5px dashed var(--surface);
 }
-.label {
-  font-size: 11px;
+
+.wordmark {
+  font-family: var(--font-display);
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: #64748b;
-  margin-bottom: 5px;
+  font-size: 15px;
+  letter-spacing: -0.01em;
+  color: var(--strip-ko);
+  line-height: 1;
 }
+
+/* ── body ── */
+
+.body {
+  padding: 12px 14px 14px;
+}
+
+/* ── labels ── */
+
+.label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 400;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--text-muted);
+  margin-bottom: 7px;
+}
+
+/* ── exposes chips ── */
+
 .exposes {
   list-style: none;
   padding: 0;
-  margin: 0 0 10px 0;
+  margin: 0 0 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
 }
+
 .exposes li {
-  font-size: 13px;
-  color: #cbd5e1;
-  padding: 1px 0;
+  background: var(--fill);
+  color: var(--text-muted);
+  border-radius: 9999px;
+  padding: 2px 9px;
+  font-size: 12px;
+  line-height: 1.5;
 }
-.exposes li::before {
-  content: "·";
-  color: #475569;
-  margin-right: 7px;
-}
+
+/* ── question ── */
+
 .question {
   font-size: 13px;
-  color: #94a3b8;
-  margin: 0 0 12px 0;
+  color: var(--text-muted);
+  margin: 0 0 12px;
+  line-height: 1.5;
 }
+
+/* ── buttons ── */
+
 .buttons {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 6px;
 }
+
 .btn {
-  padding: 8px 4px;
-  border: none;
-  border-radius: 6px;
+  padding: 9px 6px;
+  border-radius: 9px;
+  font-family: var(--font-ui);
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
-  transition: filter 0.1s;
+  transition: background 0.12s;
+  min-height: 44px;
 }
 .btn:disabled { opacity: 0.4; cursor: not-allowed; }
-.btn:not(:disabled):hover { filter: brightness(1.12); }
-.btn-hit     { background: #16a34a; color: #fff; }
-.btn-clear   { background: #2563eb; color: #fff; }
-.btn-unknown { background: #475569; color: #f1f5f9; }
-.btn-skip    { background: transparent; color: #94a3b8; border: 1px solid #334155; }
+
+.btn-hit {
+  background: var(--primary);
+  color: var(--on-primary);
+  border: none;
+}
+.btn-hit:not(:disabled):hover { background: var(--primary-hover); }
+
+.btn-clear {
+  background: transparent;
+  color: var(--primary);
+  border: 1.5px solid var(--primary);
+}
+.btn-clear:not(:disabled):hover { background: var(--fill); }
+
+.btn-unknown {
+  background: transparent;
+  color: var(--primary);
+  border: none;
+}
+.btn-unknown:not(:disabled):hover { background: var(--fill); }
+
+.btn-skip {
+  background: transparent;
+  color: var(--text-faint);
+  border: none;
+  font-weight: 400;
+}
+.btn-skip:not(:disabled):hover { background: var(--fill); }
+
+/* ── status ── */
+
 .status {
   margin-top: 10px;
   font-size: 12px;
   min-height: 18px;
-  color: #94a3b8;
+  color: var(--text-faint);
   text-align: center;
 }
-.status.saving   { color: #fbbf24; }
-.status.recorded { color: #34d399; font-weight: 600; }
 
-/* ── guidance panel (results page) ── */
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.status.saving {
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+}
+.status.saving::before {
+  content: "";
+  flex-shrink: 0;
+  width: 10px;
+  height: 10px;
+  border: 1.5px solid var(--fill);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+.status.recorded { color: var(--primary); font-weight: 600; }
+
+/* ── guidance panel ── */
+
 .guidance-msg {
   font-size: 13px;
-  color: #cbd5e1;
-  margin: 0 0 12px 0;
+  color: var(--text-muted);
+  margin: 0 0 10px;
   line-height: 1.5;
 }
+
 .toggle-link {
+  font-family: var(--font-ui);
   font-size: 12px;
-  color: #64748b;
+  color: var(--text-faint);
   cursor: pointer;
   background: none;
   border: none;
@@ -108,26 +231,31 @@ const OVERLAY_STYLES = `
   display: block;
   margin-top: 4px;
 }
-.toggle-link:hover { color: #94a3b8; }
-.paste-section {
-  margin-top: 10px;
-}
+.toggle-link:hover { color: var(--text-muted); }
+
+.paste-section { margin-top: 10px; }
+
 .paste-input {
   width: 100%;
   box-sizing: border-box;
-  padding: 7px 9px;
-  background: #0f172a;
-  border: 1px solid #334155;
-  border-radius: 6px;
-  color: #f1f5f9;
+  padding: 8px 10px;
+  background: var(--fill);
+  border: 1.5px solid var(--border);
+  border-radius: 9px;
+  color: var(--text);
+  font-family: var(--font-ui);
   font-size: 12px;
   outline: none;
   margin-bottom: 6px;
 }
-.paste-input:focus { border-color: #2563eb; }
+.paste-input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--focus-shadow);
+}
+
 .paste-warning {
   font-size: 11px;
-  color: #f59e0b;
+  color: var(--accent);
   margin-bottom: 6px;
   display: none;
 }
@@ -154,8 +282,8 @@ function setOverlayState(refs: OverlayRefs, state: OverlayState, label = ''): vo
 
   refs.status.className = `status ${state === 'unjudged' ? '' : state}`;
   refs.status.textContent =
-    state === 'saving'   ? '⋯ Saving…'    :
-    state === 'recorded' ? `✓ ${label}`   :
+    state === 'saving'   ? 'Saving your answer…' :
+    state === 'recorded' ? `✓ ${label}`          :
     '';
 }
 
@@ -172,19 +300,19 @@ function buildVerdictPanel(exposes: string[]): { host: HTMLElement; refs: Overla
   const panel = document.createElement('div');
   panel.className = 'panel';
   panel.innerHTML = `
-    <div class="header">expurge</div>
-    <div class="guidance">
+    <div class="strip"><span class="wordmark">expurge</span></div>
+    <div class="body">
       <div class="label">Look for</div>
       <ul class="exposes" id="exp-list"></ul>
-      <p class="question">Is your information listed on this page?</p>
+      <p class="question">Could this listing be you?</p>
+      <div class="buttons" id="verdict-btns">
+        <button class="btn btn-hit"     id="btn-hit">Yes, this is me</button>
+        <button class="btn btn-clear"   id="btn-clear">No, not me</button>
+        <button class="btn btn-unknown" id="btn-unknown">Not sure</button>
+        <button class="btn btn-skip"    id="btn-skip">Skip</button>
+      </div>
+      <div class="status" id="overlay-status"></div>
     </div>
-    <div class="buttons" id="verdict-btns">
-      <button class="btn btn-hit"     id="btn-hit">Listed (Yes)</button>
-      <button class="btn btn-clear"   id="btn-clear">Not Listed (No)</button>
-      <button class="btn btn-unknown" id="btn-unknown">Not Sure</button>
-      <button class="btn btn-skip"    id="btn-skip">Skip</button>
-    </div>
-    <div class="status" id="overlay-status"></div>
   `;
 
   const list = panel.querySelector('#exp-list')!;
@@ -230,28 +358,30 @@ function buildGuidancePanel(
   const exposesHtml = exposes.map(e => `<li>${e}</li>`).join('');
 
   panel.innerHTML = `
-    <div class="header">expurge</div>
-    <div class="label">Look for</div>
-    <ul class="exposes">${exposesHtml}</ul>
-    <p class="guidance-msg">
-      Found yourself? Click <strong>View Details →</strong> on your listing
-      to open your profile, then confirm there.
-    </p>
-    <button class="toggle-link" id="toggle-paste">Can't access the details page? →</button>
-    <div class="paste-section" id="paste-section" style="display:none">
-      <input class="paste-input" id="paste-input" type="text"
-             placeholder="Paste a link to your listing…" autocomplete="off">
-      <div class="paste-warning" id="paste-warning">
-        This doesn't look like a ${brokerHostname} URL — double-check before confirming.
+    <div class="strip"><span class="wordmark">expurge</span></div>
+    <div class="body">
+      <div class="label">Look for</div>
+      <ul class="exposes">${exposesHtml}</ul>
+      <p class="guidance-msg">
+        Found yourself? Click <strong>View Details →</strong> on your listing,
+        then confirm on that page.
+      </p>
+      <button class="toggle-link" id="toggle-paste">Can't reach the details page? →</button>
+      <div class="paste-section" id="paste-section" style="display:none">
+        <input class="paste-input" id="paste-input" type="text"
+               placeholder="Paste a link to your listing…" autocomplete="off">
+        <div class="paste-warning" id="paste-warning">
+          This doesn't look like a ${brokerHostname} URL — double-check before confirming.
+        </div>
+        <div class="buttons" id="paste-btns" style="display:none">
+          <button class="btn btn-hit"     id="btn-hit">Yes, this is me</button>
+          <button class="btn btn-clear"   id="btn-clear">No, not me</button>
+          <button class="btn btn-unknown" id="btn-unknown">Not sure</button>
+          <button class="btn btn-skip"    id="btn-skip">Skip</button>
+        </div>
       </div>
-      <div class="buttons" id="paste-btns" style="display:none">
-        <button class="btn btn-hit"     id="btn-hit">Listed (Yes)</button>
-        <button class="btn btn-clear"   id="btn-clear">Not Listed (No)</button>
-        <button class="btn btn-unknown" id="btn-unknown">Not Sure</button>
-        <button class="btn btn-skip"    id="btn-skip">Skip</button>
-      </div>
+      <div class="status" id="overlay-status"></div>
     </div>
-    <div class="status" id="overlay-status"></div>
   `;
 
   shadow.appendChild(style);
@@ -383,8 +513,8 @@ async function init(): Promise<void> {
       const ok = await sendVerdict(itemId, verdict, listingUrl);
       statusEl.className = 'status recorded';
       statusEl.textContent = ok
-        ? `✓ ${label} — open expurge to send your opt-out request.`
-        : `✓ ${label} (retry failed — please reopen)`;
+        ? `✓ ${label} — open expurge to continue.`
+        : `✓ ${label} — saved locally; reopen expurge to continue.`;
     };
 
     const host = buildGuidancePanel(exposes, brokerHostname, onVerdict);
@@ -403,8 +533,8 @@ async function init(): Promise<void> {
         verdict === 'unknown' ? 'Not Sure'   :
         'Skipped';
       const msg = ok
-        ? `${label} — open expurge to send your opt-out request.`
-        : `${label} (retry failed — please reopen)`;
+        ? `${label} — open expurge to continue.`
+        : `${label} — saved locally; reopen expurge to continue.`;
       setOverlayState(refs, 'recorded', msg);
     };
 
