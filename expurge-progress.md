@@ -129,9 +129,9 @@ these move to the options page in M4+. The popup becomes a compact run control p
 
 ---
 
-## Consciously deferred (code review, 2026-06-28)
+## Consciously deferred (code review, 2026-06-28 / 2026-06-29)
 
-These findings were surfaced in the pre-M4 code review and explicitly deferred rather than
+These findings were surfaced in code reviews and explicitly deferred rather than
 fixed. Recorded here so the decision isn't re-litigated in future sessions.
 
 | Finding | Deferred to | Rationale |
@@ -143,3 +143,4 @@ fixed. Recorded here so the decision isn't re-litigated in future sessions.
 | Background PING handler always returns `hasOverlay: false` | M6 | Content script is authoritative for overlay presence; background stub is incorrect but harmless until REINJECT_OVERLAY is wired into the options page |
 | SPA / History API navigation not handled (overlay disappears on client-side route change) | M5 | No current broker in the set is a SPA; revisit when adding brokers that use pushState |
 | `Profile` type has only 4 of 14 planned fields (`first`, `last`, `city`, `state`) | M5 | Remaining fields (`middle`, `zip`, `age`, `emails[]`, `phones[]`, `relatives[]`, `also_known_as[]`) are needed for AKA fan-out; premature to add fields with no consumers yet |
+| REINJECT_OVERLAY fallback opens exactly 1 tab regardless of BATCH_SIZE (duplication of `openNextBatch`) | M5 | Correct for M4 (single broker); the inline copy should be replaced with a proper `openOrRecoverBatch()` when M5 adds batch pacing |

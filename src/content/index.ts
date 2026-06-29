@@ -553,7 +553,7 @@ function buildChallengePanel(info: ItemInfoMsg, onResolved: () => void): void {
   panel.innerHTML = `
     <div class="strip">
       <span class="wordmark">expurge</span>
-      <span class="progress">${progressText}</span>
+      <span class="progress" id="strip-progress">${progressText}</span>
     </div>
     <div class="body">
       <div class="label">Security check</div>
@@ -567,12 +567,23 @@ function buildChallengePanel(info: ItemInfoMsg, onResolved: () => void): void {
 
   document.documentElement.appendChild(host);
 
+  let dismissTimer: ReturnType<typeof setTimeout> | null = null;
   const observer = new MutationObserver(() => {
-    if (!detectChallenge()) {
-      observer.disconnect();
-      host.remove();
-      onResolved();
+    if (detectChallenge()) {
+      if (dismissTimer !== null) { clearTimeout(dismissTimer); dismissTimer = null; }
+      return;
     }
+    if (dismissTimer !== null) return;
+    // Wait 250 ms before acting — CAPTCHA libraries sometimes briefly detach their container
+    // during internal state transitions, which would trigger a false positive immediately.
+    dismissTimer = setTimeout(() => {
+      dismissTimer = null;
+      if (!detectChallenge()) {
+        observer.disconnect();
+        host.remove();
+        onResolved();
+      }
+    }, 250);
   });
   observer.observe(document.documentElement, { childList: true, subtree: true });
 
@@ -580,13 +591,20 @@ function buildChallengePanel(info: ItemInfoMsg, onResolved: () => void): void {
   const statusEl = panel.querySelector('#overlay-status')    as HTMLElement;
 
   skipBtn.addEventListener('click', async () => {
+    if (dismissTimer !== null) { clearTimeout(dismissTimer); dismissTimer = null; }
     observer.disconnect();
     skipBtn.disabled     = true;
     statusEl.className   = 'status saving';
     statusEl.textContent = 'Skipping…';
-    await sendVerdict(info.itemId, 'skipped', '');
-    statusEl.className   = 'status recorded';
-    statusEl.textContent = '✓ Skipped.';
+    const ok = await sendVerdict(info.itemId, 'skipped', '');
+    if (ok) {
+      statusEl.className   = 'status recorded';
+      statusEl.textContent = '✓ Skipped.';
+    } else {
+      statusEl.className   = 'status';
+      statusEl.textContent = 'Save failed — try again.';
+      skipBtn.disabled     = false;
+    }
   });
 }
 
@@ -650,6 +668,10 @@ async function init(): Promise<void> {
   }
 
   if (!info) return;
+
+  // Re-check after the async yield — another concurrent injection may have already appended.
+  if (document.getElementById('expurge-host')) return;
+
   const itemInfo = info;
 
   if (detectChallenge()) {
