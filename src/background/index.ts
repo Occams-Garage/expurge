@@ -373,14 +373,6 @@ browser.tabs.onRemoved.addListener(async (tabId: number) => {
   await handleSkip(itemId, 'tab_closed', tabId);
 });
 
-// ── load error → skipped/load_error ─────────────────────────────────────────
-
-browser.webNavigation.onErrorOccurred.addListener(async (details) => {
-  if (details.frameId !== 0) return;  // main frame only
-  const itemId = await itemIdForTab(details.tabId);
-  if (!itemId) return;
-  await handleSkip(itemId, 'load_error', details.tabId);
-});
 
 // ── overlay re-injection ─────────────────────────────────────────────────────
 
@@ -389,6 +381,11 @@ async function findActiveBrokerTab(): Promise<number | null> {
     browser.storage.session.get(null) as Promise<Record<string, unknown>>,
     loadRun(),
   ]);
+  // A tab temporarily at a Cloudflare (or other challenge-provider) redirect URL will have a
+  // hostname that doesn't match the broker. We don't prune it — it may redirect back shortly.
+  // Keep it as a fallback so "Restore Overlay" focuses the existing tab rather than opening a
+  // fresh one that would trigger a new Cloudflare session.
+  let fallbackTabId: number | null = null;
   for (const key of Object.keys(all)) {
     if (!key.startsWith('expurge_tab_')) continue;
     const tabId = parseInt(key.slice('expurge_tab_'.length), 10);
@@ -403,7 +400,7 @@ async function findActiveBrokerTab(): Promise<number | null> {
             const brokerHost = new URL(item.renderedUrl).hostname;
             const tabHost    = new URL(tab.url).hostname;
             if (tabHost !== brokerHost && !tabHost.endsWith('.' + brokerHost)) {
-              await browser.storage.session.remove(key); // tab navigated away
+              if (fallbackTabId === null) fallbackTabId = tabId; // mid-redirect, don't prune
               continue;
             }
           } catch {
@@ -417,7 +414,7 @@ async function findActiveBrokerTab(): Promise<number | null> {
       await browser.storage.session.remove(key); // stale — tab was closed
     }
   }
-  return null;
+  return fallbackTabId;
 }
 
 async function reinjectIfMissing(tabId: number): Promise<void> {
@@ -445,5 +442,19 @@ browser.tabs.onUpdated.addListener(async (tabId, changeInfo) => {
   if (changeInfo.status !== 'complete') return;
   const itemId = await itemIdForTab(tabId);
   if (!itemId) return;
+
+  // Skip reinject for off-host pages (e.g. challenges.cloudflare.com during redirects).
+  // On-host CDN paths (broker.com/cdn-cgi/...) still reach executeScript which ignores them.
+  const run = await loadRun();
+  const item = run?.items.find(i => i.id === itemId);
+  if (item?.renderedUrl) {
+    try {
+      const tab = await browser.tabs.get(tabId);
+      const brokerHost = new URL(item.renderedUrl).hostname;
+      const tabHost    = new URL(tab.url ?? '').hostname;
+      if (tabHost !== brokerHost && !tabHost.endsWith('.' + brokerHost)) return;
+    } catch { /* malformed URL — fall through to reinject */ }
+  }
+
   await reinjectIfMissing(tabId);
 });

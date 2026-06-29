@@ -533,21 +533,34 @@ if (!w.__expurgePingBound) {
 
 // ── challenge detection ──────────────────────────────────────────────────────
 
-const CHALLENGE_SELECTORS = [
-  '#challenge-running',
-  '#challenge-stage',
-  '.cf-browser-verification',
-  '#cf-challenge-running',
-  '.cf-turnstile',
-  'iframe[src*="challenges.cloudflare.com"]',
-  'iframe[src*="hcaptcha.com"]',
-  'iframe[src*="recaptcha/api2/bframe"]',
-  '.g-recaptcha',
-  'iframe[src*="geo.captcha-delivery.com"]',
-];
-
 function detectChallenge(): boolean {
-  return CHALLENGE_SELECTORS.some(sel => document.querySelector(sel) !== null);
+  // These elements only exist on CF interstitial challenge pages; they're removed on redirect.
+  const blocking = [
+    '#challenge-running',
+    '#challenge-stage',
+    '.cf-browser-verification',
+    '#cf-challenge-running',
+  ];
+  if (blocking.some(sel => document.querySelector(sel) !== null)) return true;
+
+  // Turnstile: the container div persists in the DOM after solving (only the iframe content
+  // changes). Treat as blocking only when the response token hasn't been set yet.
+  const turnstile = document.querySelector<HTMLElement>('.cf-turnstile');
+  if (turnstile) {
+    const resp = document.querySelector<HTMLInputElement>('input[name="cf-turnstile-response"]');
+    if (!resp?.value) return true; // unsolved
+    // Solved — don't count the CF challenge iframe inside this container as a separate block.
+  } else if (document.querySelector('iframe[src*="challenges.cloudflare.com"]') !== null) {
+    return true; // standalone CF iframe (non-Turnstile challenge)
+  }
+
+  // Other embedded CAPTCHA widgets
+  return [
+    'iframe[src*="hcaptcha.com"]',
+    'iframe[src*="recaptcha/api2/bframe"]',
+    '.g-recaptcha',
+    'iframe[src*="geo.captcha-delivery.com"]',
+  ].some(sel => document.querySelector(sel) !== null);
 }
 
 // ── challenge panel ──────────────────────────────────────────────────────────
