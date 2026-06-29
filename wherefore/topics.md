@@ -16,3 +16,4 @@
 - privacy              # local-first design, no telemetry, withhold-by-default ID posture
 - verification         # per-channel verified/unverified/broken lifecycle, stale tracking, draft gate
 - ux                   # information architecture, navigation, section states, interaction model
+- local-llm            # local LLM integration (Ollama), field discovery, localhost CORS, model selection
