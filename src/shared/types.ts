@@ -1,5 +1,11 @@
 export type Verdict = 'hit' | 'clear' | 'unknown' | 'skipped';
-export type SkipReason = 'tab_closed' | 'challenge' | 'load_error';
+export type SkipReason =
+  | 'tab_closed'
+  | 'challenge'
+  | 'load_error'
+  | 'run_stopped'
+  | 'permission_denied'
+  | `missing:${string}`;
 export type WorkItemStatus = 'pending' | 'open' | 'verdicted';
 
 export interface WorkItem {

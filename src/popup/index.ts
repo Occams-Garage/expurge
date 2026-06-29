@@ -188,6 +188,18 @@ function renderDraftSection(draft: Draft, brokerId: string): void {
   }
 }
 
+// ── draft loading ─────────────────────────────────────────────────────────────
+
+async function loadAndRenderDraft(run: RunState): Promise<boolean> {
+  const hitItem = run.items.find(i => i.verdict === 'hit');
+  if (!hitItem) return false;
+  const res = await browser.runtime.sendMessage({ type: 'GET_DRAFT', brokerId: hitItem.brokerId });
+  const d = (res as { draft?: Draft }).draft;
+  if (!d) return false;
+  renderDraftSection(d, hitItem.brokerId);
+  return true;
+}
+
 // ── profile form submit ──────────────────────────────────────────────────────
 
 async function handleFormSubmit(e: Event): Promise<void> {
@@ -253,18 +265,7 @@ async function init(): Promise<void> {
     return;
   }
 
-  const hitItem = run.items.find(i => i.verdict === 'hit');
-  if (hitItem) {
-    const draftRes = await browser.runtime.sendMessage({
-      type: 'GET_DRAFT',
-      brokerId: hitItem.brokerId,
-    });
-    const d = (draftRes as { draft?: Draft }).draft;
-    if (d) {
-      renderDraftSection(d, hitItem.brokerId);
-      return;
-    }
-  }
+  if (await loadAndRenderDraft(run)) return;
 
   showRunActive(run);
 }
@@ -285,15 +286,7 @@ document.getElementById('btn-restore-overlay')!.addEventListener('click', async 
 document.getElementById('btn-view-drafts')!.addEventListener('click', async () => {
   const res = await browser.runtime.sendMessage({ type: 'GET_RUN_STATE' });
   const run = (res as { run?: RunState }).run;
-  if (!run) return;
-  const hitItem = run.items.find(i => i.verdict === 'hit');
-  if (!hitItem) return;
-  const draftRes = await browser.runtime.sendMessage({
-    type: 'GET_DRAFT',
-    brokerId: hitItem.brokerId,
-  });
-  const d = (draftRes as { draft?: Draft }).draft;
-  if (d) renderDraftSection(d, hitItem.brokerId);
+  if (run) await loadAndRenderDraft(run);
 });
 
 init().catch(console.error);

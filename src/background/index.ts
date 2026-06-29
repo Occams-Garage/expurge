@@ -144,6 +144,9 @@ async function handleSkip(itemId: string, skipReason: SkipReason, tabId?: number
   if (tabId !== undefined) {
     await browser.storage.session.remove(`expurge_tab_${tabId}`);
   }
+
+  // Auto-advance: same as handleVerdict — skips count as cleared slots.
+  await openNextBatch(updated);
 }
 
 async function itemIdForTab(tabId: number): Promise<string | null> {

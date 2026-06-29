@@ -274,6 +274,23 @@ const OVERLAY_STYLES = `
 .paste-warning.visible { display: block; }
 `;
 
+// ── shared overlay scaffold ───────────────────────────────────────────────────
+
+interface OverlayShell { host: HTMLElement; panel: HTMLDivElement; }
+
+function createOverlayShell(): OverlayShell {
+  const host = document.createElement('div');
+  host.id = 'expurge-host';
+  const shadow = host.attachShadow({ mode: 'open' });
+  const style = document.createElement('style');
+  style.textContent = OVERLAY_STYLES;
+  const panel = document.createElement('div');
+  panel.className = 'panel';
+  shadow.appendChild(style);
+  shadow.appendChild(panel);
+  return { host, panel };
+}
+
 type OverlayState = 'unjudged' | 'saving' | 'recorded';
 
 interface OverlayRefs {
@@ -305,17 +322,10 @@ function buildVerdictPanel(
   exposes: string[],
   progress: { done: number; total: number } | null,
 ): { host: HTMLElement; refs: OverlayRefs } {
-  const host = document.createElement('div');
-  host.id = 'expurge-host';
-  const shadow = host.attachShadow({ mode: 'open' });
-
-  const style = document.createElement('style');
-  style.textContent = OVERLAY_STYLES;
+  const { host, panel } = createOverlayShell();
 
   const progressText = progress ? `${progress.done} / ${progress.total}` : '';
 
-  const panel = document.createElement('div');
-  panel.className = 'panel';
   panel.innerHTML = `
     <div class="strip">
       <span class="wordmark">expurge</span>
@@ -342,9 +352,6 @@ function buildVerdictPanel(
     list.appendChild(li);
   }
 
-  shadow.appendChild(style);
-  shadow.appendChild(panel);
-
   const refs: OverlayRefs = {
     buttons:    panel.querySelector('#verdict-btns') as HTMLElement,
     btnHit:     panel.querySelector('#btn-hit')      as HTMLButtonElement,
@@ -365,18 +372,9 @@ function buildGuidancePanel(
   progress: { done: number; total: number } | null,
   onVerdict: (verdict: Verdict, listingUrl: string) => void,
 ): HTMLElement {
-  const host = document.createElement('div');
-  host.id = 'expurge-host';
-  const shadow = host.attachShadow({ mode: 'open' });
-
-  const style = document.createElement('style');
-  style.textContent = OVERLAY_STYLES;
-
-  const panel = document.createElement('div');
-  panel.className = 'panel';
+  const { host, panel } = createOverlayShell();
 
   const progressText = progress ? `${progress.done} / ${progress.total}` : '';
-  const exposesHtml = exposes.map(e => `<li>${e}</li>`).join('');
 
   panel.innerHTML = `
     <div class="strip">
@@ -385,7 +383,7 @@ function buildGuidancePanel(
     </div>
     <div class="body">
       <div class="label">Look for</div>
-      <ul class="exposes">${exposesHtml}</ul>
+      <ul class="exposes" id="exp-list"></ul>
       <p class="guidance-msg">
         Found yourself? Click <strong>View Details →</strong> on your listing,
         then confirm on that page.
@@ -408,21 +406,26 @@ function buildGuidancePanel(
     </div>
   `;
 
-  shadow.appendChild(style);
-  shadow.appendChild(panel);
+  // Populate exposes with textContent — same pattern as buildVerdictPanel.
+  const exposesList = panel.querySelector('#exp-list')!;
+  for (const item of exposes) {
+    const li = document.createElement('li');
+    li.textContent = item;
+    exposesList.appendChild(li);
+  }
 
-  const toggleBtn   = panel.querySelector('#toggle-paste')   as HTMLButtonElement;
-  const pasteSection = panel.querySelector('#paste-section') as HTMLElement;
-  const pasteInput  = panel.querySelector('#paste-input')    as HTMLInputElement;
-  const pasteWarn   = panel.querySelector('#paste-warning')  as HTMLElement;
-  const pasteBtns   = panel.querySelector('#paste-btns')     as HTMLElement;
-  const statusEl    = panel.querySelector('#overlay-status') as HTMLElement;
+  const toggleBtn    = panel.querySelector('#toggle-paste')   as HTMLButtonElement;
+  const pasteSection = panel.querySelector('#paste-section')  as HTMLElement;
+  const pasteInput   = panel.querySelector('#paste-input')    as HTMLInputElement;
+  const pasteWarn    = panel.querySelector('#paste-warning')  as HTMLElement;
+  const pasteBtns    = panel.querySelector('#paste-btns')     as HTMLElement;
+  const statusEl     = panel.querySelector('#overlay-status') as HTMLElement;
 
   toggleBtn.addEventListener('click', () => {
     pasteSection.style.display = pasteSection.style.display === 'none' ? 'block' : 'none';
     toggleBtn.textContent = pasteSection.style.display === 'none'
-      ? 'Can\'t access the details page? →'
-      : 'Can\'t access the details page? ↓';
+      ? 'Can\'t reach the details page? →'
+      : 'Can\'t reach the details page? ↓';
   });
 
   pasteInput.addEventListener('input', () => {
@@ -439,31 +442,32 @@ function buildGuidancePanel(
     // Same-domain check — warning only, never blocks.
     try {
       const parsed = new URL(val);
-      const matches = parsed.hostname.endsWith(brokerHostname);
+      const matches =
+        parsed.hostname === brokerHostname ||
+        parsed.hostname.endsWith('.' + brokerHostname);
       pasteWarn.classList.toggle('visible', !matches);
     } catch {
       pasteWarn.classList.add('visible');
     }
   });
 
-  const disableAll = () => {
-    [panel.querySelector('#btn-hit'), panel.querySelector('#btn-clear'),
-     panel.querySelector('#btn-unknown'), panel.querySelector('#btn-skip')]
-      .forEach(b => { if (b) (b as HTMLButtonElement).disabled = true; });
-  };
-
   const castFromPaste = async (verdict: Verdict) => {
     const listingUrl = pasteInput.value.trim();
-    disableAll();
+    pasteBtns.querySelectorAll('button').forEach(b => { (b as HTMLButtonElement).disabled = true; });
     statusEl.className = 'status saving';
-    statusEl.textContent = '⋯ Saving…';
-    onVerdict(verdict, listingUrl);
+    try {
+      await onVerdict(verdict, listingUrl);
+    } catch {
+      statusEl.className = 'status';
+      statusEl.textContent = 'Save failed — try again.';
+      pasteBtns.querySelectorAll('button').forEach(b => { (b as HTMLButtonElement).disabled = false; });
+    }
   };
 
-  panel.querySelector('#btn-hit')!.addEventListener('click',     () => castFromPaste('hit'));
-  panel.querySelector('#btn-clear')!.addEventListener('click',   () => castFromPaste('clear'));
-  panel.querySelector('#btn-unknown')!.addEventListener('click', () => castFromPaste('unknown'));
-  panel.querySelector('#btn-skip')!.addEventListener('click',    () => castFromPaste('skipped'));
+  panel.querySelector('#btn-hit')!.addEventListener('click',     () => void castFromPaste('hit'));
+  panel.querySelector('#btn-clear')!.addEventListener('click',   () => void castFromPaste('clear'));
+  panel.querySelector('#btn-unknown')!.addEventListener('click', () => void castFromPaste('unknown'));
+  panel.querySelector('#btn-skip')!.addEventListener('click',    () => void castFromPaste('skipped'));
 
   return host;
 }
