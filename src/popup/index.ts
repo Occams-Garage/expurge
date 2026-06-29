@@ -50,6 +50,8 @@ function showRunActive(run: RunState): void {
   if (hits > 0) summary += ` · ${hits} found`;
   document.getElementById('run-active-text')!.textContent = summary;
 
+  document.getElementById('btn-stop-run')!.classList.toggle('hidden', allDone);
+
   const viewDraftsBtn = document.getElementById('btn-view-drafts')!;
   viewDraftsBtn.classList.toggle('hidden', hits === 0);
 }
@@ -281,6 +283,13 @@ document.getElementById('btn-restore-overlay')!.addEventListener('click', async 
   const tab = tabs[0];
   if (!tab?.id) return;
   await browser.runtime.sendMessage({ type: 'REINJECT_OVERLAY', tabId: tab.id });
+});
+
+document.getElementById('btn-stop-run')!.addEventListener('click', async () => {
+  await browser.runtime.sendMessage({ type: 'STOP_RUN' });
+  const res = await browser.runtime.sendMessage({ type: 'GET_RUN_STATE' });
+  const run = (res as { run?: RunState }).run;
+  if (run) showRunActive(run);
 });
 
 document.getElementById('btn-view-drafts')!.addEventListener('click', async () => {

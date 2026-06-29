@@ -525,23 +525,76 @@ browser.runtime.onMessage.addListener((msg: unknown) => {
   return undefined;
 });
 
-// ── init ─────────────────────────────────────────────────────────────────────
+// ── challenge detection ──────────────────────────────────────────────────────
 
-async function init(): Promise<void> {
-  if (document.getElementById('expurge-host')) return;
+const CHALLENGE_SELECTORS = [
+  '#challenge-running',
+  '#challenge-stage',
+  '.cf-browser-verification',
+  '#cf-challenge-running',
+  '.cf-turnstile',
+  'iframe[src*="challenges.cloudflare.com"]',
+  'iframe[src*="hcaptcha.com"]',
+  'iframe[src*="recaptcha/api2/bframe"]',
+  '.g-recaptcha',
+  'iframe[src*="geo.captcha-delivery.com"]',
+];
 
-  let info: ItemInfoMsg | null = null;
-  try {
-    info = await browser.runtime.sendMessage({ type: 'GET_ITEM' }) as ItemInfoMsg | null;
-  } catch {
-    return;
-  }
+function detectChallenge(): boolean {
+  return CHALLENGE_SELECTORS.some(sel => document.querySelector(sel) !== null);
+}
 
-  if (!info) return;
+// ── challenge panel ──────────────────────────────────────────────────────────
 
+function buildChallengePanel(info: ItemInfoMsg, onResolved: () => void): void {
+  const { host, panel } = createOverlayShell();
+
+  const progressText = `${info.progress.done} / ${info.progress.total}`;
+  panel.innerHTML = `
+    <div class="strip">
+      <span class="wordmark">expurge</span>
+      <span class="progress">${progressText}</span>
+    </div>
+    <div class="body">
+      <div class="label">Security check</div>
+      <p class="question">This site is running a security check. Complete it, then expurge will show your results.</p>
+      <div class="buttons">
+        <button class="btn btn-skip" style="grid-column:1/-1" id="btn-challenge-skip">Skip this site</button>
+      </div>
+      <div class="status" id="overlay-status"></div>
+    </div>
+  `;
+
+  document.documentElement.appendChild(host);
+
+  const observer = new MutationObserver(() => {
+    if (!detectChallenge()) {
+      observer.disconnect();
+      host.remove();
+      onResolved();
+    }
+  });
+  observer.observe(document.documentElement, { childList: true, subtree: true });
+
+  const skipBtn  = panel.querySelector('#btn-challenge-skip') as HTMLButtonElement;
+  const statusEl = panel.querySelector('#overlay-status')    as HTMLElement;
+
+  skipBtn.addEventListener('click', async () => {
+    observer.disconnect();
+    skipBtn.disabled     = true;
+    statusEl.className   = 'status saving';
+    statusEl.textContent = 'Skipping…';
+    await sendVerdict(info.itemId, 'skipped', '');
+    statusEl.className   = 'status recorded';
+    statusEl.textContent = '✓ Skipped.';
+  });
+}
+
+// ── main panel (verdict or guidance) ────────────────────────────────────────
+
+function showMainPanel(info: ItemInfoMsg): void {
   const { itemId, exposes, renderedUrl, progress } = info;
 
-  // Detect results page: current path matches the search URL's path.
   const isResultsPage = (() => {
     try {
       return window.location.pathname === new URL(renderedUrl).pathname;
@@ -556,20 +609,18 @@ async function init(): Promise<void> {
 
   if (isResultsPage) {
     const onVerdict = async (verdict: Verdict, listingUrl: string) => {
-      const host = document.getElementById('expurge-host')!;
-      const shadow = host.shadowRoot!;
+      const host     = document.getElementById('expurge-host')!;
+      const shadow   = host.shadowRoot!;
       const statusEl = shadow.querySelector('#overlay-status') as HTMLElement;
-
-      const ok = await sendVerdict(itemId, verdict, listingUrl);
+      const ok  = await sendVerdict(itemId, verdict, listingUrl);
       const msg = verdictMsg(verdict, ok);
-      statusEl.className = 'status recorded';
+      statusEl.className   = 'status recorded';
       statusEl.textContent = msg;
     };
 
     const host = buildGuidancePanel(exposes, brokerHostname, progress, onVerdict);
     document.documentElement.appendChild(host);
   } else {
-    // Details / profile page — full verdict panel.
     const { host, refs } = buildVerdictPanel(exposes, progress);
     document.documentElement.appendChild(host);
 
@@ -583,6 +634,28 @@ async function init(): Promise<void> {
     refs.btnClear.addEventListener('click',   () => onVerdict('clear'));
     refs.btnUnknown.addEventListener('click', () => onVerdict('unknown'));
     refs.btnSkip.addEventListener('click',    () => onVerdict('skipped'));
+  }
+}
+
+// ── init ─────────────────────────────────────────────────────────────────────
+
+async function init(): Promise<void> {
+  if (document.getElementById('expurge-host')) return;
+
+  let info: ItemInfoMsg | null = null;
+  try {
+    info = await browser.runtime.sendMessage({ type: 'GET_ITEM' }) as ItemInfoMsg | null;
+  } catch {
+    return;
+  }
+
+  if (!info) return;
+  const itemInfo = info;
+
+  if (detectChallenge()) {
+    buildChallengePanel(itemInfo, () => showMainPanel(itemInfo));
+  } else {
+    showMainPanel(itemInfo);
   }
 }
 
