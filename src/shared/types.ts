@@ -35,8 +35,6 @@ export interface GetDraftMsg    { type: 'GET_DRAFT';    brokerId: string }
 export interface GetItemMsg     { type: 'GET_ITEM' }
 export interface VerdictMsg     { type: 'VERDICT'; itemId: string; verdict: Verdict; skipReason?: SkipReason; listingUrl?: string }
 
-export type ToBackground =
-  | StartRunMsg | GetRunStateMsg | GetDraftMsg | GetItemMsg | VerdictMsg;
 
 // ── messages background → content/popup ─────────────────────────────────────
 
@@ -46,5 +44,13 @@ export interface ItemInfoMsg {
   brokerId: string;
   exposes: string[];
   renderedUrl: string;
+  progress: { done: number; total: number; hits: number };
 }
-export interface AckMsg { type: 'ACK'; itemId: string }
+export interface AckMsg  { type: 'ACK';  itemId: string }
+export interface PongMsg { type: 'PONG'; hasOverlay: boolean }
+
+export interface PingMsg  { type: 'PING' }
+export interface ReinjMsg { type: 'REINJECT_OVERLAY'; tabId: number }
+
+export type ToBackground =
+  | StartRunMsg | GetRunStateMsg | GetDraftMsg | GetItemMsg | VerdictMsg | PingMsg | ReinjMsg;

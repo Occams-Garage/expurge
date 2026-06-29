@@ -5,6 +5,8 @@ import { renderUrl } from '../shared/transforms';
 import { evaluateGate } from '../shared/gate';
 import { buildDraft } from '../shared/templates';
 
+const BATCH_SIZE = 5;
+
 // ── session storage keys ─────────────────────────────────────────────────────
 // browser.storage.session: survives event-page spindown, cleared on browser close.
 // tab_id is NEVER written to durable storage — only held live in session.
@@ -60,6 +62,36 @@ function buildItems(profile: Profile): WorkItem[] {
   return items;
 }
 
+// ── batch open ───────────────────────────────────────────────────────────────
+
+async function openNextBatch(run: RunState, focusFirst = false): Promise<void> {
+  const openCount = run.items.filter(i => i.status === 'open').length;
+  const slots = BATCH_SIZE - openCount;
+  if (slots <= 0) return;
+
+  const pending = run.items.filter(i => i.status === 'pending').slice(0, slots);
+  if (pending.length === 0) return;
+
+  const pendingIds = new Set(pending.map(p => p.id));
+  const updated: RunState = {
+    ...run,
+    items: run.items.map(i =>
+      pendingIds.has(i.id) ? { ...i, status: 'open' as WorkItemStatus } : i
+    ),
+  };
+  await saveRun(updated);
+
+  let first = true;
+  for (const item of pending) {
+    const active = focusFirst && first;
+    first = false;
+    const tab = await browser.tabs.create({ url: item.renderedUrl, active });
+    if (tab.id !== undefined) {
+      await browser.storage.session.set({ [`expurge_tab_${tab.id}`]: item.id });
+    }
+  }
+}
+
 // ── handlers ─────────────────────────────────────────────────────────────────
 
 async function handleStartRun(profile: Profile): Promise<void> {
@@ -69,30 +101,9 @@ async function handleStartRun(profile: Profile): Promise<void> {
   const items = buildItems(profile);
   const run: RunState = { runId, createdAt: new Date().toISOString(), items };
 
-  // Persist before opening the tab so content script can find the item on load.
+  // Persist before opening tabs so content scripts can find their items on load.
   await saveRun(run);
-
-  const pending = items.find(i => i.status === 'pending');
-  if (!pending) return;
-
-  const tab = await browser.tabs.create({ url: pending.renderedUrl, active: true });
-  // Hold tabId in memory for this session — saved to session storage separately,
-  // but we update the in-memory run and re-save with the tabId for the ack lookup.
-  const updated: RunState = {
-    ...run,
-    items: run.items.map(i =>
-      i.id === pending.id
-        ? { ...i, status: 'open' as WorkItemStatus, tabId: tab.id }
-        : i
-    ),
-  };
-  // saveRun strips tabId, so we keep a live reference in session for tab-id lookups below.
-  // We save the status update (pending → open) but not the tabId.
-  await saveRun(updated);
-  // Store tabId→itemId mapping separately for quick lookup.
-  if (tab.id !== undefined) {
-    await browser.storage.session.set({ [`expurge_tab_${tab.id}`]: pending.id });
-  }
+  await openNextBatch(run, true);
 }
 
 async function handleVerdict(itemId: string, verdict: Verdict, listingUrl?: string, tabId?: number): Promise<void> {
@@ -111,6 +122,9 @@ async function handleVerdict(itemId: string, verdict: Verdict, listingUrl?: stri
   if (tabId !== undefined) {
     await browser.storage.session.remove(`expurge_tab_${tabId}`);
   }
+
+  // Auto-advance: fill available batch slots.
+  await openNextBatch(updated);
 }
 
 async function handleSkip(itemId: string, skipReason: SkipReason, tabId?: number): Promise<void> {
@@ -164,12 +178,15 @@ browser.runtime.onMessage.addListener(
       const item = run.items.find(i => i.id === itemId);
       if (!item) return null;
       const broker = getBroker(item.brokerId);
+      const done = run.items.filter(i => i.status === 'verdicted').length;
+      const hits = run.items.filter(i => i.verdict === 'hit').length;
       return {
         type: 'ITEM_INFO',
         itemId: item.id,
         brokerId: item.brokerId,
         exposes: broker?.search.exposes ?? [],
         renderedUrl: item.renderedUrl,
+        progress: { done, total: run.items.length, hits },
       };
     }
 
@@ -182,6 +199,15 @@ browser.runtime.onMessage.addListener(
         tabId,
       );
       return { type: 'ACK', itemId: m.itemId };
+    }
+
+    if (m.type === 'PING') {
+      return { type: 'PONG', hasOverlay: false };
+    }
+
+    if (m.type === 'REINJECT_OVERLAY') {
+      await reinjectIfMissing(m.tabId as number);
+      return { ok: true };
     }
 
     if (m.type === 'GET_DRAFT') {
@@ -223,4 +249,34 @@ browser.webNavigation.onErrorOccurred.addListener(async (details) => {
   const itemId = await itemIdForTab(details.tabId);
   if (!itemId) return;
   await handleSkip(itemId, 'load_error', details.tabId);
+});
+
+// ── overlay re-injection ─────────────────────────────────────────────────────
+
+async function reinjectIfMissing(tabId: number): Promise<void> {
+  const TIMEOUT_MS = 2_000;
+  try {
+    const pong = await Promise.race([
+      browser.tabs.sendMessage(tabId, { type: 'PING' }),
+      new Promise<never>((_, rej) => setTimeout(() => rej(new Error('timeout')), TIMEOUT_MS)),
+    ]) as { type?: string; hasOverlay?: boolean } | null;
+
+    if (pong?.hasOverlay) return; // overlay present — nothing to do
+    // Content script alive but overlay missing — fall through to inject
+  } catch {
+    // PING timed out or content script not running — inject
+  }
+
+  try {
+    await browser.scripting.executeScript({ target: { tabId }, files: ['content.js'] });
+  } catch {
+    // Tab may be on a restricted URL or closed — ignore
+  }
+}
+
+browser.tabs.onUpdated.addListener(async (tabId, changeInfo) => {
+  if (changeInfo.status !== 'complete') return;
+  const itemId = await itemIdForTab(tabId);
+  if (!itemId) return;
+  await reinjectIfMissing(tabId);
 });
