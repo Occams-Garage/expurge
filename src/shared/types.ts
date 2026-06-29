@@ -55,8 +55,9 @@ export interface ItemInfoMsg {
 export interface AckMsg  { type: 'ACK';  itemId: string }
 export interface PongMsg { type: 'PONG'; hasOverlay: boolean }
 
-export interface PingMsg  { type: 'PING' }
-export interface ReinjMsg { type: 'REINJECT_OVERLAY'; tabId: number }
+export interface PingMsg    { type: 'PING' }
+export interface ReinjMsg  { type: 'REINJECT_OVERLAY'; tabId: number }
+export interface StopRunMsg { type: 'STOP_RUN' }
 
 export type ToBackground =
-  | StartRunMsg | GetRunStateMsg | GetDraftMsg | GetItemMsg | VerdictMsg | PingMsg | ReinjMsg;
+  | StartRunMsg | GetRunStateMsg | GetDraftMsg | GetItemMsg | VerdictMsg | PingMsg | ReinjMsg | StopRunMsg;

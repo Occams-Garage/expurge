@@ -149,6 +149,21 @@ async function handleSkip(itemId: string, skipReason: SkipReason, tabId?: number
   await openNextBatch(updated);
 }
 
+async function handleStopRun(): Promise<void> {
+  const run = await loadRun();
+  if (!run) return;
+
+  const updated: RunState = {
+    ...run,
+    items: run.items.map(i =>
+      i.status === 'pending' || i.status === 'open'
+        ? { ...i, status: 'verdicted' as WorkItemStatus, verdict: 'skipped' as Verdict, skipReason: 'run_stopped' as SkipReason }
+        : i
+    ),
+  };
+  await saveRun(updated);
+}
+
 async function itemIdForTab(tabId: number): Promise<string | null> {
   const key = `expurge_tab_${tabId}`;
   const r = await browser.storage.session.get(key);
@@ -202,6 +217,11 @@ browser.runtime.onMessage.addListener(
         tabId,
       );
       return { type: 'ACK', itemId: m.itemId };
+    }
+
+    if (m.type === 'STOP_RUN') {
+      await handleStopRun();
+      return { ok: true };
     }
 
     if (m.type === 'PING') {
