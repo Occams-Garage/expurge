@@ -1,7 +1,8 @@
 import browser from 'webextension-polyfill';
-import type { RunState } from '../shared/types';
+import type { RunState, WorkItem } from '../shared/types';
 import type { Draft, EmailDraft, FormDraft } from '../shared/templates';
 import { mailtoUrl, toEml, toCopyText } from '../shared/templates';
+import { BROKERS, getBroker } from '../shared/brokers';
 
 // ── section routing ──────────────────────────────────────────────────────────
 
@@ -31,6 +32,73 @@ function clearError(): void {
 
 // ── run active view ──────────────────────────────────────────────────────────
 
+// ── broker table helpers ──────────────────────────────────────────────────────
+
+function brokerBadge(items: WorkItem[]): { kind: string; label: string } {
+  if (items.some(i => i.verdict === 'hit'))    return { kind: 'hit',     label: 'listed' };
+  if (items.some(i => i.status === 'open'))    return { kind: 'open',    label: 'open' };
+  if (items.some(i => i.status === 'pending')) return { kind: 'pending', label: 'pending' };
+  if (items.some(i => i.verdict === 'unknown'))return { kind: 'unknown', label: 'unknown' };
+  if (items.some(i => i.verdict === 'clear'))  return { kind: 'clear',   label: 'not listed' };
+  return { kind: 'skipped', label: 'skipped' };
+}
+
+function renderBrokerTable(run: RunState): void {
+  const tableEl = document.getElementById('broker-table')!;
+  const coverageEl = document.getElementById('coverage-note')!;
+
+  // Group items by brokerId, preserving order.
+  const groups = new Map<string, WorkItem[]>();
+  for (const item of run.items) {
+    const g = groups.get(item.brokerId) ?? [];
+    g.push(item);
+    groups.set(item.brokerId, g);
+  }
+
+  const rows: string[] = [];
+  for (const [brokerId, items] of groups) {
+    const broker = getBroker(brokerId);
+    const name = broker?.name ?? brokerId;
+    const badge = brokerBadge(items);
+    const akaCount = items.filter(i => i.nameVariant !== 'primary').length;
+    const akaHtml = akaCount > 0
+      ? `<span class="aka-count">+${akaCount} AKA</span>`
+      : '';
+    rows.push(`
+      <div class="run-item">
+        <span class="broker-name">${escHtml(name)}${akaHtml}</span>
+        <span class="badge badge-${badge.kind}">${badge.label}</span>
+      </div>
+    `);
+  }
+  tableEl.innerHTML = rows.join('');
+
+  // Coverage note: brokers present in the dataset but not in this run (disabled/broken),
+  // plus variants skipped due to missing profile fields.
+  const activeIds = new Set(run.items.map(i => i.brokerId));
+  const notChecked = BROKERS.filter(b => b.status !== 'active' || !activeIds.has(b.id));
+  const missingFieldSkips = run.items.filter(
+    i => typeof i.skipReason === 'string' && i.skipReason.startsWith('missing:')
+  ).length;
+
+  const notes: string[] = [];
+  if (notChecked.length > 0) {
+    notes.push(`${notChecked.length} broker${notChecked.length > 1 ? 's' : ''} not in run`);
+  }
+  if (missingFieldSkips > 0) {
+    notes.push(`${missingFieldSkips} variant${missingFieldSkips > 1 ? 's' : ''} skipped · profile info missing`);
+  }
+
+  if (notes.length > 0) {
+    coverageEl.textContent = notes.join(' · ');
+    coverageEl.classList.remove('hidden');
+  } else {
+    coverageEl.classList.add('hidden');
+  }
+}
+
+// ── run active view ──────────────────────────────────────────────────────────
+
 function showRunActive(run: RunState): void {
   showSection('profile');
 
@@ -38,10 +106,15 @@ function showRunActive(run: RunState): void {
   const activeView = document.getElementById('run-active-view')!;
   activeView.classList.remove('hidden');
 
-  const done    = run.items.filter(i => i.status === 'verdicted').length;
-  const total   = run.items.length;
+  // Exclude pre-skipped (missing-field) items from the checked/total counter
+  // so the user sees only the items that actually required a tab.
+  const checkable = run.items.filter(
+    i => !(typeof i.skipReason === 'string' && i.skipReason.startsWith('missing:'))
+  );
+  const done    = checkable.filter(i => i.status === 'verdicted').length;
+  const total   = checkable.length;
   const hits    = run.items.filter(i => i.verdict === 'hit').length;
-  const allDone = done === total;
+  const allDone = run.items.every(i => i.status === 'verdicted');
 
   document.getElementById('run-active-heading')!.textContent =
     allDone ? 'Run complete' : 'Run in progress';
@@ -49,6 +122,8 @@ function showRunActive(run: RunState): void {
   let summary = `${done} / ${total} checked`;
   if (hits > 0) summary += ` · ${hits} found`;
   document.getElementById('run-active-text')!.textContent = summary;
+
+  renderBrokerTable(run);
 
   document.getElementById('btn-stop-run')!.classList.toggle('hidden', allDone);
 
@@ -214,6 +289,10 @@ async function handleFormSubmit(e: Event): Promise<void> {
   const last  = (data.get('last') as string).trim();
   const city  = (data.get('city') as string).trim();
   const state = (data.get('state') as string).trim().toUpperCase();
+  const akaRaw = (data.get('also_known_as') as string ?? '').trim();
+  const also_known_as = akaRaw
+    ? akaRaw.split('\n').map(s => s.trim()).filter(Boolean)
+    : undefined;
 
   if (!first || !last || !city || !state) {
     showError('Please fill in all fields.');
@@ -242,7 +321,7 @@ async function handleFormSubmit(e: Event): Promise<void> {
     btn.textContent = 'Opening search…';
     await browser.runtime.sendMessage({
       type: 'START_RUN',
-      profile: { first, last, city, state },
+      profile: { first, last, city, state, ...(also_known_as ? { also_known_as } : {}) },
     });
 
     const res = await browser.runtime.sendMessage({ type: 'GET_RUN_STATE' });
