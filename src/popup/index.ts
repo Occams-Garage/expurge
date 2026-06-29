@@ -279,10 +279,15 @@ document.getElementById('profile-form')!.addEventListener('submit', (e) => {
 });
 
 document.getElementById('btn-restore-overlay')!.addEventListener('click', async () => {
-  const tabs = await browser.tabs.query({ active: true, currentWindow: true });
-  const tab = tabs[0];
-  if (!tab?.id) return;
-  await browser.runtime.sendMessage({ type: 'REINJECT_OVERLAY', tabId: tab.id });
+  const btn = document.getElementById('btn-restore-overlay') as HTMLButtonElement;
+  btn.disabled = true;
+  const res = await browser.runtime.sendMessage({ type: 'REINJECT_OVERLAY' }) as { ok?: boolean };
+  if (!res?.ok) {
+    btn.textContent = 'Nothing left to check';
+    setTimeout(() => { btn.textContent = 'Restore overlay'; btn.disabled = false; }, 2000);
+  } else {
+    btn.disabled = false; // popup will close when the browser switches to the tab
+  }
 });
 
 document.getElementById('btn-stop-run')!.addEventListener('click', async () => {
