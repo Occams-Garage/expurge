@@ -71,6 +71,9 @@ const OVERLAY_STYLES = `
   background: var(--strip-bg);
   padding: 6px 14px 5px;
   border-bottom: 1.5px dashed var(--surface);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
 
 .wordmark {
@@ -79,6 +82,15 @@ const OVERLAY_STYLES = `
   font-size: 15px;
   letter-spacing: -0.01em;
   color: var(--strip-ko);
+  line-height: 1;
+}
+
+.progress {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--strip-ko);
+  opacity: 0.7;
+  letter-spacing: 0.05em;
   line-height: 1;
 }
 
@@ -289,7 +301,10 @@ function setOverlayState(refs: OverlayRefs, state: OverlayState, label = ''): vo
 
 // ── verdict panel (details / profile page) ───────────────────────────────────
 
-function buildVerdictPanel(exposes: string[]): { host: HTMLElement; refs: OverlayRefs } {
+function buildVerdictPanel(
+  exposes: string[],
+  progress: { done: number; total: number } | null,
+): { host: HTMLElement; refs: OverlayRefs } {
   const host = document.createElement('div');
   host.id = 'expurge-host';
   const shadow = host.attachShadow({ mode: 'open' });
@@ -297,10 +312,15 @@ function buildVerdictPanel(exposes: string[]): { host: HTMLElement; refs: Overla
   const style = document.createElement('style');
   style.textContent = OVERLAY_STYLES;
 
+  const progressText = progress ? `${progress.done} / ${progress.total}` : '';
+
   const panel = document.createElement('div');
   panel.className = 'panel';
   panel.innerHTML = `
-    <div class="strip"><span class="wordmark">expurge</span></div>
+    <div class="strip">
+      <span class="wordmark">expurge</span>
+      <span class="progress" id="strip-progress">${progressText}</span>
+    </div>
     <div class="body">
       <div class="label">Look for</div>
       <ul class="exposes" id="exp-list"></ul>
@@ -342,6 +362,7 @@ function buildVerdictPanel(exposes: string[]): { host: HTMLElement; refs: Overla
 function buildGuidancePanel(
   exposes: string[],
   brokerHostname: string,
+  progress: { done: number; total: number } | null,
   onVerdict: (verdict: Verdict, listingUrl: string) => void,
 ): HTMLElement {
   const host = document.createElement('div');
@@ -354,11 +375,14 @@ function buildGuidancePanel(
   const panel = document.createElement('div');
   panel.className = 'panel';
 
-  // Exposes list HTML
+  const progressText = progress ? `${progress.done} / ${progress.total}` : '';
   const exposesHtml = exposes.map(e => `<li>${e}</li>`).join('');
 
   panel.innerHTML = `
-    <div class="strip"><span class="wordmark">expurge</span></div>
+    <div class="strip">
+      <span class="wordmark">expurge</span>
+      <span class="progress" id="strip-progress">${progressText}</span>
+    </div>
     <div class="body">
       <div class="label">Look for</div>
       <ul class="exposes">${exposesHtml}</ul>
@@ -444,6 +468,19 @@ function buildGuidancePanel(
   return host;
 }
 
+// ── post-verdict status copy ─────────────────────────────────────────────────
+
+function verdictMsg(verdict: Verdict, ok: boolean): string {
+  if (verdict === 'hit') {
+    return ok
+      ? '✓ Listed — open expurge to send your opt-out request.'
+      : '✓ Listed — saved locally; open expurge to send your opt-out request.';
+  }
+  if (verdict === 'clear')   return '✓ Not listed.';
+  if (verdict === 'unknown') return '✓ Not sure — open expurge to continue.';
+  return '✓ Skipped.';
+}
+
 // ── verdict send + ack with retry ────────────────────────────────────────────
 
 async function sendVerdict(
@@ -471,9 +508,24 @@ async function sendVerdict(
   }
 }
 
+// ── PING handler (background → content) ─────────────────────────────────────
+
+browser.runtime.onMessage.addListener((msg: unknown) => {
+  const m = msg as Record<string, unknown>;
+  if (m.type === 'PING') {
+    return Promise.resolve({
+      type: 'PONG',
+      hasOverlay: !!document.getElementById('expurge-host'),
+    });
+  }
+  return undefined;
+});
+
 // ── init ─────────────────────────────────────────────────────────────────────
 
 async function init(): Promise<void> {
+  if (document.getElementById('expurge-host')) return;
+
   let info: ItemInfoMsg | null = null;
   try {
     info = await browser.runtime.sendMessage({ type: 'GET_ITEM' }) as ItemInfoMsg | null;
@@ -483,7 +535,7 @@ async function init(): Promise<void> {
 
   if (!info) return;
 
-  const { itemId, exposes, renderedUrl } = info;
+  const { itemId, exposes, renderedUrl, progress } = info;
 
   // Detect results page: current path matches the search URL's path.
   const isResultsPage = (() => {
@@ -504,38 +556,23 @@ async function init(): Promise<void> {
       const shadow = host.shadowRoot!;
       const statusEl = shadow.querySelector('#overlay-status') as HTMLElement;
 
-      const label =
-        verdict === 'hit'     ? 'Listed'     :
-        verdict === 'clear'   ? 'Not Listed' :
-        verdict === 'unknown' ? 'Not Sure'   :
-        'Skipped';
-
       const ok = await sendVerdict(itemId, verdict, listingUrl);
+      const msg = verdictMsg(verdict, ok);
       statusEl.className = 'status recorded';
-      statusEl.textContent = ok
-        ? `✓ ${label} — open expurge to continue.`
-        : `✓ ${label} — saved locally; reopen expurge to continue.`;
+      statusEl.textContent = msg;
     };
 
-    const host = buildGuidancePanel(exposes, brokerHostname, onVerdict);
+    const host = buildGuidancePanel(exposes, brokerHostname, progress, onVerdict);
     document.documentElement.appendChild(host);
   } else {
     // Details / profile page — full verdict panel.
-    const { host, refs } = buildVerdictPanel(exposes);
+    const { host, refs } = buildVerdictPanel(exposes, progress);
     document.documentElement.appendChild(host);
 
     const onVerdict = async (verdict: Verdict) => {
       setOverlayState(refs, 'saving');
       const ok = await sendVerdict(itemId, verdict, window.location.href);
-      const label =
-        verdict === 'hit'     ? 'Listed'     :
-        verdict === 'clear'   ? 'Not Listed' :
-        verdict === 'unknown' ? 'Not Sure'   :
-        'Skipped';
-      const msg = ok
-        ? `${label} — open expurge to continue.`
-        : `${label} — saved locally; reopen expurge to continue.`;
-      setOverlayState(refs, 'recorded', msg);
+      setOverlayState(refs, 'recorded', verdictMsg(verdict, ok));
     };
 
     refs.btnHit.addEventListener('click',     () => onVerdict('hit'));

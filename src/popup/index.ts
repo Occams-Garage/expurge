@@ -5,7 +5,7 @@ import { mailtoUrl, toEml, toCopyText } from '../shared/templates';
 
 // ── section routing ──────────────────────────────────────────────────────────
 
-const SECTIONS = ['profile', 'run', 'draft'] as const;
+const SECTIONS = ['profile', 'draft'] as const;
 type Section = (typeof SECTIONS)[number];
 
 function showSection(id: Section): void {
@@ -29,34 +29,35 @@ function clearError(): void {
   el.classList.add('hidden');
 }
 
-// ── run status display ───────────────────────────────────────────────────────
+// ── run active view ──────────────────────────────────────────────────────────
 
-function badgeClass(status: string, verdict?: string): string {
-  if (verdict) return `badge badge-${verdict}`;
-  return `badge badge-${status}`;
+function showRunActive(run: RunState): void {
+  showSection('profile');
+
+  document.getElementById('profile-form-view')!.classList.add('hidden');
+  const activeView = document.getElementById('run-active-view')!;
+  activeView.classList.remove('hidden');
+
+  const done    = run.items.filter(i => i.status === 'verdicted').length;
+  const total   = run.items.length;
+  const hits    = run.items.filter(i => i.verdict === 'hit').length;
+  const allDone = done === total;
+
+  document.getElementById('run-active-heading')!.textContent =
+    allDone ? 'Run complete' : 'Run in progress';
+
+  let summary = `${done} / ${total} checked`;
+  if (hits > 0) summary += ` · ${hits} found`;
+  document.getElementById('run-active-text')!.textContent = summary;
+
+  const viewDraftsBtn = document.getElementById('btn-view-drafts')!;
+  viewDraftsBtn.classList.toggle('hidden', hits === 0);
 }
 
-function renderRunSection(run: RunState): void {
-  showSection('run');
-  const container = document.getElementById('run-items')!;
-  container.innerHTML = '';
-
-  for (const item of run.items) {
-    const row = document.createElement('div');
-    row.className = 'run-item';
-
-    const name = document.createElement('span');
-    name.className = 'broker-name';
-    name.textContent = item.brokerId;
-    row.appendChild(name);
-
-    const badge = document.createElement('span');
-    badge.className = badgeClass(item.status, item.verdict);
-    badge.textContent = item.verdict ?? item.status;
-    row.appendChild(badge);
-
-    container.appendChild(row);
-  }
+function showProfileForm(): void {
+  showSection('profile');
+  document.getElementById('profile-form-view')!.classList.remove('hidden');
+  document.getElementById('run-active-view')!.classList.add('hidden');
 }
 
 // ── html helper ──────────────────────────────────────────────────────────────
@@ -71,8 +72,8 @@ function wireBackButton(): void {
   document.getElementById('btn-back')!.onclick = async () => {
     const res = await browser.runtime.sendMessage({ type: 'GET_RUN_STATE' });
     const run = (res as { run?: RunState }).run;
-    if (run) renderRunSection(run);
-    else showSection('profile');
+    if (run) showRunActive(run);
+    else showProfileForm();
   };
 }
 
@@ -103,12 +104,10 @@ function renderEmailDraftSection(draft: EmailDraft, brokerId: string): void {
   const copyText = toCopyText(draft);
   (document.getElementById('copy-text') as HTMLTextAreaElement).value = copyText;
 
-  // "Open in mail app" — browser.tabs.create with a mailto: URL invokes the OS mail handler.
   document.getElementById('btn-mailto')!.onclick = () => {
     browser.tabs.create({ url: mailtoUrl(draft) });
   };
 
-  // ".eml download" — encodes as a data: URL so browser.downloads can fetch it cross-context.
   document.getElementById('btn-eml')!.onclick = async () => {
     const emlContent = toEml(draft);
     const bytes      = new TextEncoder().encode(emlContent);
@@ -123,7 +122,6 @@ function renderEmailDraftSection(draft: EmailDraft, brokerId: string): void {
     });
   };
 
-  // "Copy to clipboard" — reveals the textarea as a fallback.
   const copyArea = document.getElementById('copy-area')!;
   const btnCopy  = document.getElementById('btn-copy')!;
   btnCopy.onclick = async () => {
@@ -190,7 +188,7 @@ function renderDraftSection(draft: Draft, brokerId: string): void {
   }
 }
 
-// ── profile form submit (M1) ─────────────────────────────────────────────────
+// ── profile form submit ──────────────────────────────────────────────────────
 
 async function handleFormSubmit(e: Event): Promise<void> {
   e.preventDefault();
@@ -233,11 +231,10 @@ async function handleFormSubmit(e: Event): Promise<void> {
       profile: { first, last, city, state },
     });
 
-    // Poll once immediately — the tab has been opened.
     const res = await browser.runtime.sendMessage({ type: 'GET_RUN_STATE' });
     const run = (res as { run?: RunState }).run;
-    if (run) renderRunSection(run);
-    else showSection('run');
+    if (run) showRunActive(run);
+    else showProfileForm();
   } catch {
     showError('Something went wrong. Is the extension active?');
     btn.disabled = false;
@@ -252,7 +249,7 @@ async function init(): Promise<void> {
   const run = (res as { run?: RunState }).run;
 
   if (!run) {
-    showSection('profile');
+    showProfileForm();
     return;
   }
 
@@ -269,30 +266,34 @@ async function init(): Promise<void> {
     }
   }
 
-  renderRunSection(run);
+  showRunActive(run);
 }
 
-// Wire up the form.
+// ── event wiring ─────────────────────────────────────────────────────────────
+
 document.getElementById('profile-form')!.addEventListener('submit', (e) => {
   void handleFormSubmit(e);
 });
 
-// Refresh button re-polls the background.
-document.getElementById('btn-refresh')!.addEventListener('click', async () => {
+document.getElementById('btn-restore-overlay')!.addEventListener('click', async () => {
+  const tabs = await browser.tabs.query({ active: true, currentWindow: true });
+  const tab = tabs[0];
+  if (!tab?.id) return;
+  await browser.runtime.sendMessage({ type: 'REINJECT_OVERLAY', tabId: tab.id });
+});
+
+document.getElementById('btn-view-drafts')!.addEventListener('click', async () => {
   const res = await browser.runtime.sendMessage({ type: 'GET_RUN_STATE' });
   const run = (res as { run?: RunState }).run;
-  if (!run) { showSection('profile'); return; }
-
+  if (!run) return;
   const hitItem = run.items.find(i => i.verdict === 'hit');
-  if (hitItem) {
-    const draftRes = await browser.runtime.sendMessage({
-      type: 'GET_DRAFT',
-      brokerId: hitItem.brokerId,
-    });
-    const d = (draftRes as { draft?: Draft }).draft;
-    if (d) { renderDraftSection(d, hitItem.brokerId); return; }
-  }
-  renderRunSection(run);
+  if (!hitItem) return;
+  const draftRes = await browser.runtime.sendMessage({
+    type: 'GET_DRAFT',
+    brokerId: hitItem.brokerId,
+  });
+  const d = (draftRes as { draft?: Draft }).draft;
+  if (d) renderDraftSection(d, hitItem.brokerId);
 });
 
 init().catch(console.error);
