@@ -1,0 +1,140 @@
+/* ============================================================
+   expurge — design tokens
+   Brand & UI Guide v1.0
+   Raw palette is theme-independent; semantic tokens swap by theme.
+   Default = light. Dark applies via prefers-color-scheme OR
+   an explicit [data-theme="dark"] on a root element.
+   ============================================================ */
+
+:root {
+  /* ---- Raw palette (never changes) ---- */
+  --cream:        #FBF6EE;
+  --oat:          #ECE3D4;
+  --pine:         #2C5446;
+  --pine-hover:   #244839;
+  --mint:         #7FB89C;
+  --mint-hover:   #93C7AC;
+  --terracotta:   #B25C3C; /* light accent */
+  --terracotta-dark: #C9744E; /* terracotta's lift for dark backgrounds */
+  --ink:          #211D18;
+  --ink-card:     #2A2620;
+  --ink-line:     #3A342C;
+  --ink-input:    #2A2620;
+  --ink-input-border: #433D34;
+
+  /* ---- Spacing scale (px) ---- */
+  --s-1: 4px;
+  --s-2: 8px;
+  --s-3: 12px;
+  --s-4: 16px;
+  --s-5: 20px;
+  --s-6: 24px;
+  --s-7: 32px;
+  --s-8: 48px;
+  --s-9: 64px;
+  --s-10: 96px;
+
+  /* ---- Radius ---- */
+  --r-strip: 3px;       /* the tear-strip */
+  --r-control: 9px;     /* buttons, inputs (8–9) */
+  --r-card: 14px;       /* cards, panels (12–14) */
+  --r-pill: 9999px;     /* chips, pills */
+
+  /* ---- Type ---- */
+  --font-display: "Newsreader", Georgia, serif;       /* wordmark + headlines, weight 600 */
+  --font-ui: "Hanken Grotesk", system-ui, sans-serif; /* all UI & body */
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace; /* labels, IDs, fine print */
+
+  --fs-display: 96px;   /* 48–128, clamp as needed */
+  --fs-h1: 36px;        /* 30–40 */
+  --fs-h2: 22px;        /* 20–24 */
+  --fs-body: 16px;      /* 15–16 */
+  --fs-small: 13px;     /* 12.5–13.5 */
+  --fs-mono: 12px;      /* 11–12 */
+
+  --fw-regular: 400;
+  --fw-medium: 500;
+  --fw-semibold: 600;
+  --fw-bold: 700;
+
+  --lh-head: 1.1;
+  --lh-h2: 1.25;
+  --lh-body: 1.6;
+  --lh-small: 1.55;
+
+  --tracking-display: -0.01em;
+  --tracking-mono: 0.14em;
+
+  /* ---- Semantic tokens — LIGHT (default) ---- */
+  --bg:            var(--cream);
+  --surface:       var(--cream);   /* cards sit on cream, defined by --border */
+  --fill:          var(--oat);     /* soft fills, chips, hover wells */
+  --border:        var(--oat);
+  --input-bg:      #FFFFFF;
+  --input-border:  #DCD2C0;
+  --text:          var(--ink);
+  --text-muted:    #6B6053;
+  --text-faint:    #A99B8A;
+  --primary:       var(--pine);
+  --primary-hover: var(--pine-hover);
+  --on-primary:    var(--cream);
+  --link:          var(--pine);
+  --link-hover:    var(--terracotta);
+  --accent:        var(--terracotta);
+  --focus-ring:    var(--pine);
+  --focus-ring-shadow: rgba(44, 84, 70, 0.14);
+
+  /* strip on light: pine fill, cream knockout + perforation */
+  --strip-bg:      var(--pine);
+  --strip-knockout: var(--cream);
+}
+
+/* ---- Semantic tokens — DARK ---- */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg:            var(--ink);
+    --surface:       var(--ink-card);
+    --fill:          #2E2A24;
+    --border:        var(--ink-line);
+    --input-bg:      var(--ink-input);
+    --input-border:  var(--ink-input-border);
+    --text:          var(--cream);
+    --text-muted:    #C9C2B6;
+    --text-faint:    #9C9388;
+    --primary:       var(--mint);
+    --primary-hover: var(--mint-hover);
+    --on-primary:    var(--ink);
+    --link:          var(--mint);
+    --link-hover:    var(--mint-hover);
+    --accent:        var(--terracotta-dark);
+    --focus-ring:    var(--mint);
+    --focus-ring-shadow: rgba(127, 184, 156, 0.2);
+
+    /* strip on dark: mint fill, ink knockout + perforation */
+    --strip-bg:      var(--mint);
+    --strip-knockout: var(--ink);
+  }
+}
+
+/* Explicit opt-in dark (overrides system pref) */
+[data-theme="dark"] {
+  --bg:            var(--ink);
+  --surface:       var(--ink-card);
+  --fill:          #2E2A24;
+  --border:        var(--ink-line);
+  --input-bg:      var(--ink-input);
+  --input-border:  var(--ink-input-border);
+  --text:          var(--cream);
+  --text-muted:    #C9C2B6;
+  --text-faint:    #9C9388;
+  --primary:       var(--mint);
+  --primary-hover: var(--mint-hover);
+  --on-primary:    var(--ink);
+  --link:          var(--mint);
+  --link-hover:    var(--mint-hover);
+  --accent:        var(--terracotta-dark);
+  --focus-ring:    var(--mint);
+  --focus-ring-shadow: rgba(127, 184, 156, 0.2);
+  --strip-bg:      var(--mint);
+  --strip-knockout: var(--ink);
+}
