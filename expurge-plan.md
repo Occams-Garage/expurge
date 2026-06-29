@@ -488,6 +488,14 @@ how the age-not-DOB ambiguity stays recoverable. No auto "no results" detection;
 says clear. This collapses the old friendly/hostile tier distinction entirely: every broker
 is just "a tab the human can see."
 
+**Results page vs. details page: two-path overlay.** Most brokers open a *search results page* (e.g. `/results?name=…`) before the user navigates to their individual *profile/details page* (e.g. `/find/person/{id}`). The content script detects which it is by comparing `window.location.pathname` to the rendered search URL's path. On the **results page** it shows a *guidance panel* only ("Found yourself? Click 'View Details →' to open your profile, then confirm there") — no verdict buttons. On the **details/profile page** it shows the full four-button verdict panel.
+
+Why no verdict buttons on the results page: if the user confirms from results, `window.location.href` at verdict time is the search URL, not the direct listing URL. Opt-out processes need the direct listing URL to find the specific record. The navigation requirement is also desirable independently — it lets the user verify their full profile before confirming a hit.
+
+**`listingUrl` capture.** At verdict time on the details page, `window.location.href` is attached to the `VERDICT` message and stored as `listingUrl` on the `WorkItem`. `buildDraft()` threads it into the email body near the top: "The following profile contains my information and I am requesting its removal: [url]". `listingUrl` is optional end-to-end — if absent, the draft generates without the line.
+
+**Paste-URL fallback (paywalled or inaccessible detail pages).** On the results page, below the main guidance, a collapsed section "Can't access the details page? →" reveals a URL paste field. Verdict buttons appear once the field is non-empty. A same-domain check shows an amber warning if the pasted URL doesn't match the broker's domain, but does NOT block the buttons — the warning is informational. `listingUrl` is set to the pasted value. This handles edge cases (paywalled profiles, URL-less search results) without blocking the primary path.
+
 **Reserved enrichment (optional, later)**: the schema reserves a per-broker
 extraction-hint block. When present AND verified, the content script may pre-extract fields
 and show a confidence score on that specific site. Same graceful-degradation pattern as the

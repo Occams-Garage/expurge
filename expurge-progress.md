@@ -20,12 +20,12 @@ no persistence opt-ins, no options page, no challenge/load-error handling, no ba
 | `src/shared/brokers.ts` | ChannelTrust enum, BrokerChannel/Broker interfaces, BROKERS const (TruePeopleSearch only; trust stubbed as 'verified') |
 | `src/shared/transforms.ts` | Four transforms (slug/q/upper/raw), deriveFields(), renderUrl() |
 | `src/shared/gate.ts` | evaluateGate(), channelExpiryState(), WARN_MONTHS=6, EXPIRE_MONTHS=12 |
-| `src/shared/templates.ts` | buildDraft(), mailtoUrl(), toEml() (RFC 5322), toCopyText(); US general + CA CCPA templates (copy TBD Q-010) |
-| `src/background/index.ts` | Stateless coordinator; saveRun() strips tabIds; expurge_tab_{tabId} session keys; handles START_RUN/GET_RUN_STATE/GET_ITEM/VERDICT/GET_DRAFT; tabs.onRemoved → tab_closed; webNavigation.onErrorOccurred → load_error |
-| `src/content/index.ts` | Shadow DOM overlay; GET_ITEM on load; sendVerdict() with 6s timeout + 3 retries; three overlay states (unjudged/saving/recorded) |
-| `src/popup/index.html` | Three sections: profile form, run status, draft send surfaces |
-| `src/popup/index.ts` | handleFormSubmit(); permissions.request() from click handler; renderDraftSection(); init() |
-| `src/popup/style.css` | Popup styles; badge variants for all verdict/status states |
+| `src/shared/templates.ts` | Draft discriminated union (EmailDraft \| FormDraft); buildDraft() dispatches on channel.kind; buildFormCard() generates form instruction card; mailtoUrl/toEml/toCopyText on EmailDraft; US general + CA CCPA templates (copy TBD Q-010) |
+| `src/background/index.ts` | Stateless coordinator; saveRun() strips tabIds; expurge_tab_{tabId} session keys; handles START_RUN/GET_RUN_STATE/GET_ITEM/VERDICT/GET_DRAFT; tabs.onRemoved → tab_closed; webNavigation.onErrorOccurred → load_error; listingUrl stored on WorkItem; renderedUrl included in ITEM_INFO |
+| `src/content/index.ts` | Shadow DOM overlay; two-path rendering (results page: guidance panel with paste fallback; details page: full verdict panel); page detection via pathname comparison; sendVerdict() with listingUrl, 6s timeout + 3 retries; post-ACK guidance "open expurge to send your opt-out request" |
+| `src/popup/index.html` | Three sections: profile form, run status, draft content (email or form card, rendered by JS) |
+| `src/popup/index.ts` | handleFormSubmit(); permissions.request() from click handler; renderDraftSection() dispatches on draft.kind; renderEmailDraftSection() / renderFormDraftSection(); init() |
+| `src/popup/style.css` | Popup styles; badge variants; form card styles (fields table, steps list, open-form button) |
 
 ### Prototype vs. target architecture
 
@@ -42,6 +42,8 @@ these move to the options page in M4+. The popup becomes a compact run control p
 - **M1** — Profile form → URL render → open tab (popup form, permissions.request, START_RUN)
 - **M2** — Content script overlay + four-way verdict + ACK contract (shadow DOM, retry logic, tab_closed skip)
 - **M3** — Draft gate + three send surfaces (evaluateGate, buildDraft, mailto/.eml/copy-paste in popup)
+- **M3+** — Listing URL capture: results-page guidance panel, navigate-to-details flow, paste fallback, post-ACK "open expurge" cue, listingUrl in draft body
+- **M3+** — TPS form_required opt-out: corrected channel record, Draft discriminated union, buildFormCard(), form card in popup (fields table, 7-step walkthrough, open-form button)
 
 ### Remaining
 
@@ -73,7 +75,7 @@ these move to the options page in M4+. The popup becomes a compact run control p
 - Profile form, draft surfaces, results all moved out of popup and into options page
 - "Mark as sent / submitted" on draft panels
 - `general_contact` amber callout on draft panels
-- `form_required` instruction card (URL + copy-paste field values + steps)
+- `form_required` instruction card in options page (popup version exists; move + extend in M6)
 - `opted_out_at` timestamp on WorkItem
 
 #### M7 — Signed remote dataset (Ed25519)
@@ -121,10 +123,11 @@ these move to the options page in M4+. The popup becomes a compact run control p
 
 | Location | TODO |
 |----------|------|
-| `src/shared/brokers.ts` | TruePeopleSearch channel trust stubbed as `verified` + `last_checked: '2026-06-01'` — replace with real verification stamp |
+| `src/shared/brokers.ts` | TruePeopleSearch form channel verified 2026-06-28 — re-verify periodically; only one broker total (M9 expands to ~25) |
 | `src/shared/templates.ts` | Both email template bodies marked `// TODO Q-010` — legal review before launch |
-| `src/shared/brokers.ts` | Only one broker. M9 expands to ~25. |
+| `src/shared/templates.ts` | `buildFormCard()` fields are TPS-specific (role dropdown step, hCaptcha step); generalize when adding more form_required brokers |
 | `src/popup/index.ts` | Profile form and draft surfaces are in popup — move to options page in M6 |
+| `src/popup/index.ts` | `isGeneralContact` wired in EmailDraft but amber callout not yet rendered — add in M6 |
 | `src/background/index.ts` | No batch pacing — opens one tab, no batch ceiling — add in M5 |
 | `src/background/index.ts` | No AKA fan-out in buildItems() — add in M5 |
 | `src/content/index.ts` | No challenge detection — add in M4 |
