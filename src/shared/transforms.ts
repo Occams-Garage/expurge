@@ -24,7 +24,8 @@ function deriveFields(p: Profile): Record<string, string> {
 // Coerce a stored also_known_as value into clean AkaName[]. Accepts unknown so it
 // can absorb legacy profiles (each entry a "First Last" string) alongside the
 // current object shape — there is no storage versioning, so this is the single
-// place that bridges old and new data. Entries without a first name are dropped.
+// place that bridges old and new data. A searchable name needs both a first and a
+// last, so entries missing either (including single-token legacy strings) are dropped.
 export function normalizeAkas(raw: unknown): AkaName[] {
   if (!Array.isArray(raw)) return [];
   const out: AkaName[] = [];
@@ -32,16 +33,19 @@ export function normalizeAkas(raw: unknown): AkaName[] {
     if (typeof entry === 'string') {
       // Legacy "First Last" — split on the first space (preserves prior semantics).
       const t = entry.trim();
-      if (!t) continue;
       const sp = t.indexOf(' ');
-      out.push(sp >= 0 ? { first: t.slice(0, sp), last: t.slice(sp + 1).trim() } : { first: t });
+      if (sp < 0) continue;   // single-token legacy AKA — not a searchable first+last name
+      const first = t.slice(0, sp);
+      const last = t.slice(sp + 1).trim();
+      if (!first || !last) continue;
+      out.push({ first, last });
     } else if (entry && typeof entry === 'object') {
       const e = entry as Partial<AkaName>;
       const first = (e.first ?? '').trim();
-      if (!first) continue;
-      const middle = (e.middle ?? '').trim();
       const last = (e.last ?? '').trim();
-      out.push({ first, ...(middle ? { middle } : {}), ...(last ? { last } : {}) });
+      if (!first || !last) continue;
+      const middle = (e.middle ?? '').trim();
+      out.push({ first, last, ...(middle ? { middle } : {}) });
     }
   }
   return out;
