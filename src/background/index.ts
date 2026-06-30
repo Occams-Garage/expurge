@@ -91,8 +91,12 @@ function buildItems(profile: Profile): WorkItem[] {
     if (broker.status !== 'active') continue;
     for (const variant of variants) {
       const vProfile = { ...profile, first: variant.first, last: variant.last };
-      const profileMap = vProfile as unknown as Record<string, string>;
-      const missingField = broker.search.requires.find(f => !profileMap[f]?.trim());
+      const profileMap = vProfile as unknown as Record<string, unknown>;
+      const missingField = broker.search.requires.find(f => {
+        const val = profileMap[f];
+        if (Array.isArray(val)) return val.length === 0;
+        return !(val as string | undefined)?.trim();
+      });
       if (missingField) {
         // Pre-verdicted: count toward progress total but open no tab.
         items.push({
@@ -361,6 +365,41 @@ browser.runtime.onMessage.addListener(
       return { draft };
     }
 
+    if (m.type === 'SAVE_PROFILE') {
+      await saveProfile(m.profile as Profile);
+      return { ok: true };
+    }
+
+    if (m.type === 'GET_PROFILE') {
+      const profile = await loadProfile();
+      return { profile };
+    }
+
+    if (m.type === 'MARK_SENT') {
+      await serialWrite(async () => {
+        const run = await loadRun();
+        if (!run) return;
+        const updated: RunState = {
+          ...run,
+          items: run.items.map(i =>
+            i.brokerId === (m.brokerId as string) && i.verdict === 'hit' && !i.optedOutAt
+              ? { ...i, optedOutAt: new Date().toISOString() }
+              : i
+          ),
+        };
+        await saveRun(updated);
+      });
+      return { ok: true };
+    }
+
+    if (m.type === 'DELETE_ALL') {
+      await serialWrite(async () => {
+        await browser.storage.session.clear();
+      });
+      await browser.storage.local.clear();
+      return { ok: true };
+    }
+
     return undefined;
   }
 );
@@ -437,6 +476,12 @@ async function reinjectIfMissing(tabId: number): Promise<void> {
     // Tab may be on a restricted URL or closed — ignore
   }
 }
+
+// ── first install → open options page ────────────────────────────────────────
+
+browser.runtime.onInstalled.addListener(({ reason }) => {
+  if (reason === 'install') browser.runtime.openOptionsPage().catch(console.error);
+});
 
 browser.tabs.onUpdated.addListener(async (tabId, changeInfo) => {
   if (changeInfo.status !== 'complete') return;
