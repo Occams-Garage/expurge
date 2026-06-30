@@ -30,6 +30,14 @@ export interface RunState {
   items: WorkItem[];
 }
 
+// One additional name to search, captured as separate atomic fields (mirrors the
+// primary name). middle is stored but not yet used in search URLs — see normalizeAkas.
+export interface AkaName {
+  first: string;
+  middle?: string;
+  last?: string;   // may be empty for single-token names
+}
+
 export interface Profile {
   first: string;
   last: string;
@@ -38,7 +46,7 @@ export interface Profile {
   middle?: string;
   zip?: string;
   age?: string;
-  also_known_as?: string[];  // additional names to search, each as "First Last"
+  also_known_as?: AkaName[];  // additional names to search
   relatives?: string[];
   emails?: string[];
   phones?: string[];
