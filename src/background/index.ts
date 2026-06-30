@@ -355,18 +355,31 @@ browser.runtime.onMessage.addListener(
       const profile = await loadProfile();
       if (!run || !profile) return { draft: null, reason: 'no_state' };
 
-      const broker = getBroker(m.brokerId as string);
-      if (!broker) return { draft: null, reason: 'unknown_broker' };
-
       const hitItem = run.items.find(
-        i => i.brokerId === broker.id && i.verdict === 'hit'
+        i => i.id === (m.itemId as string) && i.verdict === 'hit'
       );
       if (!hitItem) return { draft: null, reason: 'no_hit' };
+
+      const broker = getBroker(hitItem.brokerId);
+      if (!broker) return { draft: null, reason: 'unknown_broker' };
 
       const gate = evaluateGate(broker, 'hit');
       if (!gate.pass) return { draft: null, reason: gate.reason };
 
-      const draft = buildDraft(profile, broker, gate.channel, hitItem.listingUrl);
+      let draftProfile = profile;
+      if (hitItem.nameVariant.startsWith('aka_')) {
+        const idx = parseInt(hitItem.nameVariant.replace('aka_', ''), 10);
+        const aka = profile.also_known_as?.[idx];
+        if (aka) {
+          const sp = aka.indexOf(' ');
+          draftProfile = {
+            ...profile,
+            first: sp >= 0 ? aka.slice(0, sp) : aka,
+            last:  sp >= 0 ? aka.slice(sp + 1) : '',
+          };
+        }
+      }
+      const draft = buildDraft(draftProfile, broker, gate.channel, hitItem.listingUrl);
       return { draft };
     }
 
@@ -387,7 +400,7 @@ browser.runtime.onMessage.addListener(
         const updated: RunState = {
           ...run,
           items: run.items.map(i =>
-            i.brokerId === (m.brokerId as string) && i.verdict === 'hit' && !i.optedOutAt
+            i.id === (m.itemId as string) && i.verdict === 'hit'
               ? { ...i, optedOutAt: new Date().toISOString() }
               : i
           ),
