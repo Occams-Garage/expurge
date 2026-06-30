@@ -33,3 +33,6 @@
 - 2026-06-29 | 2026-06-29-autofill-optout-forms | Auto-fill opt-out forms deferred to v2 | areas: opt-out-drafts, matching-overlay | topics: webextensions, privacy, ux | stories: [] | active
 - 2026-06-29 | 2026-06-29-local-llm-field-discovery | Local LLM for opt-out form field discovery | areas: matching-overlay, opt-out-drafts | topics: webextensions, privacy, local-llm | stories: [] | active
 - 2026-06-29 | 2026-06-29-cloudflare-challenge-handling | Cloudflare challenge handling and Restore Overlay | areas: matching-overlay, run-model | topics: webextensions, ux | stories: [] | active
+- 2026-06-29 | 2026-06-29-per-component-licensing | Per-component licensing: GPL/AGPL/ODbL | areas: broker-dataset | topics: licensing, dataset-distribution | stories: [] | active
+- 2026-06-29 | 2026-06-29-m6-options-design-decisions | M6 options page design tradeoffs | areas: run-model, opt-out-drafts, coverage-report | topics: ux, webextensions, data-model | stories: [] | active
+- 2026-06-29 | 2026-06-29-m6-grilling-bugs | M6 grilling: three bugs found | areas: run-model, opt-out-drafts | topics: webextensions, data-model | stories: [] | active
