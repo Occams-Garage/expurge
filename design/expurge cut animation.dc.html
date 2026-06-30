@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Newsreader:ital,wght@0,500;0,600&display=swap" rel="stylesheet">
+<style>
+  body { margin:0; background:#F1EADF; }
+</style>
+</helmet>
+
+<div style="background:#FBF6EE; min-height:100vh; font-family:'Hanken Grotesk',sans-serif; color:#211D18; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:64px 40px; gap:30px; box-sizing:border-box;">
+
+  <div style="font-family:'IBM Plex Mono',monospace; font-size:12px; letter-spacing:.18em; text-transform:uppercase; color:#2C5446;">Tearstrip · the cut, one perforation at a time</div>
+
+  <!-- LIGHT -->
+  <div style="background:#FBF6EE; border:1px solid #ECE3D4; border-radius:14px; padding:64px 56px; display:flex; align-items:center; justify-content:center;">
+    <span style="font-family:'Newsreader',serif; font-weight:600; font-size:104px; color:#211D18; letter-spacing:-.01em; line-height:1;">ex<span style="position:relative; background:#2C5446; color:#FBF6EE; padding:0 .14em; margin:0 .04em; border-radius:3px;">pur<span style="position:absolute; left:7px; right:7px; top:0; display:flex; justify-content:space-between; align-items:flex-start;"><sc-for list="{{ topLight }}" as="d" hint-placeholder-count="14"><span style="{{ d }}"></span></sc-for></span><span style="position:absolute; left:7px; right:7px; bottom:0; display:flex; justify-content:space-between; align-items:flex-end;"><sc-for list="{{ bottomLight }}" as="d" hint-placeholder-count="14"><span style="{{ d }}"></span></sc-for></span></span>ge</span>
+  </div>
+
+  <!-- DARK -->
+  <div style="background:#211D18; border-radius:14px; padding:64px 56px; display:flex; align-items:center; justify-content:center;">
+    <span style="font-family:'Newsreader',serif; font-weight:600; font-size:104px; color:#FBF6EE; letter-spacing:-.01em; line-height:1;">ex<span style="position:relative; background:#7FB89C; color:#211D18; padding:0 .14em; margin:0 .04em; border-radius:3px;">pur<span style="position:absolute; left:7px; right:7px; top:0; display:flex; justify-content:space-between; align-items:flex-start;"><sc-for list="{{ topDark }}" as="d" hint-placeholder-count="14"><span style="{{ d }}"></span></sc-for></span><span style="position:absolute; left:7px; right:7px; bottom:0; display:flex; justify-content:space-between; align-items:flex-end;"><sc-for list="{{ bottomDark }}" as="d" hint-placeholder-count="14"><span style="{{ d }}"></span></sc-for></span></span>ge</span>
+  </div>
+
+  <p style="margin:6px 0 0; max-width:560px; text-align:center; font-family:'Hanken Grotesk',sans-serif; font-size:14.5px; line-height:1.6; color:#7d7468;">The perforation draws in one dash at a time — top edge, then bottom — holds, then reverses back out, top first and bottom last. A seamless, calm loop for loading and waiting states.</p>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = { n: 0 };
+  T = 14;            // dashes per edge
+  HOLD_FULL = 8;     // pause once fully cut
+  HOLD_EMPTY = 6;    // pause once fully uncut
+  componentDidMount() {
+    // timeline: draw top -> draw bottom -> hold -> UNDRAW top -> UNDRAW bottom -> hold -> loop
+    this.total = this.T * 4 + this.HOLD_FULL + this.HOLD_EMPTY;
+    this._iv = setInterval(() => {
+      this.setState(s => ({ n: (s.n + 1) % this.total }));
+    }, 60);
+  }
+  componentWillUnmount() { clearInterval(this._iv); }
+  _vis(edge, i) {
+    const T = this.T, n = this.state.n;
+    const undoTop = 2 * T + this.HOLD_FULL;        // top starts reversing first
+    const undoBot = 3 * T + this.HOLD_FULL;        // bottom reverses last
+    if (edge === 'top') {
+      return (n > i) && !(n >= undoTop + i + 1);
+    }
+    return (n > T + i) && !(n >= undoBot + i + 1);
+  }
+  _mk(color, edge) {
+    const arr = [];
+    for (let i = 0; i < this.T; i++) {
+      const on = this._vis(edge, i);
+      arr.push({
+        display: 'inline-block',
+        width: '7px',
+        height: '3px',
+        borderRadius: '1px',
+        background: color,
+        transformOrigin: 'center',
+        transition: 'opacity .22s ease, transform .22s ease',
+        opacity: on ? 1 : 0,
+        transform: on ? 'scaleX(1)' : 'scaleX(0)'
+      });
+    }
+    return arr;
+  }
+  renderVals() {
+    return {
+      topLight: this._mk('#FBF6EE', 'top'),
+      bottomLight: this._mk('#FBF6EE', 'bottom'),
+      topDark: this._mk('#211D18', 'top'),
+      bottomDark: this._mk('#211D18', 'bottom')
+    };
+  }
+}
+</script>
+</body>
+</html>

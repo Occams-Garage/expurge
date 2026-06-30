@@ -1,0 +1,632 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Newsreader:ital,wght@0,400;0,500;0,600;0,700&display=swap" rel="stylesheet">
+<style>
+  body { margin:0; background:#E9E0D2; }
+  ::selection { background:#2C5446; color:#FBF6EE; }
+</style>
+</helmet>
+
+<div style="background:#FBF6EE; font-family:'Hanken Grotesk',sans-serif; color:#211D18; -webkit-font-smoothing:antialiased;">
+
+  <!-- ============ COVER ============ -->
+  <div style="max-width:1080px; margin:0 auto; padding:96px 48px 64px;">
+    <div style="font-family:'IBM Plex Mono',monospace; font-size:12px; letter-spacing:.2em; text-transform:uppercase; color:#2C5446;">Brand &amp; UI Guide · v1.0</div>
+    <div style="margin:40px 0 36px;">
+      <span style="font-family:'Newsreader',serif; font-weight:600; font-size:128px; color:#211D18; letter-spacing:-.01em; line-height:1;">ex<span style="position:relative; color:#FBF6EE; margin:0 .065em 0 .05em;"><span style="position:absolute; z-index:0; left:-.02em; right:-.035em; top:.24em; bottom:-.05em; background:#2C5446; border-radius:3px; border-top:3px dashed #FBF6EE; border-bottom:3px dashed #FBF6EE; box-sizing:border-box;"></span><span style="position:relative; z-index:1;">pur</span></span>ge</span>
+    </div>
+    <p style="margin:0; max-width:560px; font-family:'Newsreader',serif; font-weight:400; font-size:24px; line-height:1.4; color:#3f3a32;">A calm, honest, open-source tool that helps people find their personal data on broker sites and get it removed. This guide defines how the brand looks, sounds, and behaves.</p>
+    <div style="display:flex; gap:40px; margin-top:48px; flex-wrap:wrap; font-family:'IBM Plex Mono',monospace; font-size:12px; color:#8a7d6e;">
+      <div><span style="color:#2C5446;">01</span> &nbsp;Brand foundation</div>
+      <div><span style="color:#2C5446;">02</span> &nbsp;Extension UI system</div>
+      <div><span style="color:#2C5446;">03</span> &nbsp;Design tokens</div>
+    </div>
+  </div>
+
+  <div style="height:1px; background:#ECE3D4;"></div>
+
+  <!-- ============ PART 1 BANNER ============ -->
+  <div style="max-width:1080px; margin:0 auto; padding:64px 48px 0;">
+    <div style="font-family:'IBM Plex Mono',monospace; font-size:13px; letter-spacing:.2em; text-transform:uppercase; color:#B25C3C;">Part One</div>
+    <h2 style="margin:12px 0 0; font-family:'Newsreader',serif; font-weight:600; font-size:48px; letter-spacing:-.01em;">Brand foundation</h2>
+  </div>
+
+  <!-- ============ 1.1 WORDMARK ============ -->
+  <div style="max-width:1080px; margin:0 auto; padding:56px 48px;">
+    <div style="font-family:'IBM Plex Mono',monospace; font-size:12px; letter-spacing:.16em; text-transform:uppercase; color:#a99b8a;">1.1 — Wordmark</div>
+    <h3 style="margin:10px 0 8px; font-family:'Newsreader',serif; font-weight:600; font-size:30px; letter-spacing:-.01em;">The strip is an incision, not a sticker</h3>
+    <p style="margin:0 0 32px; max-width:620px; font-size:15px; line-height:1.55; color:#6b6053;">“expurge”, lowercase, Newsreader Semibold, with a pine tear-strip cut through “pur” — top + bottom perforation, knocked-out letters, 3px corners.</p>
+
+    <!-- lockups -->
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
+      <div style="background:#FBF6EE; border:1px solid #ECE3D4; border-radius:12px; padding:52px 24px; text-align:center;">
+        <span style="font-family:'Newsreader',serif; font-weight:600; font-size:72px; color:#211D18; letter-spacing:-.01em; line-height:1;">ex<span style="position:relative; color:#FBF6EE; margin:0 .065em 0 .05em;"><span style="position:absolute; z-index:0; left:-.02em; right:-.035em; top:.24em; bottom:-.05em; background:#2C5446; border-radius:3px; border-top:2px dashed #FBF6EE; border-bottom:2px dashed #FBF6EE; box-sizing:border-box;"></span><span style="position:relative; z-index:1;">pur</span></span>ge</span>
+        <div style="font-family:'IBM Plex Mono',monospace; font-size:11px; color:#a99b8a; margin-top:28px;">Primary · cream</div>
+      </div>
+      <div style="background:#211D18; border-radius:12px; padding:52px 24px; text-align:center;">
+        <span style="font-family:'Newsreader',serif; font-weight:600; font-size:72px; color:#FBF6EE; letter-spacing:-.01em; line-height:1;">ex<span style="position:relative; color:#211D18; margin:0 .065em 0 .05em;"><span style="position:absolute; z-index:0; left:-.02em; right:-.035em; top:.24em; bottom:-.05em; background:#7FB89C; border-radius:3px; border-top:2px dashed #211D18; border-bottom:2px dashed #211D18; box-sizing:border-box;"></span><span style="position:relative; z-index:1;">pur</span></span>ge</span>
+        <div style="font-family:'IBM Plex Mono',monospace; font-size:11px; color:#7d7468; margin-top:28px;">Reversed · ink (strip lifts to mint)</div>
+      </div>
+    </div>
+
+    <!-- clear space + min size -->
+    <div style="display:grid; grid-template-columns:1.3fr 1fr; gap:16px; margin-top:16px;">
+      <div style="background:#FBF6EE; border:1px solid #ECE3D4; border-radius:12px; padding:36px;">
+        <div style="font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:#a99b8a; margin-bottom:20px;">Clear space</div>
+        <div style="display:inline-block; border:1.5px dashed #C9B89C; border-radius:6px; padding:34px;">
+          <span style="font-family:'Newsreader',serif; font-weight:600; font-size:44px; color:#211D18; letter-spacing:-.01em; line-height:1;">ex<span style="position:relative; color:#FBF6EE; margin:0 .065em 0 .05em;"><span style="position:absolute; z-index:0; left:-.02em; right:-.035em; top:.24em; bottom:-.05em; background:#2C5446; border-radius:2px; border-top:1.5px dashed #FBF6EE; border-bottom:1.5px dashed #FBF6EE; box-sizing:border-box;"></span><span style="position:relative; z-index:1;">pur</span></span>ge</span>
+        </div>
+        <p style="margin:18px 0 0; font-size:13.5px; line-height:1.55; color:#8a7d6e;">Keep clear space on all sides equal to the <strong style="color:#2C5446;">strip height</strong>. Nothing — type, edges, other marks — enters this zone.</p>
+      </div>
+      <div style="background:#FBF6EE; border:1px solid #ECE3D4; border-radius:12px; padding:36px;">
+        <div style="font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:#a99b8a; margin-bottom:20px;">Minimum sizes</div>
+        <div style="display:flex; align-items:flex-end; gap:30px;">
+          <div style="text-align:center;">
+            <span style="font-family:'Newsreader',serif; font-weight:600; font-size:24px; color:#211D18; letter-spacing:-.01em; line-height:1;">ex<span style="position:relative; color:#FBF6EE; margin:0 .065em 0 .05em;"><span style="position:absolute; z-index:0; left:-.02em; right:-.035em; top:.24em; bottom:-.05em; background:#2C5446; border-radius:2px; border-top:1px dashed #FBF6EE; border-bottom:1px dashed #FBF6EE; box-sizing:border-box;"></span><span style="position:relative; z-index:1;">pur</span></span>ge</span>
+            <div style="font-family:'IBM Plex Mono',monospace; font-size:10.5px; color:#a99b8a; margin-top:12px;">wordmark · 24px min</div>
+          </div>
+          <div style="text-align:center;">
+            <span style="display:inline-block; width:18px; height:9px; background:#2C5446; clip-path:polygon(0% 0%,14% 0%,14% 34%,25% 34%,25% 0%,44.5% 0%,44.5% 34%,55.5% 34%,55.5% 0%,75% 0%,75% 34%,86% 34%,86% 0%,100% 0%,100% 100%,86% 100%,86% 66%,75% 66%,75% 100%,55.5% 100%,55.5% 66%,44.5% 66%,44.5% 100%,25% 100%,25% 66%,14% 66%,14% 100%,0% 100%);"></span>
+            <div style="font-family:'IBM Plex Mono',monospace; font-size:10.5px; color:#a99b8a; margin-top:12px;">glyph · 16px min</div>
+          </div>
+        </div>
+        <p style="margin:24px 0 0; font-size:13.5px; line-height:1.55; color:#8a7d6e;">Below 24px the wordmark gives way to the deep-notch glyph; below 16px, the solid-bar fallback.</p>
+      </div>
+    </div>
+
+    <!-- do / don't -->
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:16px;">
+      <!-- DO -->
+      <div style="background:#F2F6F2; border:1px solid #D5E4D9; border-radius:12px; padding:30px;">
+        <div style="display:flex; align-items:center; gap:8px; font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:#2C5446; margin-bottom:22px;"><span style="display:inline-flex; width:16px; height:16px; border-radius:50%; background:#2C5446; color:#fff; align-items:center; justify-content:center; font-size:10px;">✓</span> Do</div>
+        <div style="display:flex; flex-direction:column; gap:20px;">
+          <div style="text-align:center; padding:14px 0;"><span style="font-family:'Newsreader',serif; font-weight:600; font-size:40px; color:#211D18; letter-spacing:-.01em; line-height:1;">ex<span style="position:relative; color:#FBF6EE; margin:0 .065em 0 .05em;"><span style="position:absolute; z-index:0; left:-.02em; right:-.035em; top:.24em; bottom:-.05em; background:#2C5446; border-radius:2px; border-top:1.5px dashed #FBF6EE; border-bottom:1.5px dashed #FBF6EE; box-sizing:border-box;"></span><span style="position:relative; z-index:1;">pur</span></span>ge</span></div>
+          <div style="font-size:13px; line-height:1.5; color:#3f5a47;">Pine strip, knocked-out letters, top + bottom perforation, centered in the word with symmetric gaps.</div>
+        </div>
+      </div>
+      <!-- DON'T -->
+      <div style="background:#FBF3F0; border:1px solid #EAD3CA; border-radius:12px; padding:30px;">
+        <div style="display:flex; align-items:center; gap:8px; font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:#B25C3C; margin-bottom:22px;"><span style="display:inline-flex; width:16px; height:16px; border-radius:50%; background:#B25C3C; color:#fff; align-items:center; justify-content:center; font-size:10px;">✕</span> Don't</div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:18px 14px;">
+          <div style="text-align:center;"><span style="font-family:'Newsreader',serif; font-weight:600; font-size:30px; color:#211D18; letter-spacing:-.01em; line-height:1;">ex<span style="position:relative; color:#FBF6EE; margin:0 .065em 0 .05em;"><span style="position:absolute; z-index:0; left:-.02em; right:-.035em; top:.24em; bottom:-.05em; background:#B25C3C; border-radius:2px; border-top:1.5px dashed #FBF6EE; border-bottom:1.5px dashed #FBF6EE; box-sizing:border-box;"></span><span style="position:relative; z-index:1;">pur</span></span>ge</span><div style="font-family:'IBM Plex Mono',monospace; font-size:10px; color:#B25C3C; margin-top:10px;">recolor the strip</div></div>
+          <div style="text-align:center;"><span style="font-family:'Newsreader',serif; font-weight:600; font-size:30px; color:#211D18; letter-spacing:-.01em; line-height:1;">ex<span style="position:relative; color:#FBF6EE; margin:0 .065em 0 .05em;"><span style="position:absolute; z-index:0; left:-.02em; right:-.035em; top:.24em; bottom:-.05em; background:#2C5446; border-radius:2px; border:1.5px dashed #FBF6EE; box-sizing:border-box;"></span><span style="position:relative; z-index:1;">pur</span></span>ge</span><div style="font-family:'IBM Plex Mono',monospace; font-size:10px; color:#B25C3C; margin-top:10px;">enclose 4 sides</div></div>
+          <div style="text-align:center;"><span style="font-family:'Newsreader',serif; font-weight:600; font-size:30px; color:#211D18; letter-spacing:-.01em; line-height:1;">ex<span style="position:relative; color:#FBF6EE; margin:0 .065em 0 .05em;"><span style="position:absolute; z-index:0; left:-.02em; right:-.035em; top:.40em; bottom:.12em; background:#2C5446; border-radius:2px; border-top:1.5px dashed #FBF6EE; border-bottom:1.5px dashed #FBF6EE; box-sizing:border-box;"></span><span style="position:relative; z-index:1;">pur</span></span>ge</span><div style="font-family:'IBM Plex Mono',monospace; font-size:10px; color:#B25C3C; margin-top:10px;">bisect the letters</div></div>
+          <div style="text-align:center;"><span style="font-family:'Hanken Grotesk',sans-serif; font-weight:700; font-size:30px; color:#211D18; letter-spacing:-.01em; line-height:1;">ex<span style="position:relative; color:#FBF6EE; margin:0 .065em 0 .05em;"><span style="position:absolute; z-index:0; left:-.02em; right:-.035em; top:.16em; bottom:-.05em; background:#2C5446; border-radius:2px; border-top:1.5px dashed #FBF6EE; border-bottom:1.5px dashed #FBF6EE; box-sizing:border-box;"></span><span style="position:relative; z-index:1;">pur</span></span>ge</span><div style="font-family:'IBM Plex Mono',monospace; font-size:10px; color:#B25C3C; margin-top:10px;">swap the typeface</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div style="height:1px; background:#ECE3D4;"></div>
+
+  <!-- ============ 1.2 COLOR ============ -->
+  <div style="max-width:1080px; margin:0 auto; padding:56px 48px;">
+    <div style="font-family:'IBM Plex Mono',monospace; font-size:12px; letter-spacing:.16em; text-transform:uppercase; color:#a99b8a;">1.2 — Color</div>
+    <h3 style="margin:10px 0 8px; font-family:'Newsreader',serif; font-weight:600; font-size:30px; letter-spacing:-.01em;">A warm, grayed palette — calm, never clinical</h3>
+    <p style="margin:0 0 32px; max-width:620px; font-size:15px; line-height:1.55; color:#6b6053;">Six colors. The green stays cool and grayed so it reads as a privacy tool, not eco/wellness.</p>
+
+    <!-- swatches -->
+    <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:14px;">
+      <div style="border:1px solid #ECE3D4; border-radius:10px; overflow:hidden;"><div style="height:96px; background:#FBF6EE; border-bottom:1px solid #ECE3D4;"></div><div style="padding:14px 16px;"><div style="font-family:'Hanken Grotesk'; font-weight:600; font-size:14px;">Cream</div><div style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:#8a7d6e; margin-top:3px;">#FBF6EE</div><div style="font-size:12px; color:#a99b8a; margin-top:6px;">Paper / primary background</div></div></div>
+      <div style="border:1px solid #ECE3D4; border-radius:10px; overflow:hidden;"><div style="height:96px; background:#ECE3D4;"></div><div style="padding:14px 16px;"><div style="font-family:'Hanken Grotesk'; font-weight:600; font-size:14px;">Oat</div><div style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:#8a7d6e; margin-top:3px;">#ECE3D4</div><div style="font-size:12px; color:#a99b8a; margin-top:6px;">Soft fill / cards / dividers</div></div></div>
+      <div style="border:1px solid #ECE3D4; border-radius:10px; overflow:hidden;"><div style="height:96px; background:#2C5446;"></div><div style="padding:14px 16px;"><div style="font-family:'Hanken Grotesk'; font-weight:600; font-size:14px;">Pine</div><div style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:#8a7d6e; margin-top:3px;">#2C5446</div><div style="font-size:12px; color:#a99b8a; margin-top:6px;">Primary — strip, buttons, links</div></div></div>
+      <div style="border:1px solid #ECE3D4; border-radius:10px; overflow:hidden;"><div style="height:96px; background:#7FB89C;"></div><div style="padding:14px 16px;"><div style="font-family:'Hanken Grotesk'; font-weight:600; font-size:14px;">Mint</div><div style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:#8a7d6e; margin-top:3px;">#7FB89C</div><div style="font-size:12px; color:#a99b8a; margin-top:6px;">Pine’s lift for dark backgrounds</div></div></div>
+      <div style="border:1px solid #ECE3D4; border-radius:10px; overflow:hidden;"><div style="height:96px; background:#B25C3C;"></div><div style="padding:14px 16px;"><div style="font-family:'Hanken Grotesk'; font-weight:600; font-size:14px;">Terracotta</div><div style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:#8a7d6e; margin-top:3px;">#B25C3C</div><div style="font-size:12px; color:#a99b8a; margin-top:6px;">Sparing warm accent — never the strip</div></div></div>
+      <div style="border:1px solid #ECE3D4; border-radius:10px; overflow:hidden;"><div style="height:96px; background:#211D18;"></div><div style="padding:14px 16px;"><div style="font-family:'Hanken Grotesk'; font-weight:600; font-size:14px;">Ink</div><div style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:#8a7d6e; margin-top:3px;">#211D18</div><div style="font-size:12px; color:#a99b8a; margin-top:6px;">Text / dark background</div></div></div>
+    </div>
+
+    <!-- pairings -->
+    <div style="font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:#a99b8a; margin:36px 0 16px;">Required pairings · WCAG contrast</div>
+    <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:14px;">
+      <div style="border-radius:10px; overflow:hidden; border:1px solid #ECE3D4;"><div style="background:#FBF6EE; padding:22px 18px;"><div style="font-family:'Hanken Grotesk'; font-size:18px; color:#211D18;">Ink on cream</div></div><div style="padding:10px 14px; font-family:'IBM Plex Mono',monospace; font-size:11px; color:#2C5446;">15.6:1 · AAA · body</div></div>
+      <div style="border-radius:10px; overflow:hidden; border:1px solid #ECE3D4;"><div style="background:#FBF6EE; padding:22px 18px;"><div style="font-family:'Hanken Grotesk'; font-size:18px; color:#2C5446;">Pine on cream</div></div><div style="padding:10px 14px; font-family:'IBM Plex Mono',monospace; font-size:11px; color:#2C5446;">7.9:1 · AAA · text/link</div></div>
+      <div style="border-radius:10px; overflow:hidden; border:1px solid #211D18;"><div style="background:#211D18; padding:22px 18px;"><div style="font-family:'Hanken Grotesk'; font-size:18px; color:#FBF6EE;">Cream on ink</div></div><div style="padding:10px 14px; font-family:'IBM Plex Mono',monospace; font-size:11px; color:#7d7468;">15.6:1 · AAA · body</div></div>
+      <div style="border-radius:10px; overflow:hidden; border:1px solid #211D18;"><div style="background:#211D18; padding:22px 18px;"><div style="font-family:'Hanken Grotesk'; font-size:18px; color:#7FB89C;">Mint on ink</div></div><div style="padding:10px 14px; font-family:'IBM Plex Mono',monospace; font-size:11px; color:#7d7468;">7.4:1 · AAA · text/link</div></div>
+      <div style="border-radius:10px; overflow:hidden; border:1px solid #ECE3D4;"><div style="background:#2C5446; padding:22px 18px;"><div style="font-family:'Hanken Grotesk'; font-size:18px; color:#FBF6EE;">Cream on pine</div></div><div style="padding:10px 14px; font-family:'IBM Plex Mono',monospace; font-size:11px; color:#2C5446;">7.9:1 · AAA · button</div></div>
+      <div style="border-radius:10px; overflow:hidden; border:1px solid #ECE3D4;"><div style="background:#7FB89C; padding:22px 18px;"><div style="font-family:'Hanken Grotesk'; font-size:18px; color:#211D18;">Ink on mint</div></div><div style="padding:10px 14px; font-family:'IBM Plex Mono',monospace; font-size:11px; color:#2C5446;">7.4:1 · AAA · button (dark)</div></div>
+      <div style="border-radius:10px; overflow:hidden; border:1px solid #ECE3D4;"><div style="background:#ECE3D4; padding:22px 18px;"><div style="font-family:'Hanken Grotesk'; font-size:18px; color:#2C5446;">Pine on oat</div></div><div style="padding:10px 14px; font-family:'IBM Plex Mono',monospace; font-size:11px; color:#2C5446;">6.7:1 · AA+ · text on fill</div></div>
+      <div style="border-radius:10px; overflow:hidden; border:1px solid #ECE3D4;"><div style="background:#FBF6EE; padding:22px 18px;"><div style="font-family:'Hanken Grotesk'; font-weight:600; font-size:18px; color:#B25C3C;">Terracotta</div></div><div style="padding:10px 14px; font-family:'IBM Plex Mono',monospace; font-size:11px; color:#B25C3C;">4.3:1 · large/accent only</div></div>
+    </div>
+    <p style="margin:18px 0 0; max-width:760px; font-size:13.5px; line-height:1.6; color:#8a7d6e;"><strong style="color:#211D18;">Text-safe:</strong> ink &amp; pine on cream/oat; cream &amp; mint on ink. <strong style="color:#B25C3C;">Accent-only:</strong> terracotta never carries body text — use it for large emphasis, a link underline on hover, or a single small detail (≥24px or bold ≥19px).</p>
+  </div>
+
+  <div style="height:1px; background:#ECE3D4;"></div>
+
+    <!-- ============ 1.3 TYPOGRAPHY ============ -->
+  <div style="max-width:1080px; margin:0 auto; padding:56px 48px;">
+    <div style="font-family:'IBM Plex Mono',monospace; font-size:12px; letter-spacing:.16em; text-transform:uppercase; color:#a99b8a;">1.3 — Typography</div>
+    <h3 style="margin:10px 0 8px; font-family:'Newsreader',serif; font-weight:600; font-size:30px; letter-spacing:-.01em;">Three voices, clearly divided</h3>
+    <p style="margin:0 0 32px; max-width:620px; font-size:15px; line-height:1.55; color:#6b6053;">A warm serif for the brand’s voice, a clean humanist sans for the interface, and a mono for the small machine-facing detail.</p>
+
+    <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin-bottom:32px;">
+      <div style="background:#FBF6EE; border:1px solid #ECE3D4; border-radius:10px; padding:24px;"><div style="font-family:'Newsreader',serif; font-size:40px; color:#211D18;">Aa</div><div style="font-family:'Hanken Grotesk'; font-weight:600; font-size:14px; margin-top:10px;">Newsreader</div><div style="font-size:12.5px; color:#8a7d6e; margin-top:4px; line-height:1.5;">Wordmark, display &amp; headlines — the human, editorial voice.</div></div>
+      <div style="background:#FBF6EE; border:1px solid #ECE3D4; border-radius:10px; padding:24px;"><div style="font-family:'Hanken Grotesk'; font-weight:600; font-size:40px; color:#211D18;">Aa</div><div style="font-family:'Hanken Grotesk'; font-weight:600; font-size:14px; margin-top:10px;">Hanken Grotesk</div><div style="font-size:12.5px; color:#8a7d6e; margin-top:4px; line-height:1.5;">All UI &amp; body — calm, open, legible at length.</div></div>
+      <div style="background:#FBF6EE; border:1px solid #ECE3D4; border-radius:10px; padding:24px;"><div style="font-family:'IBM Plex Mono',monospace; font-size:38px; color:#211D18;">Aa</div><div style="font-family:'Hanken Grotesk'; font-weight:600; font-size:14px; margin-top:10px;">IBM Plex Mono</div><div style="font-size:12.5px; color:#8a7d6e; margin-top:4px; line-height:1.5;">Labels, IDs, statuses, code &amp; fine print.</div></div>
+    </div>
+
+    <!-- type scale -->
+    <div style="border:1px solid #ECE3D4; border-radius:12px; overflow:hidden;">
+      <div style="display:flex; align-items:baseline; gap:24px; padding:24px 28px; border-bottom:1px solid #ECE3D4;"><div style="flex:1;"><span style="font-family:'Newsreader',serif; font-weight:600; font-size:48px; color:#211D18; letter-spacing:-.01em;">Display</span></div><div style="font-family:'IBM Plex Mono',monospace; font-size:11.5px; color:#8a7d6e; width:300px;">Newsreader Semibold · 48–128px · 1.0</div></div>
+      <div style="display:flex; align-items:baseline; gap:24px; padding:24px 28px; border-bottom:1px solid #ECE3D4;"><div style="flex:1;"><span style="font-family:'Newsreader',serif; font-weight:600; font-size:36px; color:#211D18; letter-spacing:-.01em;">Heading 1</span></div><div style="font-family:'IBM Plex Mono',monospace; font-size:11.5px; color:#8a7d6e; width:300px;">Newsreader Semibold · 30–40px · 1.1</div></div>
+      <div style="display:flex; align-items:baseline; gap:24px; padding:24px 28px; border-bottom:1px solid #ECE3D4;"><div style="flex:1;"><span style="font-family:'Hanken Grotesk'; font-weight:600; font-size:22px; color:#211D18;">Heading 2</span></div><div style="font-family:'IBM Plex Mono',monospace; font-size:11.5px; color:#8a7d6e; width:300px;">Hanken Grotesk Semibold · 20–24px · 1.25</div></div>
+      <div style="display:flex; align-items:baseline; gap:24px; padding:24px 28px; border-bottom:1px solid #ECE3D4;"><div style="flex:1;"><span style="font-family:'Hanken Grotesk'; font-weight:400; font-size:16px; color:#211D18;">Body — the calm, plain-language default for everything users read.</span></div><div style="font-family:'IBM Plex Mono',monospace; font-size:11.5px; color:#8a7d6e; width:300px;">Hanken Grotesk Regular · 15–16px · 1.6</div></div>
+      <div style="display:flex; align-items:baseline; gap:24px; padding:24px 28px; border-bottom:1px solid #ECE3D4;"><div style="flex:1;"><span style="font-family:'Hanken Grotesk'; font-weight:400; font-size:13px; color:#6b6053;">Small — secondary helper text and captions.</span></div><div style="font-family:'IBM Plex Mono',monospace; font-size:11.5px; color:#8a7d6e; width:300px;">Hanken Grotesk Regular · 12.5–13.5px · 1.55</div></div>
+      <div style="display:flex; align-items:baseline; gap:24px; padding:24px 28px;"><div style="flex:1;"><span style="font-family:'IBM Plex Mono',monospace; font-size:12px; letter-spacing:.14em; text-transform:uppercase; color:#2C5446;">Mono label · ID-2480</span></div><div style="font-family:'IBM Plex Mono',monospace; font-size:11.5px; color:#8a7d6e; width:300px;">IBM Plex Mono · 11–12px · .14em tracking</div></div>
+    </div>
+  </div>
+
+  <div style="height:1px; background:#ECE3D4;"></div>
+
+  <!-- ============ 1.4 TEAR MOTIF ============ -->
+  <div style="max-width:1080px; margin:0 auto; padding:56px 48px;">
+    <div style="font-family:'IBM Plex Mono',monospace; font-size:12px; letter-spacing:.16em; text-transform:uppercase; color:#a99b8a;">1.4 — The tear motif</div>
+    <h3 style="margin:10px 0 8px; font-family:'Newsreader',serif; font-weight:600; font-size:30px; letter-spacing:-.01em;">One device, used sparingly</h3>
+    <p style="margin:0 0 32px; max-width:620px; font-size:15px; line-height:1.55; color:#6b6053;">The perforated strip is the brand’s signature. Use it as a quiet graphic accent — not wallpaper.</p>
+
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
+      <div style="background:#FBF6EE; border:1px solid #ECE3D4; border-radius:12px; padding:30px;">
+        <div style="font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:#2C5446; margin-bottom:20px;">Permitted · top+bottom strip</div>
+        <div style="display:flex; flex-direction:column; gap:22px;">
+          <div><div style="font-size:12px; color:#a99b8a; margin-bottom:8px;">Section divider</div><div style="height:10px; background:#2C5446; border-radius:3px; border-top:2px dashed #FBF6EE; border-bottom:2px dashed #FBF6EE; box-sizing:border-box;"></div></div>
+          <div><div style="font-size:12px; color:#a99b8a; margin-bottom:8px;">Redact a sensitive bit in marketing</div><div style="font-family:'Newsreader',serif; font-size:22px; color:#211D18;">your data on <span style="position:relative; color:#FBF6EE;"><span style="position:absolute; inset:0; background:#2C5446; border-radius:2px; border-top:1.5px dashed #FBF6EE; border-bottom:1.5px dashed #FBF6EE; box-sizing:border-box;"></span><span style="position:relative; padding:0 6px;">spokeo</span></span></div></div>
+          <div><div style="font-size:12px; color:#a99b8a; margin-bottom:8px;">Progress — segments “torn away”</div><div style="display:flex; gap:5px;"><div style="flex:1; height:12px; background:#2C5446; border-radius:2px;"></div><div style="flex:1; height:12px; background:#2C5446; border-radius:2px;"></div><div style="flex:1; height:12px; background:#2C5446; border-radius:2px;"></div><div style="flex:1; height:12px; background:#D8CDBA; border-radius:2px;"></div><div style="flex:1; height:12px; background:#D8CDBA; border-radius:2px;"></div></div></div>
+        </div>
+      </div>
+      <div style="background:#211D18; border-radius:12px; padding:30px;">
+        <div style="font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:#7FB89C; margin-bottom:20px;">4-side tab · standalone only</div>
+        <div style="display:flex; flex-direction:column; gap:18px;">
+          <div style="display:flex; align-items:center; gap:18px;">
+            <span style="display:inline-block; width:84px; height:40px; background:#7FB89C; border-radius:4px; border:3px dashed #211D18; box-sizing:border-box;"></span>
+            <div style="font-size:13px; line-height:1.5; color:#c9c2b6;">The fully-enclosed “removable tab”.</div>
+          </div>
+          <div style="font-size:13px; line-height:1.6; color:#9c9388;">Permitted for: stickers &amp; swag, the animated install / “you’re removed” moment, and a literal “remove this” action chip. <strong style="color:#FBF6EE;">Never the wordmark</strong>, and never below 24px (the vertical dashes vanish).</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div style="height:1px; background:#ECE3D4;"></div>
+
+  <!-- ============ 1.5 VOICE & TONE ============ -->
+  <div style="max-width:1080px; margin:0 auto; padding:56px 48px;">
+    <div style="font-family:'IBM Plex Mono',monospace; font-size:12px; letter-spacing:.16em; text-transform:uppercase; color:#a99b8a;">1.5 — Voice &amp; tone</div>
+    <h3 style="margin:10px 0 8px; font-family:'Newsreader',serif; font-weight:600; font-size:30px; letter-spacing:-.01em;">Calm, plain, and honest</h3>
+    <p style="margin:0 0 28px; max-width:660px; font-size:15px; line-height:1.55; color:#6b6053;">We never alarm, never nag, and never inflate the threat to push action. We use plain language, take the user’s side, and point them to better options when they exist — even when that means they need us less.</p>
+
+    <div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:32px;">
+      <span style="font-family:'IBM Plex Mono',monospace; font-size:11px; color:#2C5446; background:#ECE3D4; padding:7px 12px; border-radius:20px;">plain-language</span>
+      <span style="font-family:'IBM Plex Mono',monospace; font-size:11px; color:#2C5446; background:#ECE3D4; padding:7px 12px; border-radius:20px;">never alarming</span>
+      <span style="font-family:'IBM Plex Mono',monospace; font-size:11px; color:#2C5446; background:#ECE3D4; padding:7px 12px; border-radius:20px;">never naggy</span>
+      <span style="font-family:'IBM Plex Mono',monospace; font-size:11px; color:#2C5446; background:#ECE3D4; padding:7px 12px; border-radius:20px;">on the user’s side</span>
+      <span style="font-family:'IBM Plex Mono',monospace; font-size:11px; color:#2C5446; background:#ECE3D4; padding:7px 12px; border-radius:20px;">points to better options</span>
+    </div>
+
+    <div style="display:flex; flex-direction:column; gap:12px;">
+      <!-- example row template -->
+      <div style="display:grid; grid-template-columns:160px 1fr 1fr; gap:0; border:1px solid #ECE3D4; border-radius:12px; overflow:hidden;">
+        <div style="padding:20px 22px; background:#FBF6EE; font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:#8a7d6e;">Scan error</div>
+        <div style="padding:20px 22px; background:#FBF3F0; border-left:1px solid #ECE3D4;"><div style="font-family:'IBM Plex Mono',monospace; font-size:10px; color:#B25C3C; margin-bottom:8px;">✕ DON'T</div><div style="font-size:14px; line-height:1.5; color:#6b6053;">⚠ Error! Scan failed. Something went wrong — your data may be at risk.</div></div>
+        <div style="padding:20px 22px; background:#F2F6F2; border-left:1px solid #ECE3D4;"><div style="font-family:'IBM Plex Mono',monospace; font-size:10px; color:#2C5446; margin-bottom:8px;">✓ DO</div><div style="font-size:14px; line-height:1.5; color:#2b3f34;">We couldn’t reach that site just now. Nothing’s wrong with your data — let’s try again in a moment.</div></div>
+      </div>
+      <div style="display:grid; grid-template-columns:160px 1fr 1fr; gap:0; border:1px solid #ECE3D4; border-radius:12px; overflow:hidden;">
+        <div style="padding:20px 22px; background:#FBF6EE; font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:#8a7d6e;">Empty state</div>
+        <div style="padding:20px 22px; background:#FBF3F0; border-left:1px solid #ECE3D4;"><div style="font-family:'IBM Plex Mono',monospace; font-size:10px; color:#B25C3C; margin-bottom:8px;">✕ DON'T</div><div style="font-size:14px; line-height:1.5; color:#6b6053;">No data found. You haven’t protected yourself yet!</div></div>
+        <div style="padding:20px 22px; background:#F2F6F2; border-left:1px solid #ECE3D4;"><div style="font-family:'IBM Plex Mono',monospace; font-size:10px; color:#2C5446; margin-bottom:8px;">✓ DO</div><div style="font-size:14px; line-height:1.5; color:#2b3f34;">Nothing to review yet. Start a scan whenever you’re ready — there’s no rush.</div></div>
+      </div>
+      <div style="display:grid; grid-template-columns:160px 1fr 1fr; gap:0; border:1px solid #ECE3D4; border-radius:12px; overflow:hidden;">
+        <div style="padding:20px 22px; background:#FBF6EE; font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:#8a7d6e;">Reminder</div>
+        <div style="padding:20px 22px; background:#FBF3F0; border-left:1px solid #ECE3D4;"><div style="font-family:'IBM Plex Mono',monospace; font-size:10px; color:#B25C3C; margin-bottom:8px;">✕ DON'T</div><div style="font-size:14px; line-height:1.5; color:#6b6053;">You still have 12 unresolved exposures! Act now before it’s too late.</div></div>
+        <div style="padding:20px 22px; background:#F2F6F2; border-left:1px solid #ECE3D4;"><div style="font-family:'IBM Plex Mono',monospace; font-size:10px; color:#2C5446; margin-bottom:8px;">✓ DO</div><div style="font-size:14px; line-height:1.5; color:#2b3f34;">12 listings left to review. You can pick these up anytime — they’ll be here.</div></div>
+      </div>
+      <div style="display:grid; grid-template-columns:160px 1fr 1fr; gap:0; border:1px solid #ECE3D4; border-radius:12px; overflow:hidden;">
+        <div style="padding:20px 22px; background:#FBF6EE; font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:#8a7d6e;">Success</div>
+        <div style="padding:20px 22px; background:#FBF3F0; border-left:1px solid #ECE3D4;"><div style="font-family:'IBM Plex Mono',monospace; font-size:10px; color:#B25C3C; margin-bottom:8px;">✕ DON'T</div><div style="font-size:14px; line-height:1.5; color:#6b6053;">Success!!! 🎉 You crushed it! One down!</div></div>
+        <div style="padding:20px 22px; background:#F2F6F2; border-left:1px solid #ECE3D4;"><div style="font-family:'IBM Plex Mono',monospace; font-size:10px; color:#2C5446; margin-bottom:8px;">✓ DO</div><div style="font-size:14px; line-height:1.5; color:#2b3f34;">Opt-out sent. We’ll let you know when the broker confirms — usually a few weeks.</div></div>
+      </div>
+      <div style="display:grid; grid-template-columns:160px 1fr 1fr; gap:0; border:1px solid #ECE3D4; border-radius:12px; overflow:hidden;">
+        <div style="padding:20px 22px; background:#FBF6EE; font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:#8a7d6e;">Better option</div>
+        <div style="padding:20px 22px; background:#FBF3F0; border-left:1px solid #ECE3D4;"><div style="font-family:'IBM Plex Mono',monospace; font-size:10px; color:#B25C3C; margin-bottom:8px;">✕ DON'T</div><div style="font-size:14px; line-height:1.5; color:#6b6053;">Only expurge can keep you safe. Don’t trust anyone else.</div></div>
+        <div style="padding:20px 22px; background:#F2F6F2; border-left:1px solid #ECE3D4;"><div style="font-family:'IBM Plex Mono',monospace; font-size:10px; color:#2C5446; margin-bottom:8px;">✓ DO</div><div style="font-size:14px; line-height:1.5; color:#2b3f34;">In California? The state’s free <strong>DROP</strong> service removes you from many brokers at once. We’ll show you how — even if it means you won’t need us.</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div style="height:1px; background:#ECE3D4;"></div>
+
+    <!-- ============ PART 2 BANNER ============ -->
+  <div style="max-width:1080px; margin:0 auto; padding:64px 48px 0;">
+    <div style="font-family:'IBM Plex Mono',monospace; font-size:13px; letter-spacing:.2em; text-transform:uppercase; color:#B25C3C;">Part Two</div>
+    <h2 style="margin:12px 0 0; font-family:'Newsreader',serif; font-weight:600; font-size:48px; letter-spacing:-.01em;">Extension UI system</h2>
+    <p style="margin:16px 0 0; max-width:620px; font-size:16px; line-height:1.55; color:#6b6053;">Every surface in light and dark. Minimal, legible, and honest — calm by construction.</p>
+  </div>
+
+  <!-- ============ 2.1 BUTTONS & LINKS ============ -->
+  <div style="max-width:1080px; margin:0 auto; padding:48px 48px;">
+    <div style="font-family:'IBM Plex Mono',monospace; font-size:12px; letter-spacing:.16em; text-transform:uppercase; color:#a99b8a;">2.1 — Buttons &amp; links</div>
+    <h3 style="margin:10px 0 24px; font-family:'Newsreader',serif; font-weight:600; font-size:26px; letter-spacing:-.01em;">Primary · secondary · quiet</h3>
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
+      <!-- LIGHT -->
+      <div style="background:#FBF6EE; border:1px solid #ECE3D4; border-radius:12px; padding:32px;">
+        <div style="font-family:'IBM Plex Mono',monospace; font-size:10.5px; letter-spacing:.14em; text-transform:uppercase; color:#a99b8a; margin-bottom:22px;">Light</div>
+        <div style="display:flex; flex-direction:column; gap:16px;">
+          <div style="display:flex; align-items:center; gap:12px;"><span style="font-family:'Hanken Grotesk'; font-weight:600; font-size:14px; color:#FBF6EE; background:#2C5446; padding:11px 20px; border-radius:9px;">Scan my exposure</span><span style="font-family:'Hanken Grotesk'; font-weight:600; font-size:14px; color:#FBF6EE; background:#244839; padding:11px 20px; border-radius:9px;">Hover</span><span style="font-family:'Hanken Grotesk'; font-weight:600; font-size:14px; color:#B3A695; background:#ECE3D4; padding:11px 20px; border-radius:9px;">Disabled</span></div>
+          <div style="display:flex; align-items:center; gap:12px;"><span style="font-family:'Hanken Grotesk'; font-weight:600; font-size:14px; color:#2C5446; background:transparent; border:1.5px solid #2C5446; padding:9.5px 19px; border-radius:9px;">Secondary</span><span style="font-family:'Hanken Grotesk'; font-weight:600; font-size:14px; color:#2C5446; background:#ECE3D4; border:1.5px solid #2C5446; padding:9.5px 19px; border-radius:9px;">Hover</span></div>
+          <div style="display:flex; align-items:center; gap:12px;"><span style="font-family:'Hanken Grotesk'; font-weight:600; font-size:14px; color:#2C5446; padding:11px 14px; border-radius:9px;">Quiet action</span><span style="font-family:'Hanken Grotesk'; font-weight:600; font-size:14px; color:#2C5446; background:#ECE3D4; padding:11px 14px; border-radius:9px;">Hover</span></div>
+          <div style="border-top:1px solid #ECE3D4; padding-top:16px; font-size:14px; color:#6b6053;">Inline <a href="#" style="color:#2C5446; text-decoration:none; border-bottom:1.5px solid #2C5446;">text link</a> and on hover <span style="color:#B25C3C; border-bottom:1.5px solid #B25C3C;">terracotta underline</span>.</div>
+        </div>
+      </div>
+      <!-- DARK -->
+      <div style="background:#211D18; border-radius:12px; padding:32px;">
+        <div style="font-family:'IBM Plex Mono',monospace; font-size:10.5px; letter-spacing:.14em; text-transform:uppercase; color:#7d7468; margin-bottom:22px;">Dark</div>
+        <div style="display:flex; flex-direction:column; gap:16px;">
+          <div style="display:flex; align-items:center; gap:12px;"><span style="font-family:'Hanken Grotesk'; font-weight:600; font-size:14px; color:#211D18; background:#7FB89C; padding:11px 20px; border-radius:9px;">Scan my exposure</span><span style="font-family:'Hanken Grotesk'; font-weight:600; font-size:14px; color:#211D18; background:#93C7AC; padding:11px 20px; border-radius:9px;">Hover</span><span style="font-family:'Hanken Grotesk'; font-weight:600; font-size:14px; color:#6f675c; background:#2E2A24; padding:11px 20px; border-radius:9px;">Disabled</span></div>
+          <div style="display:flex; align-items:center; gap:12px;"><span style="font-family:'Hanken Grotesk'; font-weight:600; font-size:14px; color:#7FB89C; background:transparent; border:1.5px solid #7FB89C; padding:9.5px 19px; border-radius:9px;">Secondary</span><span style="font-family:'Hanken Grotesk'; font-weight:600; font-size:14px; color:#7FB89C; background:#2E2A24; border:1.5px solid #7FB89C; padding:9.5px 19px; border-radius:9px;">Hover</span></div>
+          <div style="display:flex; align-items:center; gap:12px;"><span style="font-family:'Hanken Grotesk'; font-weight:600; font-size:14px; color:#7FB89C; padding:11px 14px; border-radius:9px;">Quiet action</span><span style="font-family:'Hanken Grotesk'; font-weight:600; font-size:14px; color:#7FB89C; background:#2E2A24; padding:11px 14px; border-radius:9px;">Hover</span></div>
+          <div style="border-top:1px solid #3A342C; padding-top:16px; font-size:14px; color:#c9c2b6;">Inline <a href="#" style="color:#7FB89C; text-decoration:none; border-bottom:1.5px solid #7FB89C;">text link</a>, hover lifts to <span style="color:#93C7AC; border-bottom:1.5px solid #93C7AC;">brighter mint</span>.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 2.2 FORM INPUTS ============ -->
+  <div style="max-width:1080px; margin:0 auto; padding:8px 48px 48px;">
+    <div style="font-family:'IBM Plex Mono',monospace; font-size:12px; letter-spacing:.16em; text-transform:uppercase; color:#a99b8a;">2.2 — Profile inputs</div>
+    <h3 style="margin:10px 0 6px; font-family:'Newsreader',serif; font-weight:600; font-size:26px; letter-spacing:-.01em;">The minimal, non-invasive intake</h3>
+    <p style="margin:0 0 24px; max-width:640px; font-size:15px; line-height:1.55; color:#6b6053;">Only what’s needed to match a listing — and we say why, and that it never leaves the device.</p>
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
+      <!-- LIGHT -->
+      <div style="background:#FBF6EE; border:1px solid #ECE3D4; border-radius:12px; padding:32px;">
+        <div style="font-family:'IBM Plex Mono',monospace; font-size:10.5px; letter-spacing:.14em; text-transform:uppercase; color:#a99b8a; margin-bottom:22px;">Light</div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
+          <div><label style="display:block; font-family:'Hanken Grotesk'; font-weight:500; font-size:13px; color:#3f3a32; margin-bottom:7px;">First name</label><div style="font-family:'Hanken Grotesk'; font-size:15px; color:#211D18; background:#fff; border:1.5px solid #DCD2C0; border-radius:9px; padding:11px 13px;">Jordan</div></div>
+          <div><label style="display:block; font-family:'Hanken Grotesk'; font-weight:500; font-size:13px; color:#3f3a32; margin-bottom:7px;">Last name</label><div style="font-family:'Hanken Grotesk'; font-size:15px; color:#211D18; background:#fff; border:1.5px solid #2C5446; border-radius:9px; padding:11px 13px; box-shadow:0 0 0 3px rgba(44,84,70,.14);">Avery</div></div>
+          <div><label style="display:block; font-family:'Hanken Grotesk'; font-weight:500; font-size:13px; color:#3f3a32; margin-bottom:7px;">City</label><div style="font-family:'Hanken Grotesk'; font-size:15px; color:#A99B8A; background:#fff; border:1.5px solid #DCD2C0; border-radius:9px; padding:11px 13px;">City</div></div>
+          <div><label style="display:block; font-family:'Hanken Grotesk'; font-weight:500; font-size:13px; color:#3f3a32; margin-bottom:7px;">State</label><div style="font-family:'Hanken Grotesk'; font-size:15px; color:#211D18; background:#fff; border:1.5px solid #DCD2C0; border-radius:9px; padding:11px 13px; display:flex; justify-content:space-between;">CA <span style="color:#A99B8A;">▾</span></div></div>
+        </div>
+        <div style="display:flex; align-items:center; gap:8px; margin-top:18px; font-family:'IBM Plex Mono',monospace; font-size:11px; color:#2C5446;"><span style="display:inline-block;width:14px;height:7px;background:#2C5446;border-radius:1px;border-top:1.5px dashed #FBF6EE;border-bottom:1.5px dashed #FBF6EE;box-sizing:border-box;"></span> Stored only on this device · never uploaded</div>
+      </div>
+      <!-- DARK -->
+      <div style="background:#211D18; border-radius:12px; padding:32px;">
+        <div style="font-family:'IBM Plex Mono',monospace; font-size:10.5px; letter-spacing:.14em; text-transform:uppercase; color:#7d7468; margin-bottom:22px;">Dark</div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
+          <div><label style="display:block; font-family:'Hanken Grotesk'; font-weight:500; font-size:13px; color:#c9c2b6; margin-bottom:7px;">First name</label><div style="font-family:'Hanken Grotesk'; font-size:15px; color:#FBF6EE; background:#2A2620; border:1.5px solid #433D34; border-radius:9px; padding:11px 13px;">Jordan</div></div>
+          <div><label style="display:block; font-family:'Hanken Grotesk'; font-weight:500; font-size:13px; color:#c9c2b6; margin-bottom:7px;">Last name</label><div style="font-family:'Hanken Grotesk'; font-size:15px; color:#FBF6EE; background:#2A2620; border:1.5px solid #7FB89C; border-radius:9px; padding:11px 13px; box-shadow:0 0 0 3px rgba(127,184,156,.2);">Avery</div></div>
+          <div><label style="display:block; font-family:'Hanken Grotesk'; font-weight:500; font-size:13px; color:#c9c2b6; margin-bottom:7px;">City</label><div style="font-family:'Hanken Grotesk'; font-size:15px; color:#7d7468; background:#2A2620; border:1.5px solid #433D34; border-radius:9px; padding:11px 13px;">City</div></div>
+          <div><label style="display:block; font-family:'Hanken Grotesk'; font-weight:500; font-size:13px; color:#c9c2b6; margin-bottom:7px;">State</label><div style="font-family:'Hanken Grotesk'; font-size:15px; color:#FBF6EE; background:#2A2620; border:1.5px solid #433D34; border-radius:9px; padding:11px 13px; display:flex; justify-content:space-between;">CA <span style="color:#7d7468;">▾</span></div></div>
+        </div>
+        <div style="display:flex; align-items:center; gap:8px; margin-top:18px; font-family:'IBM Plex Mono',monospace; font-size:11px; color:#7FB89C;"><span style="display:inline-block;width:14px;height:7px;background:#7FB89C;border-radius:1px;border-top:1.5px dashed #211D18;border-bottom:1.5px dashed #211D18;box-sizing:border-box;"></span> Stored only on this device · never uploaded</div>
+      </div>
+    </div>
+  </div>
+
+  <div style="height:1px; background:#ECE3D4;"></div>
+
+    <!-- ============ 2.3 ON-PAGE OVERLAY ============ -->
+  <div style="max-width:1080px; margin:0 auto; padding:56px 48px;">
+    <div style="font-family:'IBM Plex Mono',monospace; font-size:12px; letter-spacing:.16em; text-transform:uppercase; color:#a99b8a;">2.3 — On-page overlay <span style="color:#B25C3C;">· signature surface</span></div>
+    <h3 style="margin:10px 0 6px; font-family:'Newsreader',serif; font-weight:600; font-size:26px; letter-spacing:-.01em;">A calm helper on the broker’s own page</h3>
+    <p style="margin:0 0 28px; max-width:660px; font-size:15px; line-height:1.55; color:#6b6053;">It guides the user to recognize a listing and record a verdict — and it <strong style="color:#211D18;">never shows their actual data</strong>, only what to look for. Reassuring and unmistakable, but light on the page.</p>
+
+    <!-- in context -->
+    <div style="position:relative; border:1px solid #ECE3D4; border-radius:14px; overflow:hidden; background:#EFEFF1; height:380px;">
+      <!-- faux broker page -->
+      <div style="padding:22px 26px; filter:saturate(.5);">
+        <div style="font-family:'Hanken Grotesk'; font-weight:700; font-size:18px; color:#7A7F88;">PeopleLookup<span style="color:#AEB3BC;">.example</span></div>
+        <div style="height:1px; background:#D8DAE0; margin:14px 0 20px;"></div>
+        <div style="display:flex; gap:18px;">
+          <div style="width:78px; height:78px; border-radius:50%; background:#D8DAE0;"></div>
+          <div style="flex:1;">
+            <div style="height:18px; width:180px; background:#CDD0D7; border-radius:4px;"></div>
+            <div style="height:11px; width:240px; background:#DCDEE3; border-radius:4px; margin-top:12px;"></div>
+            <div style="height:11px; width:300px; background:#DCDEE3; border-radius:4px; margin-top:8px;"></div>
+            <div style="height:11px; width:210px; background:#DCDEE3; border-radius:4px; margin-top:8px;"></div>
+          </div>
+        </div>
+        <div style="height:11px; width:90%; background:#E2E4E8; border-radius:4px; margin-top:22px;"></div>
+        <div style="height:11px; width:84%; background:#E2E4E8; border-radius:4px; margin-top:8px;"></div>
+        <div style="height:11px; width:74%; background:#E2E4E8; border-radius:4px; margin-top:8px;"></div>
+      </div>
+      <div style="position:absolute; top:14px; left:26px; font-family:'IBM Plex Mono',monospace; font-size:10px; color:#AEB3BC;"></div>
+      <!-- overlay docked -->
+      <div style="position:absolute; right:22px; bottom:22px; width:340px; background:#FBF6EE; border-radius:14px; box-shadow:0 12px 36px rgba(33,29,24,.22); overflow:hidden;">
+        <div style="height:8px; background:#2C5446; border-bottom:2px dashed #FBF6EE; box-sizing:border-box;"></div>
+        <div style="padding:18px 20px 20px;">
+          <div style="display:flex; align-items:center; gap:9px;"><span style="display:inline-block;width:18px;height:9px;background:#2C5446;border-radius:1.5px;border-top:1.5px dashed #FBF6EE;border-bottom:1.5px dashed #FBF6EE;box-sizing:border-box;"></span><span style="font-family:'Hanken Grotesk'; font-weight:600; font-size:15px; color:#211D18;">Could this listing be you?</span></div>
+          <p style="margin:12px 0 12px; font-size:13.5px; line-height:1.5; color:#6b6053;">On this page, look for your:</p>
+          <div style="display:flex; gap:7px; flex-wrap:wrap; margin-bottom:6px;"><span style="font-family:'Hanken Grotesk'; font-size:12.5px; color:#2C5446; background:#ECE3D4; padding:5px 11px; border-radius:20px;">age</span><span style="font-family:'Hanken Grotesk'; font-size:12.5px; color:#2C5446; background:#ECE3D4; padding:5px 11px; border-radius:20px;">current address</span><span style="font-family:'Hanken Grotesk'; font-size:12.5px; color:#2C5446; background:#ECE3D4; padding:5px 11px; border-radius:20px;">relatives’ names</span></div>
+          <p style="margin:10px 0 16px; font-family:'IBM Plex Mono',monospace; font-size:10.5px; line-height:1.5; color:#a99b8a;">We never show your data here — only what to look for.</p>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+            <span style="text-align:center; font-family:'Hanken Grotesk'; font-weight:600; font-size:13.5px; color:#FBF6EE; background:#2C5446; padding:10px; border-radius:8px;">Yes, this is me</span>
+            <span style="text-align:center; font-family:'Hanken Grotesk'; font-weight:600; font-size:13.5px; color:#2C5446; border:1.5px solid #2C5446; padding:8.5px; border-radius:8px;">No, not me</span>
+            <span style="text-align:center; font-family:'Hanken Grotesk'; font-weight:600; font-size:13.5px; color:#6b6053; padding:10px; border-radius:8px;">Not sure</span>
+            <span style="text-align:center; font-family:'Hanken Grotesk'; font-weight:600; font-size:13.5px; color:#a99b8a; padding:10px; border-radius:8px;">Skip</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- three states -->
+    <div style="font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:#a99b8a; margin:32px 0 16px;">Three states · light</div>
+    <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:16px;">
+      <!-- unjudged -->
+      <div style="background:#FBF6EE; border:1px solid #ECE3D4; border-radius:14px; overflow:hidden;"><div style="height:7px; background:#2C5446; border-bottom:2px dashed #FBF6EE; box-sizing:border-box;"></div><div style="padding:16px 18px;"><div style="font-family:'Hanken Grotesk'; font-weight:600; font-size:14px; color:#211D18; margin-bottom:14px;">Could this be you?</div><div style="display:grid; grid-template-columns:1fr 1fr; gap:7px;"><span style="text-align:center; font-family:'Hanken Grotesk'; font-weight:600; font-size:12.5px; color:#FBF6EE; background:#2C5446; padding:9px; border-radius:7px;">Yes</span><span style="text-align:center; font-family:'Hanken Grotesk'; font-weight:600; font-size:12.5px; color:#2C5446; border:1.5px solid #2C5446; padding:7.5px; border-radius:7px;">No</span><span style="text-align:center; font-family:'Hanken Grotesk'; font-weight:600; font-size:12.5px; color:#6b6053; padding:9px; border-radius:7px;">Not sure</span><span style="text-align:center; font-family:'Hanken Grotesk'; font-weight:600; font-size:12.5px; color:#a99b8a; padding:9px; border-radius:7px;">Skip</span></div></div><div style="padding:8px 18px 14px; font-family:'IBM Plex Mono',monospace; font-size:10px; color:#a99b8a;">unjudged</div></div>
+      <!-- saving -->
+      <div style="background:#FBF6EE; border:1px solid #ECE3D4; border-radius:14px; overflow:hidden;"><div style="height:7px; background:#2C5446; border-bottom:2px dashed #FBF6EE; box-sizing:border-box;"></div><div style="padding:16px 18px;"><div style="font-family:'Hanken Grotesk'; font-weight:600; font-size:14px; color:#211D18; margin-bottom:14px;">Could this be you?</div><div style="display:flex; align-items:center; gap:10px; padding:16px 4px;"><span style="width:16px; height:16px; border:2px solid #C9B89C; border-top-color:#2C5446; border-radius:50%; display:inline-block;"></span><span style="font-family:'Hanken Grotesk'; font-size:13.5px; color:#6b6053;">Saving your answer…</span></div></div><div style="padding:8px 18px 14px; font-family:'IBM Plex Mono',monospace; font-size:10px; color:#a99b8a;">saving</div></div>
+      <!-- recorded -->
+      <div style="background:#FBF6EE; border:1px solid #ECE3D4; border-radius:14px; overflow:hidden;"><div style="height:7px; background:#2C5446; border-bottom:2px dashed #FBF6EE; box-sizing:border-box;"></div><div style="padding:16px 18px;"><div style="display:flex; align-items:center; gap:8px; margin-bottom:10px;"><span style="display:inline-flex; width:18px; height:18px; border-radius:50%; background:#2C5446; color:#fff; align-items:center; justify-content:center; font-size:11px;">✓</span><span style="font-family:'Hanken Grotesk'; font-weight:600; font-size:14px; color:#211D18;">Marked as yours</span></div><p style="margin:0 0 12px; font-size:12.5px; line-height:1.5; color:#6b6053;">We’ll prepare an opt-out for this one.</p><span style="font-family:'Hanken Grotesk'; font-weight:600; font-size:12.5px; color:#2C5446; border-bottom:1.5px solid #2C5446;">Undo</span></div><div style="padding:8px 18px 14px; font-family:'IBM Plex Mono',monospace; font-size:10px; color:#a99b8a;">recorded</div></div>
+    </div>
+
+    <!-- three states dark -->
+    <div style="font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:#a99b8a; margin:24px 0 16px;">Three states · dark</div>
+    <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:16px;">
+      <div style="background:#211D18; border:1px solid #2E2A24; border-radius:14px; overflow:hidden;"><div style="height:7px; background:#7FB89C; border-bottom:2px dashed #211D18; box-sizing:border-box;"></div><div style="padding:16px 18px;"><div style="font-family:'Hanken Grotesk'; font-weight:600; font-size:14px; color:#FBF6EE; margin-bottom:14px;">Could this be you?</div><div style="display:grid; grid-template-columns:1fr 1fr; gap:7px;"><span style="text-align:center; font-family:'Hanken Grotesk'; font-weight:600; font-size:12.5px; color:#211D18; background:#7FB89C; padding:9px; border-radius:7px;">Yes</span><span style="text-align:center; font-family:'Hanken Grotesk'; font-weight:600; font-size:12.5px; color:#7FB89C; border:1.5px solid #7FB89C; padding:7.5px; border-radius:7px;">No</span><span style="text-align:center; font-family:'Hanken Grotesk'; font-weight:600; font-size:12.5px; color:#c9c2b6; padding:9px; border-radius:7px;">Not sure</span><span style="text-align:center; font-family:'Hanken Grotesk'; font-weight:600; font-size:12.5px; color:#7d7468; padding:9px; border-radius:7px;">Skip</span></div></div><div style="padding:8px 18px 14px; font-family:'IBM Plex Mono',monospace; font-size:10px; color:#7d7468;">unjudged</div></div>
+      <div style="background:#211D18; border:1px solid #2E2A24; border-radius:14px; overflow:hidden;"><div style="height:7px; background:#7FB89C; border-bottom:2px dashed #211D18; box-sizing:border-box;"></div><div style="padding:16px 18px;"><div style="font-family:'Hanken Grotesk'; font-weight:600; font-size:14px; color:#FBF6EE; margin-bottom:14px;">Could this be you?</div><div style="display:flex; align-items:center; gap:10px; padding:16px 4px;"><span style="width:16px; height:16px; border:2px solid #433D34; border-top-color:#7FB89C; border-radius:50%; display:inline-block;"></span><span style="font-family:'Hanken Grotesk'; font-size:13.5px; color:#c9c2b6;">Saving your answer…</span></div></div><div style="padding:8px 18px 14px; font-family:'IBM Plex Mono',monospace; font-size:10px; color:#7d7468;">saving</div></div>
+      <div style="background:#211D18; border:1px solid #2E2A24; border-radius:14px; overflow:hidden;"><div style="height:7px; background:#7FB89C; border-bottom:2px dashed #211D18; box-sizing:border-box;"></div><div style="padding:16px 18px;"><div style="display:flex; align-items:center; gap:8px; margin-bottom:10px;"><span style="display:inline-flex; width:18px; height:18px; border-radius:50%; background:#7FB89C; color:#211D18; align-items:center; justify-content:center; font-size:11px;">✓</span><span style="font-family:'Hanken Grotesk'; font-weight:600; font-size:14px; color:#FBF6EE;">Marked as yours</span></div><p style="margin:0 0 12px; font-size:12.5px; line-height:1.5; color:#c9c2b6;">We’ll prepare an opt-out for this one.</p><span style="font-family:'Hanken Grotesk'; font-weight:600; font-size:12.5px; color:#7FB89C; border-bottom:1.5px solid #7FB89C;">Undo</span></div><div style="padding:8px 18px 14px; font-family:'IBM Plex Mono',monospace; font-size:10px; color:#7d7468;">recorded</div></div>
+    </div>
+  </div>
+
+  <div style="height:1px; background:#ECE3D4;"></div>
+
+    <!-- ============ 2.4 COVERAGE REPORT ============ -->
+  <div style="max-width:1080px; margin:0 auto; padding:56px 48px;">
+    <div style="font-family:'IBM Plex Mono',monospace; font-size:12px; letter-spacing:.16em; text-transform:uppercase; color:#a99b8a;">2.4 — Coverage report</div>
+    <h3 style="margin:10px 0 6px; font-family:'Newsreader',serif; font-weight:600; font-size:26px; letter-spacing:-.01em;">“What’s left to finish,” never “what you failed”</h3>
+    <p style="margin:0 0 28px; max-width:660px; font-size:15px; line-height:1.55; color:#6b6053;">Progress is the frame. Unchecked brokers are a to-do with a reason, not a red error.</p>
+
+    <!-- LIGHT report -->
+    <div style="background:#FBF6EE; border:1px solid #ECE3D4; border-radius:14px; padding:30px 32px; margin-bottom:16px;">
+      <div style="display:flex; justify-content:space-between; align-items:flex-end; flex-wrap:wrap; gap:12px;">
+        <div><div style="font-family:'Newsreader',serif; font-weight:600; font-size:34px; color:#211D18; letter-spacing:-.01em;">22 of 48 cleared</div><div style="font-size:14px; color:#6b6053; margin-top:4px;">Nice progress — here’s what’s left whenever you want it.</div></div>
+        <span style="font-family:'Hanken Grotesk'; font-weight:600; font-size:13.5px; color:#FBF6EE; background:#2C5446; padding:10px 18px; border-radius:8px;">Finish the next 9</span>
+      </div>
+      <!-- stacked bar -->
+      <div style="display:flex; gap:3px; margin:24px 0 18px; height:16px;">
+        <div style="width:46%; background:#2C5446; border-radius:5px 0 0 5px;"></div>
+        <div style="width:19%; background:#B25C3C;"></div>
+        <div style="width:8%; background:#C9B89C;"></div>
+        <div style="width:27%; background:#E2D9C8; border-radius:0 5px 5px 0;"></div>
+      </div>
+      <!-- legend -->
+      <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:14px;">
+        <div><div style="display:flex; align-items:center; gap:7px;"><span style="width:11px;height:11px;border-radius:3px;background:#2C5446;"></span><span style="font-family:'Hanken Grotesk'; font-weight:600; font-size:20px; color:#211D18;">22</span></div><div style="font-size:12.5px; color:#6b6053; margin-top:3px;">Clear — removed or not found</div></div>
+        <div><div style="display:flex; align-items:center; gap:7px;"><span style="width:11px;height:11px;border-radius:3px;background:#B25C3C;"></span><span style="font-family:'Hanken Grotesk'; font-weight:600; font-size:20px; color:#211D18;">9</span></div><div style="font-size:12.5px; color:#6b6053; margin-top:3px;">Listed — found, opt-out ready</div></div>
+        <div><div style="display:flex; align-items:center; gap:7px;"><span style="width:11px;height:11px;border-radius:3px;background:#C9B89C;"></span><span style="font-family:'Hanken Grotesk'; font-weight:600; font-size:20px; color:#211D18;">4</span></div><div style="font-size:12.5px; color:#6b6053; margin-top:3px;">Couldn’t tell — needs a look</div></div>
+        <div><div style="display:flex; align-items:center; gap:7px;"><span style="width:11px;height:11px;border-radius:3px;background:#E2D9C8;"></span><span style="font-family:'Hanken Grotesk'; font-weight:600; font-size:20px; color:#211D18;">13</span></div><div style="font-size:12.5px; color:#6b6053; margin-top:3px;">Not checked yet</div></div>
+      </div>
+      <!-- not checked breakdown -->
+      <div style="background:#F6F1E8; border-radius:10px; padding:16px 18px; margin-top:20px;">
+        <div style="font-family:'IBM Plex Mono',monospace; font-size:10.5px; letter-spacing:.1em; text-transform:uppercase; color:#a99b8a; margin-bottom:12px;">The 13 not checked — and why</div>
+        <div style="display:flex; flex-direction:column; gap:10px;">
+          <div style="display:flex; justify-content:space-between; align-items:center;"><span style="font-size:13.5px; color:#3f3a32;">Need a bit more info <span style="color:#8a7d6e;">— add a middle initial to check these</span></span><span style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:#2C5446;">8</span></div>
+          <div style="height:1px; background:#ECE3D4;"></div>
+          <div style="display:flex; justify-content:space-between; align-items:center;"><span style="font-size:13.5px; color:#3f3a32;">Not yet verified <span style="color:#8a7d6e;">— we’ll re-check automatically</span></span><span style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:#2C5446;">5</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- DARK report -->
+    <div style="background:#211D18; border:1px solid #2E2A24; border-radius:14px; padding:30px 32px;">
+      <div style="display:flex; justify-content:space-between; align-items:flex-end; flex-wrap:wrap; gap:12px;">
+        <div><div style="font-family:'Newsreader',serif; font-weight:600; font-size:34px; color:#FBF6EE; letter-spacing:-.01em;">22 of 48 cleared</div><div style="font-size:14px; color:#c9c2b6; margin-top:4px;">Nice progress — here’s what’s left whenever you want it.</div></div>
+        <span style="font-family:'Hanken Grotesk'; font-weight:600; font-size:13.5px; color:#211D18; background:#7FB89C; padding:10px 18px; border-radius:8px;">Finish the next 9</span>
+      </div>
+      <div style="display:flex; gap:3px; margin:24px 0 18px; height:16px;">
+        <div style="width:46%; background:#7FB89C; border-radius:5px 0 0 5px;"></div>
+        <div style="width:19%; background:#C9744E;"></div>
+        <div style="width:8%; background:#6B6253;"></div>
+        <div style="width:27%; background:#3A342C; border-radius:0 5px 5px 0;"></div>
+      </div>
+      <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:14px;">
+        <div><div style="display:flex; align-items:center; gap:7px;"><span style="width:11px;height:11px;border-radius:3px;background:#7FB89C;"></span><span style="font-family:'Hanken Grotesk'; font-weight:600; font-size:20px; color:#FBF6EE;">22</span></div><div style="font-size:12.5px; color:#c9c2b6; margin-top:3px;">Clear — removed or not found</div></div>
+        <div><div style="display:flex; align-items:center; gap:7px;"><span style="width:11px;height:11px;border-radius:3px;background:#C9744E;"></span><span style="font-family:'Hanken Grotesk'; font-weight:600; font-size:20px; color:#FBF6EE;">9</span></div><div style="font-size:12.5px; color:#c9c2b6; margin-top:3px;">Listed — found, opt-out ready</div></div>
+        <div><div style="display:flex; align-items:center; gap:7px;"><span style="width:11px;height:11px;border-radius:3px;background:#6B6253;"></span><span style="font-family:'Hanken Grotesk'; font-weight:600; font-size:20px; color:#FBF6EE;">4</span></div><div style="font-size:12.5px; color:#c9c2b6; margin-top:3px;">Couldn’t tell — needs a look</div></div>
+        <div><div style="display:flex; align-items:center; gap:7px;"><span style="width:11px;height:11px;border-radius:3px;background:#3A342C;border:1px solid #4a4339;box-sizing:border-box;"></span><span style="font-family:'Hanken Grotesk'; font-weight:600; font-size:20px; color:#FBF6EE;">13</span></div><div style="font-size:12.5px; color:#c9c2b6; margin-top:3px;">Not checked yet</div></div>
+      </div>
+      <div style="background:#2A2620; border-radius:10px; padding:16px 18px; margin-top:20px;">
+        <div style="font-family:'IBM Plex Mono',monospace; font-size:10.5px; letter-spacing:.1em; text-transform:uppercase; color:#7d7468; margin-bottom:12px;">The 13 not checked — and why</div>
+        <div style="display:flex; flex-direction:column; gap:10px;">
+          <div style="display:flex; justify-content:space-between; align-items:center;"><span style="font-size:13.5px; color:#e7e2d8;">Need a bit more info <span style="color:#9c9388;">— add a middle initial to check these</span></span><span style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:#7FB89C;">8</span></div>
+          <div style="height:1px; background:#3A342C;"></div>
+          <div style="display:flex; justify-content:space-between; align-items:center;"><span style="font-size:13.5px; color:#e7e2d8;">Not yet verified <span style="color:#9c9388;">— we’ll re-check automatically</span></span><span style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:#7FB89C;">5</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div style="height:1px; background:#ECE3D4;"></div>
+
+    <!-- ============ 2.5 CONSENT ============ -->
+  <div style="max-width:1080px; margin:0 auto; padding:56px 48px;">
+    <div style="font-family:'IBM Plex Mono',monospace; font-size:12px; letter-spacing:.16em; text-transform:uppercase; color:#a99b8a;">2.5 — Consent</div>
+    <h3 style="margin:10px 0 6px; font-family:'Newsreader',serif; font-weight:600; font-size:26px; letter-spacing:-.01em;">A focused page — and declining is as easy as accepting</h3>
+    <p style="margin:0 0 28px; max-width:660px; font-size:15px; line-height:1.55; color:#6b6053;">Never a popup. One page, plain language, two equal choices. No pre-ticked boxes, no buried decline.</p>
+
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
+      <!-- LIGHT -->
+      <div style="background:#FBF6EE; border:1px solid #ECE3D4; border-radius:14px; padding:34px;">
+        <div style="display:flex; align-items:center; gap:10px; margin-bottom:18px;"><span style="display:inline-block;width:20px;height:10px;background:#2C5446;border-radius:1.5px;border-top:2px dashed #FBF6EE;border-bottom:2px dashed #FBF6EE;box-sizing:border-box;"></span><span style="font-family:'Newsreader',serif; font-weight:600; font-size:22px; color:#211D18;">Before we start</span></div>
+        <div style="display:flex; flex-direction:column; gap:14px; margin-bottom:24px;">
+          <div style="display:flex; gap:11px;"><span style="color:#2C5446; font-size:15px;">✓</span><div style="font-size:14px; line-height:1.5; color:#3f3a32;"><strong>What it does:</strong> checks broker sites for your listing and drafts opt-outs.</div></div>
+          <div style="display:flex; gap:11px;"><span style="color:#2C5446; font-size:15px;">✓</span><div style="font-size:14px; line-height:1.5; color:#3f3a32;"><strong>What it stores:</strong> your name &amp; city — only on this device.</div></div>
+          <div style="display:flex; gap:11px;"><span style="color:#2C5446; font-size:15px;">✓</span><div style="font-size:14px; line-height:1.5; color:#3f3a32;"><strong>What it never does:</strong> sell, upload, or track you. Ever.</div></div>
+        </div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+          <span style="text-align:center; font-family:'Hanken Grotesk'; font-weight:600; font-size:14px; color:#FBF6EE; background:#2C5446; padding:12px; border-radius:9px;">Accept &amp; continue</span>
+          <span style="text-align:center; font-family:'Hanken Grotesk'; font-weight:600; font-size:14px; color:#2C5446; border:1.5px solid #2C5446; padding:10.5px; border-radius:9px;">No thanks</span>
+        </div>
+        <div style="text-align:center; font-family:'IBM Plex Mono',monospace; font-size:11px; color:#a99b8a; margin-top:14px;">Change this anytime in Settings</div>
+      </div>
+      <!-- DARK -->
+      <div style="background:#211D18; border:1px solid #2E2A24; border-radius:14px; padding:34px;">
+        <div style="display:flex; align-items:center; gap:10px; margin-bottom:18px;"><span style="display:inline-block;width:20px;height:10px;background:#7FB89C;border-radius:1.5px;border-top:2px dashed #211D18;border-bottom:2px dashed #211D18;box-sizing:border-box;"></span><span style="font-family:'Newsreader',serif; font-weight:600; font-size:22px; color:#FBF6EE;">Before we start</span></div>
+        <div style="display:flex; flex-direction:column; gap:14px; margin-bottom:24px;">
+          <div style="display:flex; gap:11px;"><span style="color:#7FB89C; font-size:15px;">✓</span><div style="font-size:14px; line-height:1.5; color:#e7e2d8;"><strong>What it does:</strong> checks broker sites for your listing and drafts opt-outs.</div></div>
+          <div style="display:flex; gap:11px;"><span style="color:#7FB89C; font-size:15px;">✓</span><div style="font-size:14px; line-height:1.5; color:#e7e2d8;"><strong>What it stores:</strong> your name &amp; city — only on this device.</div></div>
+          <div style="display:flex; gap:11px;"><span style="color:#7FB89C; font-size:15px;">✓</span><div style="font-size:14px; line-height:1.5; color:#e7e2d8;"><strong>What it never does:</strong> sell, upload, or track you. Ever.</div></div>
+        </div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+          <span style="text-align:center; font-family:'Hanken Grotesk'; font-weight:600; font-size:14px; color:#211D18; background:#7FB89C; padding:12px; border-radius:9px;">Accept &amp; continue</span>
+          <span style="text-align:center; font-family:'Hanken Grotesk'; font-weight:600; font-size:14px; color:#7FB89C; border:1.5px solid #7FB89C; padding:10.5px; border-radius:9px;">No thanks</span>
+        </div>
+        <div style="text-align:center; font-family:'IBM Plex Mono',monospace; font-size:11px; color:#7d7468; margin-top:14px;">Change this anytime in Settings</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 2.6 DELETE ALL ============ -->
+  <div style="max-width:1080px; margin:0 auto; padding:8px 48px 56px;">
+    <div style="font-family:'IBM Plex Mono',monospace; font-size:12px; letter-spacing:.16em; text-transform:uppercase; color:#a99b8a;">2.6 — Delete all my data</div>
+    <h3 style="margin:10px 0 6px; font-family:'Newsreader',serif; font-weight:600; font-size:26px; letter-spacing:-.01em;">Leaving is easier than the brokers ever make it</h3>
+    <p style="margin:0 0 28px; max-width:660px; font-size:15px; line-height:1.55; color:#6b6053;">One click, no hoops, no waiting period. We make the point by example — and we use calm pine, not an alarming red.</p>
+
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
+      <!-- LIGHT -->
+      <div style="background:#FBF6EE; border:1px solid #ECE3D4; border-radius:14px; padding:30px 32px;">
+        <div style="font-family:'Hanken Grotesk'; font-weight:600; font-size:17px; color:#211D18; margin-bottom:8px;">Delete everything, anytime</div>
+        <p style="margin:0 0 20px; font-size:14px; line-height:1.55; color:#6b6053;">Removes all local data and stops every pending request — instantly, on this device. No confirmation maze, no “are you really sure” guilt trip.</p>
+        <div style="display:flex; align-items:center; gap:14px;">
+          <span style="font-family:'Hanken Grotesk'; font-weight:600; font-size:14px; color:#FBF6EE; background:#2C5446; padding:11px 20px; border-radius:9px;">Delete all my data</span>
+          <span style="font-family:'IBM Plex Mono',monospace; font-size:11px; color:#a99b8a;">one click · no waiting period</span>
+        </div>
+      </div>
+      <!-- DARK (confirm inline) -->
+      <div style="background:#211D18; border:1px solid #2E2A24; border-radius:14px; padding:30px 32px;">
+        <div style="font-family:'Hanken Grotesk'; font-weight:600; font-size:17px; color:#FBF6EE; margin-bottom:8px;">Delete everything? <span style="color:#9c9388; font-weight:400;">— quick confirm</span></div>
+        <p style="margin:0 0 20px; font-size:14px; line-height:1.55; color:#c9c2b6;">This clears your local data right away. You can always start fresh later — nothing is held hostage.</p>
+        <div style="display:flex; align-items:center; gap:10px;">
+          <span style="font-family:'Hanken Grotesk'; font-weight:600; font-size:14px; color:#211D18; background:#7FB89C; padding:11px 20px; border-radius:9px;">Yes, delete it all</span>
+          <span style="font-family:'Hanken Grotesk'; font-weight:600; font-size:14px; color:#7FB89C; border:1.5px solid #7FB89C; padding:9.5px 18px; border-radius:9px;">Keep my data</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div style="height:1px; background:#ECE3D4;"></div>
+
+    <!-- ============ 2.7 STATES ============ -->
+  <div style="max-width:1080px; margin:0 auto; padding:56px 48px;">
+    <div style="font-family:'IBM Plex Mono',monospace; font-size:12px; letter-spacing:.16em; text-transform:uppercase; color:#a99b8a;">2.7 — Empty · loading · success</div>
+    <h3 style="margin:10px 0 24px; font-family:'Newsreader',serif; font-weight:600; font-size:26px; letter-spacing:-.01em;">Calm at every moment</h3>
+
+    <!-- light row -->
+    <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:16px; margin-bottom:16px;">
+      <div style="background:#FBF6EE; border:1px solid #ECE3D4; border-radius:14px; padding:34px 26px; text-align:center;">
+        <span style="display:inline-block; width:34px; height:17px; background:#C9B89C; border-radius:3px; border-top:2.5px dashed #FBF6EE; border-bottom:2.5px dashed #FBF6EE; box-sizing:border-box;"></span>
+        <div style="font-family:'Hanken Grotesk'; font-weight:600; font-size:16px; color:#211D18; margin-top:18px;">Nothing to review yet</div>
+        <p style="margin:8px 0 16px; font-size:13.5px; line-height:1.5; color:#6b6053;">Start a scan whenever you’re ready — there’s no rush.</p>
+        <span style="font-family:'Hanken Grotesk'; font-weight:600; font-size:13.5px; color:#FBF6EE; background:#2C5446; padding:10px 18px; border-radius:8px;">Start a scan</span>
+        <div style="font-family:'IBM Plex Mono',monospace; font-size:10px; color:#a99b8a; margin-top:18px;">empty</div>
+      </div>
+      <div style="background:#FBF6EE; border:1px solid #ECE3D4; border-radius:14px; padding:34px 26px; text-align:center;">
+        <span style="display:inline-block; width:30px; height:30px; border:3px solid #E2D9C8; border-top-color:#2C5446; border-radius:50%;"></span>
+        <div style="font-family:'Hanken Grotesk'; font-weight:600; font-size:16px; color:#211D18; margin-top:16px;">Checking 48 brokers…</div>
+        <p style="margin:8px 0 14px; font-size:13.5px; line-height:1.5; color:#6b6053;">This runs quietly in the background.</p>
+        <div style="height:8px; background:#ECE3D4; border-radius:5px; overflow:hidden;"><div style="width:46%; height:100%; background:#2C5446;"></div></div>
+        <div style="font-family:'IBM Plex Mono',monospace; font-size:11px; color:#2C5446; margin-top:10px;">22 / 48</div>
+        <div style="font-family:'IBM Plex Mono',monospace; font-size:10px; color:#a99b8a; margin-top:14px;">loading</div>
+      </div>
+      <div style="background:#FBF6EE; border:1px solid #ECE3D4; border-radius:14px; padding:34px 26px; text-align:center;">
+        <span style="display:inline-flex; width:34px; height:34px; border-radius:50%; background:#2C5446; color:#fff; align-items:center; justify-content:center; font-size:18px;">✓</span>
+        <div style="font-family:'Hanken Grotesk'; font-weight:600; font-size:16px; color:#211D18; margin-top:16px;">You’re all clear here</div>
+        <p style="margin:8px 0 0; font-size:13.5px; line-height:1.5; color:#6b6053;">No listing found for you on this site. We’ll keep an eye out.</p>
+        <div style="font-family:'IBM Plex Mono',monospace; font-size:10px; color:#a99b8a; margin-top:18px;">success</div>
+      </div>
+    </div>
+    <!-- dark row -->
+    <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:16px;">
+      <div style="background:#211D18; border:1px solid #2E2A24; border-radius:14px; padding:34px 26px; text-align:center;">
+        <span style="display:inline-block; width:34px; height:17px; background:#6B6253; border-radius:3px; border-top:2.5px dashed #211D18; border-bottom:2.5px dashed #211D18; box-sizing:border-box;"></span>
+        <div style="font-family:'Hanken Grotesk'; font-weight:600; font-size:16px; color:#FBF6EE; margin-top:18px;">Nothing to review yet</div>
+        <p style="margin:8px 0 16px; font-size:13.5px; line-height:1.5; color:#c9c2b6;">Start a scan whenever you’re ready — there’s no rush.</p>
+        <span style="font-family:'Hanken Grotesk'; font-weight:600; font-size:13.5px; color:#211D18; background:#7FB89C; padding:10px 18px; border-radius:8px;">Start a scan</span>
+        <div style="font-family:'IBM Plex Mono',monospace; font-size:10px; color:#7d7468; margin-top:18px;">empty</div>
+      </div>
+      <div style="background:#211D18; border:1px solid #2E2A24; border-radius:14px; padding:34px 26px; text-align:center;">
+        <span style="display:inline-block; width:30px; height:30px; border:3px solid #3A342C; border-top-color:#7FB89C; border-radius:50%;"></span>
+        <div style="font-family:'Hanken Grotesk'; font-weight:600; font-size:16px; color:#FBF6EE; margin-top:16px;">Checking 48 brokers…</div>
+        <p style="margin:8px 0 14px; font-size:13.5px; line-height:1.5; color:#c9c2b6;">This runs quietly in the background.</p>
+        <div style="height:8px; background:#2E2A24; border-radius:5px; overflow:hidden;"><div style="width:46%; height:100%; background:#7FB89C;"></div></div>
+        <div style="font-family:'IBM Plex Mono',monospace; font-size:11px; color:#7FB89C; margin-top:10px;">22 / 48</div>
+        <div style="font-family:'IBM Plex Mono',monospace; font-size:10px; color:#7d7468; margin-top:14px;">loading</div>
+      </div>
+      <div style="background:#211D18; border:1px solid #2E2A24; border-radius:14px; padding:34px 26px; text-align:center;">
+        <span style="display:inline-flex; width:34px; height:34px; border-radius:50%; background:#7FB89C; color:#211D18; align-items:center; justify-content:center; font-size:18px;">✓</span>
+        <div style="font-family:'Hanken Grotesk'; font-weight:600; font-size:16px; color:#FBF6EE; margin-top:16px;">You’re all clear here</div>
+        <p style="margin:8px 0 0; font-size:13.5px; line-height:1.5; color:#c9c2b6;">No listing found for you on this site. We’ll keep an eye out.</p>
+        <div style="font-family:'IBM Plex Mono',monospace; font-size:10px; color:#7d7468; margin-top:18px;">success</div>
+      </div>
+    </div>
+  </div>
+
+  <div style="height:1px; background:#ECE3D4;"></div>
+
+  <!-- ============ PART 3 TOKENS ============ -->
+  <div style="background:#211D18; color:#FBF6EE;">
+    <div style="max-width:1080px; margin:0 auto; padding:64px 48px 80px;">
+      <div style="font-family:'IBM Plex Mono',monospace; font-size:13px; letter-spacing:.2em; text-transform:uppercase; color:#7FB89C;">Part Three</div>
+      <h2 style="margin:12px 0 6px; font-family:'Newsreader',serif; font-weight:600; font-size:40px; letter-spacing:-.01em;">Design tokens</h2>
+      <p style="margin:0 0 36px; max-width:560px; font-size:15px; line-height:1.55; color:#c9c2b6;">Implementation-ready values. Copy these into the build.</p>
+
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:36px 48px;">
+        <!-- COLOR -->
+        <div>
+          <div style="font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:#7FB89C; margin-bottom:16px;">Color</div>
+          <div style="font-family:'IBM Plex Mono',monospace; font-size:12.5px; line-height:2.05; color:#e7e2d8;">
+            <div style="display:flex; justify-content:space-between;"><span><span style="display:inline-block;width:10px;height:10px;background:#FBF6EE;border-radius:2px;margin-right:8px;"></span>--cream</span><span style="color:#9c9388;">#FBF6EE</span></div>
+            <div style="display:flex; justify-content:space-between;"><span><span style="display:inline-block;width:10px;height:10px;background:#ECE3D4;border-radius:2px;margin-right:8px;"></span>--oat</span><span style="color:#9c9388;">#ECE3D4</span></div>
+            <div style="display:flex; justify-content:space-between;"><span><span style="display:inline-block;width:10px;height:10px;background:#2C5446;border-radius:2px;margin-right:8px;"></span>--pine</span><span style="color:#9c9388;">#2C5446</span></div>
+            <div style="display:flex; justify-content:space-between;"><span><span style="display:inline-block;width:10px;height:10px;background:#244839;border-radius:2px;margin-right:8px;"></span>--pine-hover</span><span style="color:#9c9388;">#244839</span></div>
+            <div style="display:flex; justify-content:space-between;"><span><span style="display:inline-block;width:10px;height:10px;background:#7FB89C;border-radius:2px;margin-right:8px;"></span>--mint</span><span style="color:#9c9388;">#7FB89C</span></div>
+            <div style="display:flex; justify-content:space-between;"><span><span style="display:inline-block;width:10px;height:10px;background:#93C7AC;border-radius:2px;margin-right:8px;"></span>--mint-hover</span><span style="color:#9c9388;">#93C7AC</span></div>
+            <div style="display:flex; justify-content:space-between;"><span><span style="display:inline-block;width:10px;height:10px;background:#B25C3C;border-radius:2px;margin-right:8px;"></span>--terracotta</span><span style="color:#9c9388;">#B25C3C</span></div>
+            <div style="display:flex; justify-content:space-between;"><span><span style="display:inline-block;width:10px;height:10px;background:#211D18;border:1px solid #4a4339;border-radius:2px;margin-right:8px;"></span>--ink</span><span style="color:#9c9388;">#211D18</span></div>
+            <div style="display:flex; justify-content:space-between;"><span><span style="display:inline-block;width:10px;height:10px;background:#2A2620;border:1px solid #4a4339;border-radius:2px;margin-right:8px;"></span>--ink-card</span><span style="color:#9c9388;">#2A2620</span></div>
+            <div style="display:flex; justify-content:space-between;"><span><span style="display:inline-block;width:10px;height:10px;background:#3A342C;border-radius:2px;margin-right:8px;"></span>--ink-line</span><span style="color:#9c9388;">#3A342C</span></div>
+          </div>
+        </div>
+        <!-- SPACING + RADIUS -->
+        <div>
+          <div style="font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:#7FB89C; margin-bottom:16px;">Spacing (px)</div>
+          <div style="font-family:'IBM Plex Mono',monospace; font-size:12.5px; line-height:2.05; color:#e7e2d8;">
+            <div style="display:flex; justify-content:space-between;"><span>--s-1 … --s-10</span><span style="color:#9c9388;">4 · 8 · 12 · 16 · 20</span></div>
+            <div style="display:flex; justify-content:space-between;"><span></span><span style="color:#9c9388;">24 · 32 · 48 · 64 · 96</span></div>
+          </div>
+          <div style="font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:#7FB89C; margin:24px 0 16px;">Radius (px)</div>
+          <div style="font-family:'IBM Plex Mono',monospace; font-size:12.5px; line-height:2.05; color:#e7e2d8;">
+            <div style="display:flex; justify-content:space-between;"><span>--r-strip</span><span style="color:#9c9388;">3</span></div>
+            <div style="display:flex; justify-content:space-between;"><span>--r-control</span><span style="color:#9c9388;">8–9</span></div>
+            <div style="display:flex; justify-content:space-between;"><span>--r-card</span><span style="color:#9c9388;">12–14</span></div>
+            <div style="display:flex; justify-content:space-between;"><span>--r-pill</span><span style="color:#9c9388;">20 / 9999</span></div>
+          </div>
+          <div style="font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:#7FB89C; margin:24px 0 16px;">Type</div>
+          <div style="font-family:'IBM Plex Mono',monospace; font-size:12.5px; line-height:1.95; color:#e7e2d8;">
+            <div style="display:flex; justify-content:space-between;"><span>--font-display</span><span style="color:#9c9388;">Newsreader 600</span></div>
+            <div style="display:flex; justify-content:space-between;"><span>--font-ui</span><span style="color:#9c9388;">Hanken Grotesk</span></div>
+            <div style="display:flex; justify-content:space-between;"><span>--font-mono</span><span style="color:#9c9388;">IBM Plex Mono</span></div>
+            <div style="display:flex; justify-content:space-between;"><span>--lh-body / --lh-head</span><span style="color:#9c9388;">1.6 / 1.1</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div style="margin-top:48px; padding-top:24px; border-top:1px solid #3A342C; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:16px;">
+        <span style="font-family:'Newsreader',serif; font-weight:600; font-size:30px; color:#FBF6EE; letter-spacing:-.01em; line-height:1;">ex<span style="position:relative; color:#211D18; margin:0 .065em 0 .05em;"><span style="position:absolute; z-index:0; left:-.02em; right:-.035em; top:.24em; bottom:-.05em; background:#7FB89C; border-radius:2px; border-top:1.5px dashed #211D18; border-bottom:1.5px dashed #211D18; box-sizing:border-box;"></span><span style="position:relative; z-index:1;">pur</span></span>ge</span>
+        <span style="font-family:'IBM Plex Mono',monospace; font-size:11px; color:#7d7468;">Brand &amp; UI Guide · v1.0 · calm, honest, open</span>
+      </div>
+    </div>
+  </div>
+
+
+</div>
+</x-dc>
+</body>
+</html>
