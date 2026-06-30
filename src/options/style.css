@@ -306,6 +306,41 @@ textarea {
 .error-msg { font-size: var(--fs-small); color: var(--accent); }
 .success-msg { font-size: var(--fs-small); color: var(--primary); }
 
+/* ── "Other names" rows ───────────────────────────────────── */
+
+/* Header + each input row share one grid so the columns line up. The trailing
+   column reserves space for the per-row remove button (empty in the header). */
+.aka-cols,
+.aka-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr var(--s-7);
+  gap: var(--s-2);
+}
+
+.aka-cols {
+  margin-bottom: var(--s-1);
+  font-family: var(--font-mono);
+  font-size: var(--fs-mono);
+  letter-spacing: var(--tracking-mono);
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.aka-row {
+  margin-bottom: var(--s-2);
+  align-items: center;
+}
+
+.aka-remove {
+  min-height: 0;
+  padding: var(--s-1);
+  font-size: var(--fs-body);
+  line-height: 1;
+  color: var(--text-faint);
+}
+
+.btn-add-aka { margin-top: var(--s-1); }
+
 /* ── run section ──────────────────────────────────────────── */
 
 .broker-table { margin: var(--s-4) 0; }

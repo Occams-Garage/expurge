@@ -1,4 +1,4 @@
-import type { Profile } from './types';
+import type { AkaName, Profile } from './types';
 
 // Fixed lookup table — NOT a templating language.
 type TransformFn = (v: string) => string;
@@ -19,6 +19,32 @@ function deriveFields(p: Profile): Record<string, string> {
     name_full:  `${p.first} ${p.last}`,   // extended with middle when Profile gains that field
     citystate:  `${p.city}, ${p.state}`,
   };
+}
+
+// Coerce a stored also_known_as value into clean AkaName[]. Accepts unknown so it
+// can absorb legacy profiles (each entry a "First Last" string) alongside the
+// current object shape — there is no storage versioning, so this is the single
+// place that bridges old and new data. Entries without a first name are dropped.
+export function normalizeAkas(raw: unknown): AkaName[] {
+  if (!Array.isArray(raw)) return [];
+  const out: AkaName[] = [];
+  for (const entry of raw) {
+    if (typeof entry === 'string') {
+      // Legacy "First Last" — split on the first space (preserves prior semantics).
+      const t = entry.trim();
+      if (!t) continue;
+      const sp = t.indexOf(' ');
+      out.push(sp >= 0 ? { first: t.slice(0, sp), last: t.slice(sp + 1).trim() } : { first: t });
+    } else if (entry && typeof entry === 'object') {
+      const e = entry as Partial<AkaName>;
+      const first = (e.first ?? '').trim();
+      if (!first) continue;
+      const middle = (e.middle ?? '').trim();
+      const last = (e.last ?? '').trim();
+      out.push({ first, ...(middle ? { middle } : {}), ...(last ? { last } : {}) });
+    }
+  }
+  return out;
 }
 
 // Renders a broker search URL template.

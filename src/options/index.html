@@ -128,9 +128,12 @@
                 <input type="text" id="p-age" name="age" autocomplete="off" inputmode="numeric" maxlength="3">
               </div>
               <div class="field">
-                <label for="p-also-known-as">Other names <span class="label-optional">(optional)</span></label>
-                <textarea id="p-also-known-as" name="also_known_as" rows="3"
-                          placeholder="One name per line&#10;e.g. Jane Smith&#10;Jane Marie Smith"></textarea>
+                <label>Other names <span class="label-optional">(optional)</span></label>
+                <div class="aka-cols" aria-hidden="true">
+                  <span>First</span><span>Middle</span><span>Last</span>
+                </div>
+                <div id="aka-rows"></div>
+                <button type="button" id="btn-add-aka" class="btn-quiet btn-add-aka">+ Add another name</button>
                 <span class="field-hint">Maiden names, middle-name variants, nicknames</span>
               </div>
               <div class="field">

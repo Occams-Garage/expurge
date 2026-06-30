@@ -1,7 +1,8 @@
 import browser from 'webextension-polyfill';
-import type { Profile, RunState, WorkItem } from '../shared/types';
+import type { AkaName, Profile, RunState, WorkItem } from '../shared/types';
 import type { Draft, EmailDraft, FormDraft } from '../shared/templates';
 import { mailtoUrl, toEml, toCopyText } from '../shared/templates';
+import { normalizeAkas } from '../shared/transforms';
 import { BROKERS, getBroker } from '../shared/brokers';
 
 type Section = 'run' | 'results' | 'profile' | 'settings';
@@ -741,7 +742,7 @@ function populateProfileForm(profile: Profile): void {
   (document.getElementById('p-middle') as HTMLInputElement).value = profile.middle ?? '';
   (document.getElementById('p-zip')    as HTMLInputElement).value = profile.zip ?? '';
   (document.getElementById('p-age')    as HTMLInputElement).value = profile.age ?? '';
-  (document.getElementById('p-also-known-as') as HTMLTextAreaElement).value = (profile.also_known_as ?? []).join('\n');
+  resetAkaRows(normalizeAkas(profile.also_known_as));
   (document.getElementById('p-relatives')     as HTMLTextAreaElement).value = (profile.relatives ?? []).join('\n');
   (document.getElementById('p-emails')        as HTMLTextAreaElement).value = (profile.emails ?? []).join('\n');
   (document.getElementById('p-phones')        as HTMLTextAreaElement).value = (profile.phones ?? []).join('\n');
@@ -764,13 +765,77 @@ function readProfileFromForm(): Profile | null {
     return lines.length > 0 ? lines : undefined;
   };
 
+  const akas = readAkaRows();
+
   return {
     first, last, city, state, middle, zip, age,
-    also_known_as: parseLines('p-also-known-as'),
+    also_known_as: akas.length > 0 ? akas : undefined,
     relatives:     parseLines('p-relatives'),
     emails:        parseLines('p-emails'),
     phones:        parseLines('p-phones'),
   };
+}
+
+// ── "Other names" (also_known_as) dynamic rows ────────────────────────────────
+// Each name is captured as separate First/Middle/Last inputs, mirroring the
+// primary name. The container always holds at least one row.
+
+function buildAkaRow(aka?: AkaName): HTMLElement {
+  const row = document.createElement('div');
+  row.className = 'aka-row';
+
+  const mkInput = (key: keyof AkaName, label: string): HTMLInputElement => {
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.autocomplete = 'off';
+    input.placeholder = label;
+    input.setAttribute('aria-label', label);
+    input.dataset['aka'] = key;
+    input.value = aka?.[key] ?? '';
+    return input;
+  };
+
+  const remove = document.createElement('button');
+  remove.type = 'button';
+  remove.className = 'btn-quiet aka-remove';
+  remove.textContent = '×';
+  remove.setAttribute('aria-label', 'Remove this name');
+  remove.addEventListener('click', () => {
+    const container = row.parentElement;
+    row.remove();
+    if (container && container.children.length === 0) container.appendChild(buildAkaRow());
+  });
+
+  row.append(mkInput('first', 'First'), mkInput('middle', 'Middle'), mkInput('last', 'Last'), remove);
+  return row;
+}
+
+function addAkaRow(aka?: AkaName): void {
+  document.getElementById('aka-rows')!.appendChild(buildAkaRow(aka));
+}
+
+// Clear and repopulate the rows; always leave at least one (empty) row.
+function resetAkaRows(akas: AkaName[]): void {
+  const container = document.getElementById('aka-rows')!;
+  container.replaceChildren();
+  if (akas.length === 0) { container.appendChild(buildAkaRow()); return; }
+  for (const aka of akas) container.appendChild(buildAkaRow(aka));
+}
+
+// Read rows back into AkaName[], dropping rows with no first name and omitting
+// empty middle/last fields.
+function readAkaRows(): AkaName[] {
+  const out: AkaName[] = [];
+  for (const row of Array.from(document.querySelectorAll<HTMLElement>('#aka-rows .aka-row'))) {
+    const val = (key: keyof AkaName) =>
+      (row.querySelector<HTMLInputElement>(`input[data-aka="${key}"]`)?.value ?? '').trim();
+    const first = val('first');
+    if (!first) continue;
+    const middle = val('middle');
+    const last = val('last');
+    out.push({ first, ...(middle ? { middle } : {}), ...(last ? { last } : {}) });
+  }
+  return out;
 }
 
 async function handleProfileSave(e: Event): Promise<void> {
@@ -848,6 +913,7 @@ async function handleDeleteAll(): Promise<void> {
   lastResultsSig = ''; // run cleared — drop the early-out cache so the next render rebuilds
   stopPolling();
   (document.getElementById('profile-form') as HTMLFormElement).reset();
+  resetAkaRows([]); // form.reset() can't clear JS-built rows — restore one empty row
   document.getElementById('delete-confirm-panel')!.classList.add('hidden');
   showSection('run');
   showRunDisplayState('welcome');
@@ -920,6 +986,7 @@ async function init(): Promise<void> {
   renderBrokerCoverage();
 
   if (currentProfile) populateProfileForm(currentProfile);
+  else resetAkaRows([]); // first-time user: show one empty "Other names" row
 
   // First-time users: land on Profile so they can fill it in immediately
   if (!currentProfile) {
@@ -980,6 +1047,7 @@ document.getElementById('btn-view-results')!.addEventListener('click', () => {
 document.getElementById('btn-run-again')!.addEventListener('click', () => { handleStartRun().catch(console.error); });
 
 document.getElementById('profile-form')!.addEventListener('submit', e => { handleProfileSave(e).catch(console.error); });
+document.getElementById('btn-add-aka')!.addEventListener('click', () => addAkaRow());
 
 document.getElementById('send-method-group')!.addEventListener('change', e => {
   const radio = e.target as HTMLInputElement;
