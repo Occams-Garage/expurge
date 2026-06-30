@@ -10,6 +10,8 @@ superseded-by:
 superseded-date:
 ---
 
+CORRECTION 2026-06-30: the popup's "pause/resume button" was dropped — run control is stop-only. See 2026-06-30-stop-only-run-control. The rest of this entry remains accurate.
+
 ## Summary
 The popup (toolbar icon click) is a compact run control panel, not the primary UI. The Firefox options page — opened as a full browser tab via `options_ui.open_in_tab: true` — is the primary UI and hosts all persistent navigation. Four sections: Run, Results, Profile, Settings. `browser.runtime.onInstalled` opens the options page on first install. The current M0–M3 popup (which contained the profile form and draft surfaces) is the prototype scaffolding; those surfaces migrate to the options page in M4+.
 
