@@ -12,8 +12,8 @@ export interface WorkItem {
   id: string;              // "{brokerId}:{nameVariant}"
   brokerId: string;
   nameVariant: string;
-  variantFirst?: string;   // first name resolved for this variant, frozen at run time
-  variantLast?: string;    // last name resolved for this variant (may be empty for single-token AKAs)
+  variantFirst: string;    // first name resolved for this variant, frozen at run time
+  variantLast: string;     // last name resolved for this variant (may be empty for single-token AKAs)
   renderedUrl: string;
   status: WorkItemStatus;
   tabId?: number;          // live-session scratch only — never written to durable storage
