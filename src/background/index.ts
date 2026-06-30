@@ -186,24 +186,32 @@ async function handleStartRun(profile: Profile): Promise<void> {
   });
 }
 
+// Pure: return a run with the given item's verdict applied. Shared by the
+// live-tab verdict path and the dashboard re-verdict path so they can't drift.
+function withVerdict(run: RunState, itemId: string, verdict: Verdict, listingUrl?: string): RunState {
+  return {
+    ...run,
+    items: run.items.map(i => {
+      if (i.id !== itemId) return i;
+      return {
+        ...i,
+        status: 'verdicted' as WorkItemStatus,
+        verdict,
+        listingUrl,
+        ...(verdict === 'hit' ? { matchedAs: i.nameVariant } : {}),
+      };
+    }),
+  };
+}
+
+// Verdict from a live broker tab: record it, drop the tab's tracking key, and
+// advance the run.
 async function handleVerdict(itemId: string, verdict: Verdict, listingUrl?: string, tabId?: number): Promise<void> {
   return serialWrite(async () => {
     const run = await loadRun();
     if (!run) return;
 
-    const updated: RunState = {
-      ...run,
-      items: run.items.map(i => {
-        if (i.id !== itemId) return i;
-        return {
-          ...i,
-          status: 'verdicted' as WorkItemStatus,
-          verdict,
-          listingUrl,
-          ...(verdict === 'hit' ? { matchedAs: i.nameVariant } : {}),
-        };
-      }),
-    };
+    const updated = withVerdict(run, itemId, verdict, listingUrl);
     await saveRun(updated);
 
     if (tabId !== undefined) {
@@ -212,6 +220,19 @@ async function handleVerdict(itemId: string, verdict: Verdict, listingUrl?: stri
 
     await updateBadge(updated);
     await openNextBatch(updated);
+  });
+}
+
+// Re-verdict from the results dashboard: a pure state edit of an already-recorded
+// item. Never touches tab tracking or opens tabs.
+async function handleReverdict(itemId: string, verdict: Verdict, listingUrl?: string): Promise<void> {
+  return serialWrite(async () => {
+    const run = await loadRun();
+    if (!run) return;
+
+    const updated = withVerdict(run, itemId, verdict, listingUrl);
+    await saveRun(updated);
+    await updateBadge(updated);
   });
 }
 
@@ -314,6 +335,15 @@ browser.runtime.onMessage.addListener(
         m.verdict as Verdict,
         m.listingUrl as string | undefined,
         tabId,
+      );
+      return { type: 'ACK', itemId: m.itemId };
+    }
+
+    if (m.type === 'REVERDICT') {
+      await handleReverdict(
+        m.itemId as string,
+        m.verdict as Verdict,
+        m.listingUrl as string | undefined,
       );
       return { type: 'ACK', itemId: m.itemId };
     }
