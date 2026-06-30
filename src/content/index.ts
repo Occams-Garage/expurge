@@ -512,6 +512,15 @@ async function sendVerdict(
   }
 }
 
+// Ask the background to close this tab (a content script can't reliably close a
+// tab it didn't open). The short delay lets the user read the "✓ recorded" status
+// before the tab disappears.
+function closeSelfTab(): void {
+  setTimeout(() => {
+    browser.runtime.sendMessage({ type: 'CLOSE_TAB' }).catch(() => {});
+  }, 800);
+}
+
 // ── PING handler (background → content) ─────────────────────────────────────
 // Guarded by a window flag so each executeScript reinject doesn't stack another
 // listener — all would respond identically but they accumulate across reinjections.
@@ -619,7 +628,7 @@ function buildChallengePanel(info: ItemInfoMsg, onResolved: () => void): void {
     if (ok) {
       statusEl.className   = 'status recorded';
       statusEl.textContent = '✓ Skipped.';
-      setTimeout(() => { browser.runtime.sendMessage({ type: 'CLOSE_TAB' }).catch(() => {}); }, 800);
+      closeSelfTab();
     } else {
       statusEl.className   = 'status';
       statusEl.textContent = 'Save failed — try again.';
@@ -653,7 +662,7 @@ function showMainPanel(info: ItemInfoMsg): void {
       const ok  = await sendVerdict(itemId, verdict, listingUrl);
       statusEl.className   = 'status recorded';
       statusEl.textContent = verdictMsg(verdict, ok);
-      if (ok) setTimeout(() => { browser.runtime.sendMessage({ type: 'CLOSE_TAB' }).catch(() => {}); }, 800);
+      if (ok) closeSelfTab();
     };
 
     const host = buildGuidancePanel(exposes, brokerHostname, progress, onVerdict);
@@ -666,7 +675,7 @@ function showMainPanel(info: ItemInfoMsg): void {
       setOverlayState(refs, 'saving');
       const ok = await sendVerdict(itemId, verdict, window.location.href);
       setOverlayState(refs, 'recorded', verdictMsg(verdict, ok));
-      if (ok) setTimeout(() => { browser.runtime.sendMessage({ type: 'CLOSE_TAB' }).catch(() => {}); }, 800);
+      if (ok) closeSelfTab();
     };
 
     refs.btnHit.addEventListener('click',     () => onVerdict('hit'));
