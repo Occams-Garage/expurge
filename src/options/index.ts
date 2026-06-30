@@ -196,24 +196,56 @@ function stopPolling(): void {
 
 // ── results section ───────────────────────────────────────────────────────────
 
-// Everything that affects a broker group's rendered output. When this is unchanged
-// the group's DOM is left untouched on re-render (see renderResults).
-function groupSignature(items: WorkItem[]): string {
-  return items
-    // optedOutAt as a boolean: only its presence is rendered, and the optimistic
-    // (client) timestamp never equals the background's — keying the raw value would
-    // make every mark-sent spuriously rebuild the group and collapse the open panel.
-    .map(i => `${i.id}|${i.verdict ?? ''}|${i.status}|${i.skipReason ?? ''}|${i.optedOutAt ? '1' : ''}|${i.listingUrl ?? ''}`)
-    .join(';');
+// One item's contribution to its group's rendered output. status collapses to a
+// verdicted-or-not flag (pending and open render identically as "checking…"), and
+// optedOutAt to a boolean (only its presence is rendered, and the optimistic client
+// timestamp never equals the background's). A row whose signature is unchanged is
+// left untouched on re-render.
+function itemRowSignature(i: WorkItem): string {
+  return `${i.verdict ?? ''}|${i.status === 'verdicted' ? 'v' : '_'}|${i.skipReason ?? ''}|${i.optedOutAt ? '1' : ''}|${i.listingUrl ?? ''}`;
 }
 
-// Carry a user's collapsed state onto a freshly rebuilt group.
-function preserveCollapse(prev: HTMLElement, fresh: HTMLElement): void {
-  const collapsed = prev.querySelector('.broker-group-body')?.classList.contains('hidden');
-  if (!collapsed) return;
-  fresh.querySelector('.broker-group-body')?.classList.add('hidden');
-  const chev = fresh.querySelector<HTMLElement>('.broker-group-chevron');
-  if (chev) chev.textContent = '▸';
+// A broker group's signature is the ordered concatenation of its item row signatures.
+function groupSignature(items: WorkItem[]): string {
+  return items.map(i => `${i.id}:${itemRowSignature(i)}`).join(';');
+}
+
+function brokerSummary(items: WorkItem[]): string {
+  const hits     = items.filter(i => i.verdict === 'hit').length;
+  const clears   = items.filter(i => i.verdict === 'clear').length;
+  const unknowns = items.filter(i => i.verdict === 'unknown').length;
+  const skipped  = items.filter(i => i.verdict === 'skipped').length;
+  const checking = items.filter(i => i.status !== 'verdicted').length;
+  const parts: string[] = [];
+  if (hits > 0)     parts.push(`${hits} hit${hits !== 1 ? 's' : ''}`);
+  if (clears > 0)   parts.push(`${clears} not found`);
+  if (unknowns > 0) parts.push(`${unknowns} couldn't tell`);
+  if (checking > 0) parts.push(`${checking} checking`);
+  if (skipped > 0)  parts.push(`${skipped} skipped`);
+  return parts.join(' · ') || 'no results';
+}
+
+// Item display order within a group: hits, then unknowns, clears, everything else.
+function sortItems(items: WorkItem[]): WorkItem[] {
+  return [
+    ...items.filter(i => i.verdict === 'hit'),
+    ...items.filter(i => i.verdict === 'unknown'),
+    ...items.filter(i => i.verdict === 'clear'),
+    ...items.filter(i => i.verdict !== 'hit' && i.verdict !== 'unknown' && i.verdict !== 'clear'),
+  ];
+}
+
+// Create / update / remove the opt-out status pill in a group header.
+function applyOptStatusPill(groupEl: HTMLElement, hitCount: number, sentCount: number): void {
+  const opt = optStatusFor(hitCount, sentCount);
+  let span = groupEl.querySelector<HTMLElement>('.broker-group-optstatus');
+  if (!opt) { span?.remove(); return; }
+  if (!span) {
+    span = document.createElement('span');
+    groupEl.querySelector('.broker-group-header')!.appendChild(span);
+  }
+  span.textContent = opt.text;
+  span.className = `broker-group-optstatus ${opt.className}`;
 }
 
 function renderResults(run: RunState): void {
@@ -232,10 +264,11 @@ function renderResults(run: RunState): void {
 
   const container = document.getElementById('results-groups')!;
 
-  // Group-keyed reconciliation: rebuild a broker group only when its items changed.
-  // Untouched groups keep their existing DOM nodes, so expanded draft panels, the
-  // collapse state, and scroll position survive the 2s poll and re-verdicts —
-  // instead of being torn down by a full container.innerHTML rebuild every tick.
+  // Reconcile per broker group, keyed on data-broker. An unchanged group is left
+  // alone; a changed group is reconciled IN PLACE with rows keyed by item id, so an
+  // expanded draft panel on an unrelated row in the same group — plus the group's
+  // collapse state and scroll position — survives the 2s poll and re-verdicts,
+  // instead of being torn down by a full rebuild.
   const existing = new Map<string, HTMLElement>();
   for (const el of Array.from(container.querySelectorAll<HTMLElement>('.broker-group[data-broker]'))) {
     existing.set(el.dataset['broker']!, el);
@@ -243,19 +276,13 @@ function renderResults(run: RunState): void {
   const notCheckedEl = container.querySelector<HTMLElement>('.broker-group:not([data-broker])');
 
   for (const [brokerId, items] of groups) {
-    const sig  = groupSignature(items);
     const prev = existing.get(brokerId);
-    if (prev && prev.dataset['sig'] === sig) continue; // unchanged — leave it in place
-
-    const fresh = buildBrokerGroup(brokerId, items);
-    fresh.dataset['sig'] = sig;
     if (prev) {
-      preserveCollapse(prev, fresh);
-      prev.replaceWith(fresh);
-    } else if (notCheckedEl) {
-      container.insertBefore(fresh, notCheckedEl);
+      if (prev.dataset['sig'] !== groupSignature(items)) reconcileBrokerGroup(prev, items);
     } else {
-      container.appendChild(fresh);
+      const fresh = buildBrokerGroup(brokerId, items);
+      if (notCheckedEl) container.insertBefore(fresh, notCheckedEl);
+      else container.appendChild(fresh);
     }
   }
 
@@ -295,35 +322,18 @@ function optStatusFor(hitCount: number, sentCount: number): { text: string; clas
 
 function buildBrokerGroup(brokerId: string, items: WorkItem[]): HTMLElement {
   const brokerName = getBroker(brokerId)?.name ?? brokerId;
-  const hits     = items.filter(i => i.verdict === 'hit');
-  const clears   = items.filter(i => i.verdict === 'clear');
-  const unknowns = items.filter(i => i.verdict === 'unknown');
-  const sentCount = hits.filter(i => i.optedOutAt).length;
-
-  const checking = items.filter(i => i.status !== 'verdicted').length;
-  const skipped  = items.filter(i => i.verdict === 'skipped').length;
-
-  const parts: string[] = [];
-  if (hits.length > 0)     parts.push(`${hits.length} hit${hits.length !== 1 ? 's' : ''}`);
-  if (clears.length > 0)   parts.push(`${clears.length} not found`);
-  if (unknowns.length > 0) parts.push(`${unknowns.length} couldn't tell`);
-  if (checking > 0)        parts.push(`${checking} checking`);
-  if (skipped > 0)         parts.push(`${skipped} skipped`);
-  const summary = parts.join(' · ') || 'no results';
-
-  const opt = optStatusFor(hits.length, sentCount);
 
   const div = document.createElement('div');
   div.className = 'broker-group';
   div.dataset['broker'] = brokerId;
+  div.dataset['sig'] = groupSignature(items);
 
   const header = document.createElement('button');
   header.className = 'broker-group-header';
   header.innerHTML = `
     <span class="broker-group-chevron">▾</span>
     <span class="broker-group-name">${esc(brokerName)}</span>
-    <span class="broker-group-summary">${esc(summary)}</span>
-    ${opt ? `<span class="broker-group-optstatus ${opt.className}">${esc(opt.text)}</span>` : ''}
+    <span class="broker-group-summary">${esc(brokerSummary(items))}</span>
   `;
 
   const body = document.createElement('div');
@@ -334,23 +344,54 @@ function buildBrokerGroup(brokerId: string, items: WorkItem[]): HTMLElement {
     header.querySelector<HTMLElement>('.broker-group-chevron')!.textContent = collapsed ? '▸' : '▾';
   });
 
-  const sorted = [
-    ...hits,
-    ...unknowns,
-    ...clears,
-    ...items.filter(i => i.verdict !== 'hit' && i.verdict !== 'unknown' && i.verdict !== 'clear'),
-  ];
-  for (const item of sorted) body.appendChild(buildItemRow(item));
+  for (const item of sortItems(items)) body.appendChild(buildItemRow(item));
 
   div.appendChild(header);
   div.appendChild(body);
+
+  const hits = items.filter(i => i.verdict === 'hit');
+  applyOptStatusPill(div, hits.length, hits.filter(i => i.optedOutAt).length);
   return div;
+}
+
+// Update an existing broker group in place: header summary + pill, and body rows
+// keyed by item id. A row whose signature is unchanged keeps its DOM node — so an
+// open draft panel on it survives a sibling item's change; only changed rows are
+// rebuilt, and rows are reordered to match the current sort.
+function reconcileBrokerGroup(groupEl: HTMLElement, items: WorkItem[]): void {
+  groupEl.querySelector<HTMLElement>('.broker-group-summary')!.textContent = brokerSummary(items);
+  const hits = items.filter(i => i.verdict === 'hit');
+  applyOptStatusPill(groupEl, hits.length, hits.filter(i => i.optedOutAt).length);
+
+  const body = groupEl.querySelector<HTMLElement>('.broker-group-body')!;
+  const existingRows = new Map<string, HTMLElement>();
+  for (const r of Array.from(body.children) as HTMLElement[]) {
+    if (r.dataset['item']) existingRows.set(r.dataset['item'], r);
+  }
+
+  let anchor: HTMLElement | null = null;
+  for (const item of sortItems(items)) {
+    const prev = existingRows.get(item.id);
+    const rowEl = (prev && prev.dataset['rowsig'] === itemRowSignature(item))
+      ? prev                       // unchanged — keep node (preserves an open draft panel)
+      : buildItemRow(item);
+    if (anchor) { if (anchor.nextElementSibling !== rowEl) anchor.after(rowEl); }
+    else        { if (body.firstElementChild !== rowEl)    body.prepend(rowEl); }
+    anchor = rowEl;
+  }
+
+  const liveIds = new Set(items.map(i => i.id));
+  for (const [id, r] of existingRows) if (!liveIds.has(id)) r.remove();
+
+  groupEl.dataset['sig'] = groupSignature(items);
 }
 
 function buildItemRow(item: WorkItem): HTMLElement {
   const name = nameForVariant(item);
   const row = document.createElement('div');
   row.className = 'broker-item-row';
+  row.dataset['item'] = item.id;
+  row.dataset['rowsig'] = itemRowSignature(item);
 
   if (item.verdict === 'hit') {
     const sentAt = item.optedOutAt;
@@ -496,17 +537,15 @@ function refreshBrokerGroupHeader(brokerId: string): void {
   if (!groupEl) return;
   const items = currentRun.items.filter(i => i.brokerId === brokerId);
   const hits = items.filter(i => i.verdict === 'hit');
-  if (hits.length === 0) return;
-  // The optstatus span is always present once a group has hits (rendered by buildBrokerGroup).
-  const statusEl = groupEl.querySelector<HTMLElement>('.broker-group-optstatus');
-  if (!statusEl) return;
-  const sentCount = hits.filter(i => i.optedOutAt).length;
-  const opt = optStatusFor(hits.length, sentCount)!; // hits.length > 0 guaranteed above
-  statusEl.textContent = opt.text;
-  statusEl.className = `broker-group-optstatus ${opt.className}`;
+  applyOptStatusPill(groupEl, hits.length, hits.filter(i => i.optedOutAt).length);
 
-  // Keep the stored signature current so the next poll-driven renderResults sees
-  // this group as unchanged and leaves the (now open) draft panel in place.
+  // Keep the stored group + row signatures current so the next poll-driven
+  // renderResults sees this group as unchanged and leaves the (now open) draft
+  // panel in place, rather than reconciling the row and tearing it down.
+  for (const item of items) {
+    const rowEl = groupEl.querySelector<HTMLElement>(`.broker-item-row[data-item="${CSS.escape(item.id)}"]`);
+    if (rowEl) rowEl.dataset['rowsig'] = itemRowSignature(item);
+  }
   groupEl.dataset['sig'] = groupSignature(items);
 }
 

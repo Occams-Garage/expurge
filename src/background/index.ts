@@ -230,6 +230,12 @@ async function handleReverdict(itemId: string, verdict: Verdict, listingUrl?: st
     const run = await loadRun();
     if (!run) return;
 
+    // Only edit an already-verdicted item. Item ids are deterministic and reused
+    // across runs, so a stale dashboard re-verdict (button from a prior run) must
+    // not clobber a pending/open item in a freshly-started run.
+    const target = run.items.find(i => i.id === itemId);
+    if (!target || target.status !== 'verdicted') return;
+
     const updated = withVerdict(run, itemId, verdict, listingUrl);
     await saveRun(updated);
     await updateBadge(updated);
