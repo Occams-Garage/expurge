@@ -75,14 +75,18 @@ function buildItems(profile: Profile): WorkItem[] {
   const items: WorkItem[] = [];
 
   // Name variants: primary name first, then each AKA split on the first space.
+  // This split is the single source of truth for a variant's name — the resolved
+  // first/last are stored on each WorkItem so drafts and labels never re-parse the
+  // (mutable) profile later.
   const variants: Array<{ nameVariant: string; first: string; last: string }> = [
     { nameVariant: 'primary', first: profile.first, last: profile.last },
     ...(profile.also_known_as ?? []).map((aka, i) => {
-      const sp = aka.indexOf(' ');
+      const t  = aka.trim();
+      const sp = t.indexOf(' ');
       return {
         nameVariant: `aka_${i}`,
-        first: sp >= 0 ? aka.slice(0, sp) : aka,
-        last:  sp >= 0 ? aka.slice(sp + 1) : '',
+        first: sp >= 0 ? t.slice(0, sp) : t,
+        last:  sp >= 0 ? t.slice(sp + 1).trim() : '',
       };
     }),
   ];
@@ -103,6 +107,8 @@ function buildItems(profile: Profile): WorkItem[] {
           id: `${broker.id}:${variant.nameVariant}`,
           brokerId: broker.id,
           nameVariant: variant.nameVariant,
+          variantFirst: variant.first,
+          variantLast: variant.last,
           renderedUrl: '',
           status: 'verdicted',
           verdict: 'skipped',
@@ -114,6 +120,8 @@ function buildItems(profile: Profile): WorkItem[] {
         id: `${broker.id}:${variant.nameVariant}`,
         brokerId: broker.id,
         nameVariant: variant.nameVariant,
+        variantFirst: variant.first,
+        variantLast: variant.last,
         renderedUrl: renderUrl(broker.search.url, vProfile),
         status: 'pending',
       });
@@ -131,10 +139,16 @@ async function openNextBatch(run: RunState, focusFirst = false): Promise<void> {
 
   // At most one open tab per broker — prevents hammering the same site with
   // multiple AKA queries in parallel, which triggers bot-detection / CAPTCHAs.
-  const openBrokers = new Set(run.items.filter(i => i.status === 'open').map(i => i.brokerId));
-  const pending = run.items
-    .filter(i => i.status === 'pending' && !openBrokers.has(i.brokerId))
-    .slice(0, slots);
+  // The broker set is seeded from already-open tabs and grows as we select, so a
+  // second variant of the same broker can't join this batch either.
+  const claimedBrokers = new Set(run.items.filter(i => i.status === 'open').map(i => i.brokerId));
+  const pending: WorkItem[] = [];
+  for (const item of run.items) {
+    if (pending.length >= slots) break;
+    if (item.status !== 'pending' || claimedBrokers.has(item.brokerId)) continue;
+    pending.push(item);
+    claimedBrokers.add(item.brokerId);
+  }
   if (pending.length === 0) return;
 
   const pendingIds = new Set(pending.map(p => p.id));
@@ -366,19 +380,13 @@ browser.runtime.onMessage.addListener(
       const gate = evaluateGate(broker, 'hit');
       if (!gate.pass) return { draft: null, reason: gate.reason };
 
-      let draftProfile = profile;
-      if (hitItem.nameVariant.startsWith('aka_')) {
-        const idx = parseInt(hitItem.nameVariant.replace('aka_', ''), 10);
-        const aka = profile.also_known_as?.[idx];
-        if (aka) {
-          const sp = aka.indexOf(' ');
-          draftProfile = {
-            ...profile,
-            first: sp >= 0 ? aka.slice(0, sp) : aka,
-            last:  sp >= 0 ? aka.slice(sp + 1) : '',
-          };
-        }
-      }
+      // Use the name resolved at run time (frozen on the item), not a re-parse of the
+      // current profile — editing/reordering AKAs after a hit must not change the draft.
+      const draftProfile: Profile = {
+        ...profile,
+        first: hitItem.variantFirst ?? profile.first,
+        last:  hitItem.variantLast  ?? profile.last,
+      };
       const draft = buildDraft(draftProfile, broker, gate.channel, hitItem.listingUrl);
       return { draft };
     }
@@ -400,7 +408,8 @@ browser.runtime.onMessage.addListener(
         const updated: RunState = {
           ...run,
           items: run.items.map(i =>
-            i.id === (m.itemId as string) && i.verdict === 'hit'
+            // Don't re-stamp an already-sent item — preserves the original send date.
+            i.id === (m.itemId as string) && i.verdict === 'hit' && !i.optedOutAt
               ? { ...i, optedOutAt: new Date().toISOString() }
               : i
           ),

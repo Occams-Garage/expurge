@@ -32,6 +32,23 @@ function esc(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
+// Escape for use inside a double-quoted HTML attribute (esc() alone leaves " intact).
+function escAttr(s: string): string {
+  return esc(s).replace(/"/g, '&quot;');
+}
+
+// Only allow http(s) URLs to be rendered as links in this privileged page.
+// Blocks javascript:/data:/etc. schemes; returns '' for anything unsafe.
+function safeHttpUrl(url: string | undefined): string {
+  if (!url) return '';
+  try {
+    const u = new URL(url);
+    return (u.protocol === 'http:' || u.protocol === 'https:') ? url : '';
+  } catch {
+    return '';
+  }
+}
+
 // ── run section ──────────────────────────────────────────────────────────────
 
 function runDisplayState(profile: Profile | null, run: RunState | null): RunDisplayState {
@@ -75,10 +92,11 @@ function showRunDisplayState(state: RunDisplayState, run?: RunState | null): voi
       );
       const hits  = run.items.filter(i => i.verdict === 'hit').length;
       const sites = new Set(checkable.map(i => i.brokerId)).size;
+      const hitSites = new Set(run.items.filter(i => i.verdict === 'hit').map(i => i.brokerId)).size;
       const names = new Set(checkable.map(i => i.nameVariant)).size;
       let desc: string;
       if (hits > 0) {
-        desc = `Found ${hits} listing${hits !== 1 ? 's' : ''} across ${sites} site${sites !== 1 ? 's' : ''}. Check Results for opt-out requests.`;
+        desc = `Found ${hits} listing${hits !== 1 ? 's' : ''} across ${hitSites} site${hitSites !== 1 ? 's' : ''}. Check Results for opt-out requests.`;
       } else if (names > 1) {
         desc = `Checked ${names} names across ${sites} site${sites !== 1 ? 's' : ''} — no listings found.`;
       } else {
@@ -200,14 +218,20 @@ function renderResults(run: RunState): void {
   if (notInRun.length > 0) container.appendChild(buildNotCheckedGroup(notInRun));
 }
 
-function nameForVariant(nameVariant: string): string {
-  if (nameVariant === 'primary') {
-    return currentProfile ? `${currentProfile.first} ${currentProfile.last}` : 'primary';
+function nameForVariant(item: WorkItem): string {
+  // The resolved name is frozen on the item at run time — no re-parse of the
+  // (mutable) profile, so labels stay correct after AKA edits.
+  const name = [item.variantFirst, item.variantLast].filter(Boolean).join(' ');
+  if (name) return name;
+
+  // Fallback for items predating variant-name capture.
+  if (item.nameVariant === 'primary') {
+    return currentProfile ? `${currentProfile.first} ${currentProfile.last}`.trim() : 'primary';
   }
-  const idx = parseInt(nameVariant.replace('aka_', ''), 10);
+  const idx = parseInt(item.nameVariant.replace('aka_', ''), 10);
   return (!isNaN(idx) && currentProfile?.also_known_as?.[idx])
     ? currentProfile.also_known_as[idx]
-    : nameVariant;
+    : item.nameVariant;
 }
 
 function buildBrokerGroup(brokerId: string, items: WorkItem[]): HTMLElement {
@@ -217,12 +241,15 @@ function buildBrokerGroup(brokerId: string, items: WorkItem[]): HTMLElement {
   const unknowns = items.filter(i => i.verdict === 'unknown');
   const sentCount = hits.filter(i => i.optedOutAt).length;
 
+  const checking = items.filter(i => i.status !== 'verdicted').length;
+  const skipped  = items.filter(i => i.verdict === 'skipped').length;
+
   const parts: string[] = [];
   if (hits.length > 0)     parts.push(`${hits.length} hit${hits.length !== 1 ? 's' : ''}`);
   if (clears.length > 0)   parts.push(`${clears.length} not found`);
   if (unknowns.length > 0) parts.push(`${unknowns.length} couldn't tell`);
-  const otherCount = items.length - hits.length - clears.length - unknowns.length;
-  if (otherCount > 0)      parts.push(`${otherCount} skipped`);
+  if (checking > 0)        parts.push(`${checking} checking`);
+  if (skipped > 0)         parts.push(`${skipped} skipped`);
   const summary = parts.join(' · ') || 'no results';
 
   let optStatus = '';
@@ -267,7 +294,7 @@ function buildBrokerGroup(brokerId: string, items: WorkItem[]): HTMLElement {
 }
 
 function buildItemRow(item: WorkItem): HTMLElement {
-  const name = nameForVariant(item.nameVariant);
+  const name = nameForVariant(item);
   const row = document.createElement('div');
   row.className = 'broker-item-row';
 
@@ -288,15 +315,19 @@ function buildItemRow(item: WorkItem): HTMLElement {
     btn.addEventListener('click', () => {
       if (panel.classList.contains('hidden')) {
         panel.classList.remove('hidden');
-        loadDraftPanel(panel, item).catch(console.error);
+        if (!panel.dataset['loaded']) {
+          panel.dataset['loaded'] = '1';
+          loadDraftPanel(panel, item).catch(console.error);
+        }
       } else {
         panel.classList.add('hidden');
       }
     });
 
   } else if (item.verdict === 'unknown') {
-    const listingLink = item.listingUrl
-      ? `<a class="review-listing-link" href="${esc(item.listingUrl)}" target="_blank">Open listing →</a>` : '';
+    const listingHref = safeHttpUrl(item.listingUrl);
+    const listingLink = listingHref
+      ? `<a class="review-listing-link" href="${escAttr(listingHref)}" target="_blank" rel="noopener noreferrer">Open listing →</a>` : '';
     row.innerHTML = `
       <div class="broker-item-header">
         <span class="broker-item-name">${esc(name)}</span>
@@ -347,11 +378,15 @@ function buildItemRow(item: WorkItem): HTMLElement {
     `;
 
   } else {
-    const reason = item.skipReason?.replace('missing:', 'missing ') ?? 'skipped';
+    // No verdict yet → still in the run; a verdicted item here is a real skip.
+    const label = item.status !== 'verdicted'
+      ? 'checking…'
+      : (item.skipReason?.replace('missing:', 'missing ') ?? 'skipped');
+    const cls = item.status !== 'verdicted' ? 'verdict-unknown' : 'verdict-skipped';
     row.innerHTML = `
       <div class="broker-item-header">
         <span class="broker-item-name">${esc(name)}</span>
-        <span class="broker-item-verdict verdict-skipped">${esc(reason)}</span>
+        <span class="broker-item-verdict ${cls}">${esc(label)}</span>
       </div>
     `;
   }
@@ -400,23 +435,20 @@ function buildNotCheckedGroup(brokers: readonly (typeof BROKERS)[number][]): HTM
 
 function refreshBrokerGroupHeader(brokerId: string): void {
   if (!currentRun) return;
-  const groupEl = Array.from(document.querySelectorAll<HTMLElement>('.broker-group'))
-    .find(el => el.dataset['broker'] === brokerId);
+  const groupEl = document.querySelector<HTMLElement>(`.broker-group[data-broker="${CSS.escape(brokerId)}"]`);
   if (!groupEl) return;
   const items = currentRun.items.filter(i => i.brokerId === brokerId);
   const hits = items.filter(i => i.verdict === 'hit');
   if (hits.length === 0) return;
+  // The optstatus span is always present once a group has hits (rendered by buildBrokerGroup).
+  const statusEl = groupEl.querySelector<HTMLElement>('.broker-group-optstatus');
+  if (!statusEl) return;
   const sentCount = hits.filter(i => i.optedOutAt).length;
   let optStatus: string;
   let statusClass: string;
   if (sentCount === hits.length)  { optStatus = 'all sent'; statusClass = 'status-done'; }
   else if (sentCount > 0)         { optStatus = `${sentCount}/${hits.length} sent`; statusClass = 'status-partial'; }
   else                            { optStatus = 'not started'; statusClass = 'status-partial'; }
-  let statusEl = groupEl.querySelector<HTMLElement>('.broker-group-optstatus');
-  if (!statusEl) {
-    statusEl = document.createElement('span');
-    groupEl.querySelector('.broker-group-header')?.appendChild(statusEl);
-  }
   statusEl.textContent = optStatus;
   statusEl.className = `broker-group-optstatus ${statusClass}`;
 }
@@ -456,7 +488,9 @@ function renderEmailDraftInPanel(panel: HTMLElement, draft: EmailDraft, item: Wo
     </div>
     <div class="copy-area hidden"><textarea readonly>${esc(copyText)}</textarea></div>
     <div class="draft-mark-sent">
-      <button class="btn-quiet" data-action="mark-sent">Mark as sent</button>
+      ${item.optedOutAt
+        ? '<span class="sent-badge">Sent ✓</span>'
+        : '<button class="btn-quiet" data-action="mark-sent">Mark as sent</button>'}
     </div>
   `;
 
@@ -467,7 +501,7 @@ function renderEmailDraftInPanel(panel: HTMLElement, draft: EmailDraft, item: Wo
   panel.querySelector<HTMLButtonElement>('[data-action="eml"]')!.onclick = async () => {
     const url = URL.createObjectURL(new Blob([toEml(draft)], { type: 'message/rfc822' }));
     try {
-      await browser.downloads.download({ url, filename: `expurge-optout-${item.brokerId}.eml`, saveAs: false });
+      await browser.downloads.download({ url, filename: `expurge-optout-${item.brokerId}-${item.nameVariant}.eml`, saveAs: false });
     } finally {
       URL.revokeObjectURL(url);
     }
@@ -486,16 +520,21 @@ function renderEmailDraftInPanel(panel: HTMLElement, draft: EmailDraft, item: Wo
     }
   };
 
-  panel.querySelector<HTMLButtonElement>('[data-action="mark-sent"]')!.onclick = async () => {
-    await browser.runtime.sendMessage({ type: 'MARK_SENT', itemId: item.id });
+  const markSentBtn = panel.querySelector<HTMLButtonElement>('[data-action="mark-sent"]');
+  if (markSentBtn) markSentBtn.onclick = async () => {
+    try {
+      await browser.runtime.sendMessage({ type: 'MARK_SENT', itemId: item.id });
+    } catch {
+      return; // leave the button actionable so the user can retry
+    }
     panel.querySelector('.draft-mark-sent')!.innerHTML = '<span class="sent-badge">Sent ✓</span>';
-    const toggleBtn = document.querySelector<HTMLButtonElement>(`.btn-draft-toggle[data-item="${item.id}"]`);
+    const toggleBtn = document.querySelector<HTMLButtonElement>(`.btn-draft-toggle[data-item="${CSS.escape(item.id)}"]`);
     if (toggleBtn) { toggleBtn.textContent = 'Sent ✓'; toggleBtn.classList.add('sent'); }
     if (currentRun) {
       currentRun = {
         ...currentRun,
         items: currentRun.items.map(i =>
-          i.id === item.id ? { ...i, optedOutAt: new Date().toISOString() } : i
+          i.id === item.id && !i.optedOutAt ? { ...i, optedOutAt: new Date().toISOString() } : i
         ),
       };
       refreshBrokerGroupHeader(item.brokerId);
@@ -504,7 +543,6 @@ function renderEmailDraftInPanel(panel: HTMLElement, draft: EmailDraft, item: Wo
 }
 
 function renderFormDraftInPanel(panel: HTMLElement, draft: FormDraft, item: WorkItem): void {
-  const brokerId = item.brokerId;
   const fieldsHtml = draft.fields.map(f => `
     <tr>
       <td class="form-field-label">${esc(f.label)}</td>
@@ -529,7 +567,9 @@ function renderFormDraftInPanel(panel: HTMLElement, draft: FormDraft, item: Work
     </div>
     <button class="btn-send btn-send-primary" data-action="open-form">Open opt-out form →</button>
     <div class="draft-mark-sent">
-      <button class="btn-quiet" data-action="mark-submitted">Mark as submitted</button>
+      ${item.optedOutAt
+        ? '<span class="sent-badge">Submitted ✓</span>'
+        : '<button class="btn-quiet" data-action="mark-submitted">Mark as submitted</button>'}
     </div>
   `;
 
@@ -537,16 +577,21 @@ function renderFormDraftInPanel(panel: HTMLElement, draft: FormDraft, item: Work
     browser.tabs.create({ url: draft.formUrl }).catch(console.error);
   };
 
-  panel.querySelector<HTMLButtonElement>('[data-action="mark-submitted"]')!.onclick = async () => {
-    await browser.runtime.sendMessage({ type: 'MARK_SENT', itemId: item.id });
+  const markSubmittedBtn = panel.querySelector<HTMLButtonElement>('[data-action="mark-submitted"]');
+  if (markSubmittedBtn) markSubmittedBtn.onclick = async () => {
+    try {
+      await browser.runtime.sendMessage({ type: 'MARK_SENT', itemId: item.id });
+    } catch {
+      return; // leave the button actionable so the user can retry
+    }
     panel.querySelector('.draft-mark-sent')!.innerHTML = '<span class="sent-badge">Submitted ✓</span>';
-    const toggleBtn = document.querySelector<HTMLButtonElement>(`.btn-draft-toggle[data-item="${item.id}"]`);
+    const toggleBtn = document.querySelector<HTMLButtonElement>(`.btn-draft-toggle[data-item="${CSS.escape(item.id)}"]`);
     if (toggleBtn) { toggleBtn.textContent = 'Submitted ✓'; toggleBtn.classList.add('sent'); }
     if (currentRun) {
       currentRun = {
         ...currentRun,
         items: currentRun.items.map(i =>
-          i.id === item.id ? { ...i, optedOutAt: new Date().toISOString() } : i
+          i.id === item.id && !i.optedOutAt ? { ...i, optedOutAt: new Date().toISOString() } : i
         ),
       };
       refreshBrokerGroupHeader(item.brokerId);
