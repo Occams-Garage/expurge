@@ -18,13 +18,16 @@ const entries = [
   { entryPoints: ['src/content/index.ts'],    outfile: 'dist/content.js'    },
   { entryPoints: ['src/popup/index.ts'],      outfile: 'dist/popup.js'      },
   { entryPoints: ['src/popup/style.css'],     outfile: 'dist/style.css'     },
+  { entryPoints: ['src/options/index.ts'],    outfile: 'dist/options.js'    },
+  { entryPoints: ['src/options/style.css'],   outfile: 'dist/options.css'   },
 ];
 
 function copyStatics() {
   // Strip "dist/" prefix from file paths — manifest lives inside dist/ so paths are relative to it.
   const manifest = readFileSync('manifest.json', 'utf8').replaceAll('"dist/', '"');
   writeFileSync('dist/manifest.json', manifest);
-  copyFileSync('src/popup/index.html', 'dist/popup.html');
+  copyFileSync('src/popup/index.html',   'dist/popup.html');
+  copyFileSync('src/options/index.html', 'dist/options.html');
 }
 
 if (watch) {

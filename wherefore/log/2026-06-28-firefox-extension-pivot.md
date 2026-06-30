@@ -1,3 +1,4 @@
+
 ---
 date: 2026-06-28
 title: "Firefox extension as delivery platform"

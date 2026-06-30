@@ -19,6 +19,7 @@ export interface WorkItem {
   skipReason?: SkipReason;
   listingUrl?: string;     // direct profile page URL captured at verdict time
   matchedAs?: string;      // nameVariant that produced a hit (populated on hit verdict)
+  optedOutAt?: string;     // ISO timestamp set when user marks opt-out as sent
 }
 
 export interface RunState {
@@ -32,7 +33,13 @@ export interface Profile {
   last: string;
   city: string;
   state: string;
+  middle?: string;
+  zip?: string;
+  age?: string;
   also_known_as?: string[];  // additional names to search, each as "First Last"
+  relatives?: string[];
+  emails?: string[];
+  phones?: string[];
 }
 
 // ── messages popup/content → background ─────────────────────────────────────
@@ -42,7 +49,10 @@ export interface GetRunStateMsg { type: 'GET_RUN_STATE' }
 export interface GetDraftMsg    { type: 'GET_DRAFT';    brokerId: string }
 export interface GetItemMsg     { type: 'GET_ITEM' }
 export interface VerdictMsg     { type: 'VERDICT'; itemId: string; verdict: Verdict; skipReason?: SkipReason; listingUrl?: string }
-
+export interface SaveProfileMsg { type: 'SAVE_PROFILE'; profile: Profile }
+export interface GetProfileMsg  { type: 'GET_PROFILE' }
+export interface MarkSentMsg    { type: 'MARK_SENT';    brokerId: string }
+export interface DeleteAllMsg   { type: 'DELETE_ALL' }
 
 // ── messages background → content/popup ─────────────────────────────────────
 
@@ -62,4 +72,5 @@ export interface ReinjMsg  { type: 'REINJECT_OVERLAY'; tabId?: number }
 export interface StopRunMsg { type: 'STOP_RUN' }
 
 export type ToBackground =
-  | StartRunMsg | GetRunStateMsg | GetDraftMsg | GetItemMsg | VerdictMsg | PingMsg | ReinjMsg | StopRunMsg;
+  | StartRunMsg | GetRunStateMsg | GetDraftMsg | GetItemMsg | VerdictMsg
+  | PingMsg | ReinjMsg | StopRunMsg | SaveProfileMsg | GetProfileMsg | MarkSentMsg | DeleteAllMsg;

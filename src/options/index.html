@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>expurge</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600&family=IBM+Plex+Mono&family=Newsreader:opsz,wght@6..72,600&display=swap">
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <div id="app">
+    <header class="page-header">
+      <h1 class="xpg-wordmark">ex<span class="xpg-strip">pur</span>ge</h1>
+      <p class="tagline">Find your data on people-search sites and opt out — nothing leaves your device</p>
+    </header>
+
+    <div class="layout">
+      <nav class="sidebar">
+        <button class="nav-btn" data-section="run">Run</button>
+        <button class="nav-btn" data-section="results">Results</button>
+        <button class="nav-btn" data-section="profile">Profile</button>
+        <button class="nav-btn" data-section="settings">Settings</button>
+      </nav>
+
+      <main class="main-content">
+
+        <!-- ── Run ───────────────────────────────────────────── -->
+        <section id="section-run">
+
+          <div id="run-welcome">
+            <h2>Check people-search sites for your data</h2>
+            <p class="body-text">expurge opens each site in its own tab and shows you whether your information appears. If it does, you get a ready-to-send opt-out request.</p>
+            <p class="body-text">Start by adding your info in <button class="link-btn" data-nav="profile">Profile</button>.</p>
+          </div>
+
+          <div id="run-ready" class="hidden">
+            <h2>Ready to scan</h2>
+            <p class="body-text" id="run-ready-desc"></p>
+            <button id="btn-start" class="btn-primary">Start scan</button>
+            <p id="start-error" class="error-msg hidden"></p>
+          </div>
+
+          <div id="run-active" class="hidden">
+            <h2 id="run-active-heading">Scan in progress</h2>
+            <p id="run-active-desc" class="body-text"></p>
+            <div id="run-broker-table" class="broker-table"></div>
+            <p id="run-coverage-note" class="coverage-note hidden"></p>
+            <div class="action-row">
+              <button id="btn-restore-overlay" class="btn-secondary">Restore overlay</button>
+              <button id="btn-stop" class="btn-quiet">Stop scan</button>
+            </div>
+          </div>
+
+          <div id="run-done" class="hidden">
+            <h2>Scan complete</h2>
+            <p id="run-done-desc" class="body-text"></p>
+            <div class="action-row">
+              <button id="btn-view-results" class="btn-primary">View results</button>
+              <button id="btn-run-again" class="btn-secondary">Run again</button>
+            </div>
+          </div>
+
+        </section>
+
+        <!-- ── Results ───────────────────────────────────────── -->
+        <section id="section-results" class="hidden">
+
+          <div id="results-empty">
+            <h2>Results</h2>
+            <p class="body-text">No scan results yet. <button class="link-btn" data-nav="run">Start a scan</button> to see what's out there.</p>
+          </div>
+
+          <div id="results-content" class="hidden">
+            <h2>Results</h2>
+            <div id="results-groups"></div>
+          </div>
+
+        </section>
+
+        <!-- ── Profile ───────────────────────────────────────── -->
+        <section id="section-profile" class="hidden">
+          <h2>Your profile</h2>
+          <p class="note">Stored only in this browser session — never uploaded.</p>
+
+          <form id="profile-form" novalidate>
+            <fieldset class="field-group">
+              <legend>Name</legend>
+              <div class="field-row-2col">
+                <div class="field">
+                  <label for="p-first">First name <span class="req">*</span></label>
+                  <input type="text" id="p-first" name="first" autocomplete="off" required>
+                </div>
+                <div class="field">
+                  <label for="p-last">Last name <span class="req">*</span></label>
+                  <input type="text" id="p-last" name="last" autocomplete="off" required>
+                </div>
+              </div>
+              <div class="field field-narrow">
+                <label for="p-middle">Middle name <span class="label-optional">(optional)</span></label>
+                <input type="text" id="p-middle" name="middle" autocomplete="off">
+              </div>
+            </fieldset>
+
+            <fieldset class="field-group">
+              <legend>Location</legend>
+              <div class="field-row-2col">
+                <div class="field">
+                  <label for="p-city">City <span class="req">*</span></label>
+                  <input type="text" id="p-city" name="city" autocomplete="off" required>
+                </div>
+                <div class="field field-narrow">
+                  <label for="p-state">State <span class="req">*</span></label>
+                  <input type="text" id="p-state" name="state" maxlength="2" autocomplete="off" required placeholder="CA">
+                </div>
+              </div>
+              <div class="field field-narrow">
+                <label for="p-zip">ZIP <span class="label-optional">(optional)</span></label>
+                <input type="text" id="p-zip" name="zip" autocomplete="off" maxlength="10" inputmode="numeric">
+              </div>
+            </fieldset>
+
+            <fieldset class="field-group">
+              <legend>Additional details</legend>
+              <div class="field field-narrow">
+                <label for="p-age">Age <span class="label-optional">(optional)</span></label>
+                <input type="text" id="p-age" name="age" autocomplete="off" inputmode="numeric" maxlength="3">
+              </div>
+              <div class="field">
+                <label for="p-also-known-as">Other names <span class="label-optional">(optional)</span></label>
+                <textarea id="p-also-known-as" name="also_known_as" rows="3"
+                          placeholder="One name per line&#10;e.g. Jane Smith&#10;Jane Marie Smith"></textarea>
+                <span class="field-hint">Maiden names, middle-name variants, nicknames</span>
+              </div>
+              <div class="field">
+                <label for="p-relatives">Relatives <span class="label-optional">(optional)</span></label>
+                <textarea id="p-relatives" name="relatives" rows="3" placeholder="One name per line — helps narrow results on some sites"></textarea>
+              </div>
+              <div class="field">
+                <label for="p-emails">Email addresses <span class="label-optional">(optional)</span></label>
+                <textarea id="p-emails" name="emails" rows="2" placeholder="One per line"></textarea>
+              </div>
+              <div class="field">
+                <label for="p-phones">Phone numbers <span class="label-optional">(optional)</span></label>
+                <textarea id="p-phones" name="phones" rows="2" placeholder="One per line"></textarea>
+              </div>
+            </fieldset>
+
+            <div class="form-actions">
+              <button type="submit" id="btn-save-profile" class="btn-primary">Save profile</button>
+              <p id="profile-error" class="error-msg hidden"></p>
+              <p id="profile-saved-msg" class="success-msg hidden">Profile saved.</p>
+            </div>
+          </form>
+        </section>
+
+        <!-- ── Settings ──────────────────────────────────────── -->
+        <section id="section-settings" class="hidden">
+          <h2>Settings</h2>
+
+          <div class="settings-block">
+            <h3 class="settings-heading">Preferred send method</h3>
+            <p class="note">How you prefer to deliver opt-out emails.</p>
+            <div class="radio-group" id="send-method-group">
+              <label class="radio-item">
+                <input type="radio" name="send-method" value="mailto" checked>
+                <div class="radio-text">
+                  <span class="radio-label">Open in mail app</span>
+                  <span class="radio-desc">Opens your default email client with the draft pre-filled</span>
+                </div>
+              </label>
+              <label class="radio-item">
+                <input type="radio" name="send-method" value="eml">
+                <div class="radio-text">
+                  <span class="radio-label">Download .eml file</span>
+                  <span class="radio-desc">Saves a ready-to-import email file</span>
+                </div>
+              </label>
+              <label class="radio-item">
+                <input type="radio" name="send-method" value="copy">
+                <div class="radio-text">
+                  <span class="radio-label">Copy to clipboard</span>
+                  <span class="radio-desc">Copies the full email text for pasting anywhere</span>
+                </div>
+              </label>
+            </div>
+          </div>
+
+          <div class="settings-block">
+            <h3 class="settings-heading">Broker coverage</h3>
+            <div id="broker-list"></div>
+          </div>
+
+          <div class="settings-block">
+            <h3 class="settings-heading">Your data</h3>
+            <p class="note">All data is in this browser session only. Nothing is uploaded.</p>
+            <div class="action-row">
+              <button id="btn-export" class="btn-secondary">Export session data</button>
+              <button id="btn-delete-all" class="btn-danger">Delete all data</button>
+            </div>
+            <div id="delete-confirm-panel" class="hidden confirm-panel">
+              <p>This clears your profile and run data from this session. This can't be undone.</p>
+              <div class="action-row">
+                <button id="btn-delete-confirm" class="btn-danger">Delete everything</button>
+                <button id="btn-delete-cancel" class="btn-quiet">Cancel</button>
+              </div>
+            </div>
+          </div>
+
+        </section>
+
+      </main>
+    </div>
+  </div>
+
+  <script src="options.js"></script>
+</body>
+</html>

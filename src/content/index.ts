@@ -619,6 +619,7 @@ function buildChallengePanel(info: ItemInfoMsg, onResolved: () => void): void {
     if (ok) {
       statusEl.className   = 'status recorded';
       statusEl.textContent = '✓ Skipped.';
+      setTimeout(() => window.close(), 800);
     } else {
       statusEl.className   = 'status';
       statusEl.textContent = 'Save failed — try again.';
@@ -650,9 +651,9 @@ function showMainPanel(info: ItemInfoMsg): void {
       const shadow   = host.shadowRoot!;
       const statusEl = shadow.querySelector('#overlay-status') as HTMLElement;
       const ok  = await sendVerdict(itemId, verdict, listingUrl);
-      const msg = verdictMsg(verdict, ok);
       statusEl.className   = 'status recorded';
-      statusEl.textContent = msg;
+      statusEl.textContent = verdictMsg(verdict, ok);
+      if (ok) setTimeout(() => window.close(), 800);
     };
 
     const host = buildGuidancePanel(exposes, brokerHostname, progress, onVerdict);
@@ -665,6 +666,7 @@ function showMainPanel(info: ItemInfoMsg): void {
       setOverlayState(refs, 'saving');
       const ok = await sendVerdict(itemId, verdict, window.location.href);
       setOverlayState(refs, 'recorded', verdictMsg(verdict, ok));
+      if (ok) setTimeout(() => window.close(), 800);
     };
 
     refs.btnHit.addEventListener('click',     () => onVerdict('hit'));
