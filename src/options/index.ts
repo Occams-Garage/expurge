@@ -406,7 +406,7 @@ function buildItemRow(item: WorkItem): HTMLElement {
       statusEl.textContent = 'Saving…';
       try {
         await browser.runtime.sendMessage({
-          type: 'VERDICT', itemId: item.id, verdict, listingUrl: item.listingUrl,
+          type: 'REVERDICT', itemId: item.id, verdict, listingUrl: item.listingUrl,
         });
         if (currentRun) {
           currentRun = {
