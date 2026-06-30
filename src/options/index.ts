@@ -196,6 +196,23 @@ function stopPolling(): void {
 
 // ── results section ───────────────────────────────────────────────────────────
 
+// Everything that affects a broker group's rendered output. When this is unchanged
+// the group's DOM is left untouched on re-render (see renderResults).
+function groupSignature(items: WorkItem[]): string {
+  return items
+    .map(i => `${i.id}|${i.verdict ?? ''}|${i.status}|${i.skipReason ?? ''}|${i.optedOutAt ?? ''}|${i.listingUrl ?? ''}`)
+    .join(';');
+}
+
+// Carry a user's collapsed state onto a freshly rebuilt group.
+function preserveCollapse(prev: HTMLElement, fresh: HTMLElement): void {
+  const collapsed = prev.querySelector('.broker-group-body')?.classList.contains('hidden');
+  if (!collapsed) return;
+  fresh.querySelector('.broker-group-body')?.classList.add('hidden');
+  const chev = fresh.querySelector<HTMLElement>('.broker-group-chevron');
+  if (chev) chev.textContent = '▸';
+}
+
 function renderResults(run: RunState): void {
   document.getElementById('results-empty')!.classList.add('hidden');
   document.getElementById('results-content')!.classList.remove('hidden');
@@ -211,11 +228,45 @@ function renderResults(run: RunState): void {
   const notInRun = BROKERS.filter(b => !inRun.has(b.id));
 
   const container = document.getElementById('results-groups')!;
-  container.innerHTML = '';
-  for (const [brokerId, items] of groups) {
-    container.appendChild(buildBrokerGroup(brokerId, items));
+
+  // Group-keyed reconciliation: rebuild a broker group only when its items changed.
+  // Untouched groups keep their existing DOM nodes, so expanded draft panels, the
+  // collapse state, and scroll position survive the 2s poll and re-verdicts —
+  // instead of being torn down by a full container.innerHTML rebuild every tick.
+  const existing = new Map<string, HTMLElement>();
+  for (const el of Array.from(container.querySelectorAll<HTMLElement>('.broker-group[data-broker]'))) {
+    existing.set(el.dataset['broker']!, el);
   }
-  if (notInRun.length > 0) container.appendChild(buildNotCheckedGroup(notInRun));
+  const notCheckedEl = container.querySelector<HTMLElement>('.broker-group:not([data-broker])');
+
+  for (const [brokerId, items] of groups) {
+    const sig  = groupSignature(items);
+    const prev = existing.get(brokerId);
+    if (prev && prev.dataset['sig'] === sig) continue; // unchanged — leave it in place
+
+    const fresh = buildBrokerGroup(brokerId, items);
+    fresh.dataset['sig'] = sig;
+    if (prev) {
+      preserveCollapse(prev, fresh);
+      prev.replaceWith(fresh);
+    } else if (notCheckedEl) {
+      container.insertBefore(fresh, notCheckedEl);
+    } else {
+      container.appendChild(fresh);
+    }
+  }
+
+  // Drop groups for brokers no longer in this run (e.g. after a new run starts).
+  for (const [brokerId, el] of existing) {
+    if (!groups.has(brokerId)) el.remove();
+  }
+
+  // "Not checked" is static across a run — build it once, then leave it alone.
+  if (notInRun.length > 0 && !notCheckedEl) {
+    container.appendChild(buildNotCheckedGroup(notInRun));
+  } else if (notInRun.length === 0 && notCheckedEl) {
+    notCheckedEl.remove();
+  }
 }
 
 function nameForVariant(item: WorkItem): string {
@@ -451,6 +502,10 @@ function refreshBrokerGroupHeader(brokerId: string): void {
   else                            { optStatus = 'not started'; statusClass = 'status-partial'; }
   statusEl.textContent = optStatus;
   statusEl.className = `broker-group-optstatus ${statusClass}`;
+
+  // Keep the stored signature current so the next poll-driven renderResults sees
+  // this group as unchanged and leaves the (now open) draft panel in place.
+  groupEl.dataset['sig'] = groupSignature(items);
 }
 
 // ── draft loading + rendering ─────────────────────────────────────────────────
