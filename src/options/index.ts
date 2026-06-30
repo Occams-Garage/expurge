@@ -14,6 +14,7 @@ let currentRun: RunState | null = null;
 let currentProfile: Profile | null = null;
 let sendMethod: SendMethod = 'mailto';
 let pollHandle: number | null = null;
+let lastResultsSig = ''; // results view signature of the last render — gates the 2s poll
 
 // ── section routing ──────────────────────────────────────────────────────────
 
@@ -196,13 +197,22 @@ function stopPolling(): void {
 
 // ── results section ───────────────────────────────────────────────────────────
 
-// One item's contribution to its group's rendered output. status collapses to a
-// verdicted-or-not flag (pending and open render identically as "checking…"), and
+// One item's contribution to its group's rendered output — must include every field
+// buildItemRow renders, or a change to it won't refresh the row. status collapses to
+// a verdicted-or-not flag (pending and open render identically as "checking…"), and
 // optedOutAt to a boolean (only its presence is rendered, and the optimistic client
-// timestamp never equals the background's). A row whose signature is unchanged is
-// left untouched on re-render.
+// timestamp never equals the background's). nameForVariant is included so editing the
+// (live) primary profile name re-renders its rows. A row whose signature is unchanged
+// is left untouched on re-render.
 function itemRowSignature(i: WorkItem): string {
-  return `${i.verdict ?? ''}|${i.status === 'verdicted' ? 'v' : '_'}|${i.skipReason ?? ''}|${i.optedOutAt ? '1' : ''}|${i.listingUrl ?? ''}`;
+  return [
+    nameForVariant(i),
+    i.verdict ?? '',
+    i.status === 'verdicted' ? 'v' : '_',
+    i.skipReason ?? '',
+    i.optedOutAt ? '1' : '',
+    i.listingUrl ?? '',
+  ].join('|');
 }
 
 // A broker group's signature is the ordered concatenation of its item row signatures.
@@ -235,9 +245,14 @@ function sortItems(items: WorkItem[]): WorkItem[] {
   ];
 }
 
-// Create / update / remove the opt-out status pill in a group header.
-function applyOptStatusPill(groupEl: HTMLElement, hitCount: number, sentCount: number): void {
-  const opt = optStatusFor(hitCount, sentCount);
+// Update a group header's summary text and opt-out status pill in place. Single
+// source of header rendering, shared by buildBrokerGroup, reconcileBrokerGroup, and
+// the optimistic mark-sent refresh.
+function updateGroupHeader(groupEl: HTMLElement, items: WorkItem[]): void {
+  groupEl.querySelector<HTMLElement>('.broker-group-summary')!.textContent = brokerSummary(items);
+  const hits = items.filter(i => i.verdict === 'hit');
+  const sentCount = hits.filter(i => i.optedOutAt).length;
+  const opt = optStatusFor(hits.length, sentCount);
   let span = groupEl.querySelector<HTMLElement>('.broker-group-optstatus');
   if (!opt) { span?.remove(); return; }
   if (!span) {
@@ -252,15 +267,22 @@ function renderResults(run: RunState): void {
   document.getElementById('results-empty')!.classList.add('hidden');
   document.getElementById('results-content')!.classList.remove('hidden');
 
+  const inRun = new Set(run.items.map(i => i.brokerId));
+  const notInRun = BROKERS.filter(b => !inRun.has(b.id));
+  const ncSig = notInRun.map(b => `${b.id}:${b.status}`).join(';');
+
+  // Top-level early-out: skip the whole reconcile when nothing the results view
+  // renders has changed since the last render (the common case on the 2s poll).
+  const renderSig = run.items.map(i => `${i.id}:${itemRowSignature(i)}`).join(';') + '#' + ncSig;
+  if (renderSig === lastResultsSig) return;
+  lastResultsSig = renderSig;
+
   const groups = new Map<string, WorkItem[]>();
   for (const item of run.items) {
     const g = groups.get(item.brokerId) ?? [];
     g.push(item);
     groups.set(item.brokerId, g);
   }
-
-  const inRun = new Set(run.items.map(i => i.brokerId));
-  const notInRun = BROKERS.filter(b => !inRun.has(b.id));
 
   const container = document.getElementById('results-groups')!;
 
@@ -291,11 +313,15 @@ function renderResults(run: RunState): void {
     if (!groups.has(brokerId)) el.remove();
   }
 
-  // "Not checked" is static across a run — build it once, then leave it alone.
-  if (notInRun.length > 0 && !notCheckedEl) {
-    container.appendChild(buildNotCheckedGroup(notInRun));
-  } else if (notInRun.length === 0 && notCheckedEl) {
-    notCheckedEl.remove();
+  // "Not checked" group: rebuild only when its membership/status set changes
+  // (e.g. a new run with a different broker set, or a dataset update).
+  if (notInRun.length === 0) {
+    notCheckedEl?.remove();
+  } else if (!notCheckedEl || notCheckedEl.dataset['sig'] !== ncSig) {
+    const nc = buildNotCheckedGroup(notInRun);
+    nc.dataset['sig'] = ncSig;
+    if (notCheckedEl) notCheckedEl.replaceWith(nc);
+    else container.appendChild(nc);
   }
 }
 
@@ -333,7 +359,7 @@ function buildBrokerGroup(brokerId: string, items: WorkItem[]): HTMLElement {
   header.innerHTML = `
     <span class="broker-group-chevron">▾</span>
     <span class="broker-group-name">${esc(brokerName)}</span>
-    <span class="broker-group-summary">${esc(brokerSummary(items))}</span>
+    <span class="broker-group-summary"></span>
   `;
 
   const body = document.createElement('div');
@@ -349,8 +375,7 @@ function buildBrokerGroup(brokerId: string, items: WorkItem[]): HTMLElement {
   div.appendChild(header);
   div.appendChild(body);
 
-  const hits = items.filter(i => i.verdict === 'hit');
-  applyOptStatusPill(div, hits.length, hits.filter(i => i.optedOutAt).length);
+  updateGroupHeader(div, items);
   return div;
 }
 
@@ -359,9 +384,7 @@ function buildBrokerGroup(brokerId: string, items: WorkItem[]): HTMLElement {
 // open draft panel on it survives a sibling item's change; only changed rows are
 // rebuilt, and rows are reordered to match the current sort.
 function reconcileBrokerGroup(groupEl: HTMLElement, items: WorkItem[]): void {
-  groupEl.querySelector<HTMLElement>('.broker-group-summary')!.textContent = brokerSummary(items);
-  const hits = items.filter(i => i.verdict === 'hit');
-  applyOptStatusPill(groupEl, hits.length, hits.filter(i => i.optedOutAt).length);
+  updateGroupHeader(groupEl, items);
 
   const body = groupEl.querySelector<HTMLElement>('.broker-group-body')!;
   const existingRows = new Map<string, HTMLElement>();
@@ -536,8 +559,7 @@ function refreshBrokerGroupHeader(brokerId: string): void {
   const groupEl = document.querySelector<HTMLElement>(`.broker-group[data-broker="${CSS.escape(brokerId)}"]`);
   if (!groupEl) return;
   const items = currentRun.items.filter(i => i.brokerId === brokerId);
-  const hits = items.filter(i => i.verdict === 'hit');
-  applyOptStatusPill(groupEl, hits.length, hits.filter(i => i.optedOutAt).length);
+  updateGroupHeader(groupEl, items);
 
   // Keep the stored group + row signatures current so the next poll-driven
   // renderResults sees this group as unchanged and leaves the (now open) draft
@@ -550,6 +572,20 @@ function refreshBrokerGroupHeader(brokerId: string): void {
 }
 
 // ── draft loading + rendering ─────────────────────────────────────────────────
+
+// Drafts are built from the live profile, so a profile edit makes every cached
+// panel stale. Drop the load cache; reload any panel that's currently open.
+function invalidateDraftPanels(): void {
+  for (const panel of Array.from(document.querySelectorAll<HTMLElement>('.draft-panel'))) {
+    delete panel.dataset['loaded'];
+    if (panel.classList.contains('hidden')) continue;
+    const itemId = (panel.closest('.broker-item-row') as HTMLElement | null)?.dataset['item'];
+    const item = itemId ? currentRun?.items.find(i => i.id === itemId) : undefined;
+    if (!item) continue;
+    panel.dataset['loaded'] = '1';
+    loadDraftPanel(panel, item).catch(err => { console.error(err); delete panel.dataset['loaded']; });
+  }
+}
 
 async function loadDraftPanel(panel: HTMLElement, item: WorkItem): Promise<void> {
   panel.textContent = 'Loading…';
@@ -755,6 +791,7 @@ async function handleProfileSave(e: Event): Promise<void> {
   btn.disabled = true;
   await browser.runtime.sendMessage({ type: 'SAVE_PROFILE', profile });
   currentProfile = profile;
+  invalidateDraftPanels(); // drafts are built from the profile — drop stale cached panels
   btn.disabled = false;
   savedEl.classList.remove('hidden');
   setTimeout(() => savedEl.classList.add('hidden'), 3000);
@@ -808,6 +845,7 @@ async function handleDeleteAll(): Promise<void> {
   await browser.runtime.sendMessage({ type: 'DELETE_ALL' });
   currentProfile = null;
   currentRun = null;
+  lastResultsSig = ''; // run cleared — drop the early-out cache so the next render rebuilds
   stopPolling();
   (document.getElementById('profile-form') as HTMLFormElement).reset();
   document.getElementById('delete-confirm-panel')!.classList.add('hidden');
