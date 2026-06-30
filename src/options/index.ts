@@ -801,9 +801,11 @@ function buildAkaRow(aka?: AkaName): HTMLElement {
   remove.textContent = '×';
   remove.setAttribute('aria-label', 'Remove this name');
   remove.addEventListener('click', () => {
-    const container = row.parentElement;
+    const focusAfter = (row.nextElementSibling ?? row.previousElementSibling) as HTMLElement | null;
     row.remove();
-    if (container && container.children.length === 0) container.appendChild(buildAkaRow());
+    ensureOneAkaRow(); // never leave the list empty
+    const target = focusAfter ?? document.querySelector<HTMLElement>('#aka-rows .aka-row');
+    target?.querySelector<HTMLInputElement>('input[data-aka="first"]')?.focus();
   });
 
   row.append(mkInput('first', 'First'), mkInput('middle', 'Middle'), mkInput('last', 'Last'), remove);
@@ -811,15 +813,22 @@ function buildAkaRow(aka?: AkaName): HTMLElement {
 }
 
 function addAkaRow(aka?: AkaName): void {
-  document.getElementById('aka-rows')!.appendChild(buildAkaRow(aka));
+  const row = buildAkaRow(aka);
+  document.getElementById('aka-rows')!.appendChild(row);
+  row.querySelector<HTMLInputElement>('input[data-aka="first"]')?.focus();
+}
+
+// The "Other names" list always keeps at least one row. Querying `.aka-row` (not the
+// raw child count) keeps the invariant robust if a non-row node is ever added here.
+function ensureOneAkaRow(): void {
+  const container = document.getElementById('aka-rows')!;
+  if (!container.querySelector('.aka-row')) container.appendChild(buildAkaRow());
 }
 
 // Clear and repopulate the rows; always leave at least one (empty) row.
 function resetAkaRows(akas: AkaName[]): void {
-  const container = document.getElementById('aka-rows')!;
-  container.replaceChildren();
-  if (akas.length === 0) { container.appendChild(buildAkaRow()); return; }
-  for (const aka of akas) container.appendChild(buildAkaRow(aka));
+  document.getElementById('aka-rows')!.replaceChildren(...akas.map(aka => buildAkaRow(aka)));
+  ensureOneAkaRow();
 }
 
 // Read one row's trimmed First/Middle/Last values.
@@ -921,7 +930,15 @@ async function handleExport(): Promise<void> {
     browser.runtime.sendMessage({ type: 'GET_RUN_STATE' }),
   ]) as [{ profile?: Profile }, { run?: RunState }];
 
-  const json = JSON.stringify({ expurge_export: true, profile: profileRes.profile ?? null, run: runRes.run ?? null }, null, 2);
+  // Export the canonical profile shape (normalize legacy/raw also_known_as) and stamp a
+  // schema version so a future importer can tell payload shapes apart.
+  let profile: Profile | null = null;
+  if (profileRes.profile) {
+    const akas = normalizeAkas(profileRes.profile.also_known_as);
+    profile = { ...profileRes.profile, also_known_as: akas.length ? akas : undefined };
+  }
+
+  const json = JSON.stringify({ expurge_export: true, version: 1, profile, run: runRes.run ?? null }, null, 2);
   const url  = URL.createObjectURL(new Blob([json], { type: 'application/json' }));
   try {
     await browser.downloads.download({ url, filename: 'expurge-session.json', saveAs: true });
@@ -1072,6 +1089,19 @@ document.getElementById('btn-run-again')!.addEventListener('click', () => { hand
 
 document.getElementById('profile-form')!.addEventListener('submit', e => { handleProfileSave(e).catch(console.error); });
 document.getElementById('btn-add-aka')!.addEventListener('click', () => addAkaRow());
+
+// Enter inside an AKA input must not submit the whole profile form (these are
+// single-line inputs in a form with a submit button). Treat it like the old
+// "one name per line" textarea: insert a fresh row after the current one.
+document.getElementById('aka-rows')!.addEventListener('keydown', e => {
+  if (e.key !== 'Enter') return;
+  const target = e.target as HTMLElement;
+  if (!target.matches('input[data-aka]')) return;
+  e.preventDefault();
+  const newRow = buildAkaRow();
+  target.closest('.aka-row')!.after(newRow);
+  newRow.querySelector<HTMLInputElement>('input[data-aka="first"]')?.focus();
+});
 
 document.getElementById('send-method-group')!.addEventListener('change', e => {
   const radio = e.target as HTMLInputElement;
