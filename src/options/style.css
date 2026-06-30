@@ -398,15 +398,6 @@ textarea {
   font-weight: var(--fw-medium);
 }
 
-.result-name-tag {
-  display: inline-block;
-  margin-left: var(--s-2);
-  font-size: var(--fs-mono);
-  font-family: var(--font-mono);
-  color: var(--text-muted);
-  letter-spacing: var(--tracking-mono);
-}
-
 .skip-reason {
   font-family: var(--font-mono);
   font-size: var(--fs-mono);
@@ -692,7 +683,7 @@ textarea {
 .broker-group-body {
   padding-left: var(--s-5);
   border-left: 2px solid var(--border);
-  margin-left: 4px;
+  margin-left: var(--s-1);
 }
 
 .broker-item-row {
@@ -728,8 +719,6 @@ textarea {
 .verdict-skipped { color: var(--text-faint); }
 
 /* ── review group (unknown re-verdict) ────────────────────── */
-
-.review-listing-row { margin: var(--s-1) 0 var(--s-2); }
 
 .review-listing-link {
   font-size: var(--fs-small);
