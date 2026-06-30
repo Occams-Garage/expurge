@@ -24,7 +24,7 @@
 - 2026-06-28 | 2026-06-28-amo-compliance | AMO compliance review: four build constraints | areas: permissions | topics: webextensions, privacy | stories: [] | active
 - 2026-06-28 | 2026-06-28-ux-architecture | Popup as run control panel; options page as primary UI with four nav sections | areas: run-model, profile, coverage-report, opt-out-drafts | topics: webextensions, ux | stories: [] | active
 - 2026-06-28 | 2026-06-28-run-section-states | Run section: four states, pause/stop controls, one-row-per-broker monitor | areas: run-model | topics: webextensions, ux, data-model | stories: [] | active
-- 2026-06-28 | 2026-06-28-results-section | Results section: four verdict groups, clear collapsed, nudge pattern, mini-run | areas: coverage-report, run-model | topics: ux, data-model | stories: [] | active
+- 2026-06-28 | 2026-06-28-results-section | Results section: four verdict groups, clear collapsed, nudge pattern, mini-run | areas: coverage-report, run-model | topics: ux, data-model | stories: [] | superseded -> 2026-06-30-results-broker-grouped
 - 2026-06-28 | 2026-06-28-draft-opt-out-status | Draft panels: opt-out status tracking, form instruction cards, general_contact callout | areas: opt-out-drafts | topics: ux, data-model | stories: [] | active
 - 2026-06-28 | 2026-06-28-permissions-flow | Permissions: all-at-once at run start, denied brokers skipped | areas: permissions, run-model | topics: webextensions, ux | stories: [] | active
 - 2026-06-28 | 2026-06-28-first-fetch-consent | First-fetch consent in Profile section at setup; weekly lazy auto-cadence | areas: broker-dataset, profile | topics: dataset-distribution, ux, privacy | stories: [] | active
@@ -36,3 +36,5 @@
 - 2026-06-29 | 2026-06-29-per-component-licensing | Per-component licensing: GPL/AGPL/ODbL | areas: broker-dataset | topics: licensing, dataset-distribution | stories: [] | active
 - 2026-06-29 | 2026-06-29-m6-options-design-decisions | M6 options page design tradeoffs | areas: run-model, opt-out-drafts, coverage-report | topics: ux, webextensions, data-model | stories: [] | active
 - 2026-06-29 | 2026-06-29-m6-grilling-bugs | M6 grilling: three bugs found | areas: run-model, opt-out-drafts | topics: webextensions, data-model | stories: [] | active
+- 2026-06-30 | 2026-06-30-aka-name-in-drafts | AKA name used in opt-out draft body | areas: opt-out-drafts | topics: data-model | stories: [] | active
+- 2026-06-30 | 2026-06-30-results-broker-grouped | Results page redesigned: broker-grouped layout | areas: coverage-report, matching-overlay | topics: ux, data-model | stories: [] | active
