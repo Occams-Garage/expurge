@@ -200,7 +200,10 @@ function stopPolling(): void {
 // the group's DOM is left untouched on re-render (see renderResults).
 function groupSignature(items: WorkItem[]): string {
   return items
-    .map(i => `${i.id}|${i.verdict ?? ''}|${i.status}|${i.skipReason ?? ''}|${i.optedOutAt ?? ''}|${i.listingUrl ?? ''}`)
+    // optedOutAt as a boolean: only its presence is rendered, and the optimistic
+    // (client) timestamp never equals the background's — keying the raw value would
+    // make every mark-sent spuriously rebuild the group and collapse the open panel.
+    .map(i => `${i.id}|${i.verdict ?? ''}|${i.status}|${i.skipReason ?? ''}|${i.optedOutAt ? '1' : ''}|${i.listingUrl ?? ''}`)
     .join(';');
 }
 
@@ -270,19 +273,12 @@ function renderResults(run: RunState): void {
 }
 
 function nameForVariant(item: WorkItem): string {
-  // The resolved name is frozen on the item at run time — no re-parse of the
-  // (mutable) profile, so labels stay correct after AKA edits.
-  const name = [item.variantFirst, item.variantLast].filter(Boolean).join(' ');
-  if (name) return name;
-
-  // Fallback for items predating variant-name capture.
+  // Primary tracks the live profile (no drift); AKA variants use the name frozen
+  // on the item at run time, so labels stay correct after the AKA list is edited.
   if (item.nameVariant === 'primary') {
     return currentProfile ? `${currentProfile.first} ${currentProfile.last}`.trim() : 'primary';
   }
-  const idx = parseInt(item.nameVariant.replace('aka_', ''), 10);
-  return (!isNaN(idx) && currentProfile?.also_known_as?.[idx])
-    ? currentProfile.also_known_as[idx]
-    : item.nameVariant;
+  return [item.variantFirst, item.variantLast].filter(Boolean).join(' ') || item.nameVariant;
 }
 
 // Opt-out send status for a broker's hits — single source of truth for the
@@ -362,7 +358,7 @@ function buildItemRow(item: WorkItem): HTMLElement {
       <div class="broker-item-header">
         <span class="broker-item-name">${esc(name)}</span>
         <span class="broker-item-verdict verdict-hit">hit</span>
-        <button class="btn-draft-toggle${sentAt ? ' sent' : ''}" data-item="${esc(item.id)}">
+        <button class="btn-draft-toggle${sentAt ? ' sent' : ''}" data-item="${escAttr(item.id)}">
           ${sentAt ? 'Sent ✓' : 'Get opt-out request'}
         </button>
       </div>
@@ -374,8 +370,11 @@ function buildItemRow(item: WorkItem): HTMLElement {
       if (panel.classList.contains('hidden')) {
         panel.classList.remove('hidden');
         if (!panel.dataset['loaded']) {
-          panel.dataset['loaded'] = '1';
-          loadDraftPanel(panel, item).catch(console.error);
+          panel.dataset['loaded'] = '1'; // set first so a double-click doesn't double-load
+          loadDraftPanel(panel, item).catch(err => {
+            console.error(err);
+            delete panel.dataset['loaded']; // transient failure — allow reopen to retry
+          });
         }
       } else {
         panel.classList.add('hidden');
