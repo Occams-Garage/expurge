@@ -12,6 +12,8 @@ export interface WorkItem {
   id: string;              // "{brokerId}:{nameVariant}"
   brokerId: string;
   nameVariant: string;
+  variantFirst: string;    // first name resolved for this variant, frozen at run time
+  variantLast: string;     // last name resolved for this variant (may be empty for single-token AKAs)
   renderedUrl: string;
   status: WorkItemStatus;
   tabId?: number;          // live-session scratch only — never written to durable storage
@@ -49,6 +51,7 @@ export interface GetRunStateMsg { type: 'GET_RUN_STATE' }
 export interface GetDraftMsg    { type: 'GET_DRAFT';    itemId: string }
 export interface GetItemMsg     { type: 'GET_ITEM' }
 export interface VerdictMsg     { type: 'VERDICT'; itemId: string; verdict: Verdict; skipReason?: SkipReason; listingUrl?: string }
+export interface ReverdictMsg   { type: 'REVERDICT'; itemId: string; verdict: Verdict; listingUrl?: string }
 export interface SaveProfileMsg { type: 'SAVE_PROFILE'; profile: Profile }
 export interface GetProfileMsg  { type: 'GET_PROFILE' }
 export interface MarkSentMsg    { type: 'MARK_SENT';    itemId: string }
@@ -73,5 +76,5 @@ export interface ReinjMsg  { type: 'REINJECT_OVERLAY'; tabId?: number }
 export interface StopRunMsg { type: 'STOP_RUN' }
 
 export type ToBackground =
-  | StartRunMsg | GetRunStateMsg | GetDraftMsg | GetItemMsg | VerdictMsg
+  | StartRunMsg | GetRunStateMsg | GetDraftMsg | GetItemMsg | VerdictMsg | ReverdictMsg
   | PingMsg | ReinjMsg | StopRunMsg | SaveProfileMsg | GetProfileMsg | MarkSentMsg | DeleteAllMsg | CloseTabMsg;

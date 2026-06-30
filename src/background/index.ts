@@ -75,14 +75,18 @@ function buildItems(profile: Profile): WorkItem[] {
   const items: WorkItem[] = [];
 
   // Name variants: primary name first, then each AKA split on the first space.
+  // This split is the single source of truth for a variant's name — the resolved
+  // first/last are stored on each WorkItem so drafts and labels never re-parse the
+  // (mutable) profile later.
   const variants: Array<{ nameVariant: string; first: string; last: string }> = [
-    { nameVariant: 'primary', first: profile.first, last: profile.last },
+    { nameVariant: 'primary', first: profile.first.trim(), last: profile.last.trim() },
     ...(profile.also_known_as ?? []).map((aka, i) => {
-      const sp = aka.indexOf(' ');
+      const t  = aka.trim();
+      const sp = t.indexOf(' ');
       return {
         nameVariant: `aka_${i}`,
-        first: sp >= 0 ? aka.slice(0, sp) : aka,
-        last:  sp >= 0 ? aka.slice(sp + 1) : '',
+        first: sp >= 0 ? t.slice(0, sp) : t,
+        last:  sp >= 0 ? t.slice(sp + 1).trim() : '',
       };
     }),
   ];
@@ -103,6 +107,8 @@ function buildItems(profile: Profile): WorkItem[] {
           id: `${broker.id}:${variant.nameVariant}`,
           brokerId: broker.id,
           nameVariant: variant.nameVariant,
+          variantFirst: variant.first,
+          variantLast: variant.last,
           renderedUrl: '',
           status: 'verdicted',
           verdict: 'skipped',
@@ -114,6 +120,8 @@ function buildItems(profile: Profile): WorkItem[] {
         id: `${broker.id}:${variant.nameVariant}`,
         brokerId: broker.id,
         nameVariant: variant.nameVariant,
+        variantFirst: variant.first,
+        variantLast: variant.last,
         renderedUrl: renderUrl(broker.search.url, vProfile),
         status: 'pending',
       });
@@ -131,10 +139,16 @@ async function openNextBatch(run: RunState, focusFirst = false): Promise<void> {
 
   // At most one open tab per broker — prevents hammering the same site with
   // multiple AKA queries in parallel, which triggers bot-detection / CAPTCHAs.
-  const openBrokers = new Set(run.items.filter(i => i.status === 'open').map(i => i.brokerId));
-  const pending = run.items
-    .filter(i => i.status === 'pending' && !openBrokers.has(i.brokerId))
-    .slice(0, slots);
+  // The broker set is seeded from already-open tabs and grows as we select, so a
+  // second variant of the same broker can't join this batch either.
+  const claimedBrokers = new Set(run.items.filter(i => i.status === 'open').map(i => i.brokerId));
+  const pending: WorkItem[] = [];
+  for (const item of run.items) {
+    if (pending.length >= slots) break;
+    if (item.status !== 'pending' || claimedBrokers.has(item.brokerId)) continue;
+    pending.push(item);
+    claimedBrokers.add(item.brokerId);
+  }
   if (pending.length === 0) return;
 
   const pendingIds = new Set(pending.map(p => p.id));
@@ -172,24 +186,36 @@ async function handleStartRun(profile: Profile): Promise<void> {
   });
 }
 
+// Pure: return a run with the given item's verdict applied. Shared by the
+// live-tab verdict path and the dashboard re-verdict path so they can't drift.
+function withVerdict(run: RunState, itemId: string, verdict: Verdict, listingUrl?: string): RunState {
+  return {
+    ...run,
+    items: run.items.map(i => {
+      if (i.id !== itemId) return i;
+      // Drop matchedAs first, then re-add only for a hit — so a hit→non-hit
+      // re-verdict can't leave a stale match. Keep the existing listingUrl unless
+      // a new one is supplied (don't wipe a captured URL with undefined).
+      const { matchedAs: _drop, ...rest } = i;
+      return {
+        ...rest,
+        status: 'verdicted' as WorkItemStatus,
+        verdict,
+        ...(listingUrl !== undefined ? { listingUrl } : {}),
+        ...(verdict === 'hit' ? { matchedAs: i.nameVariant } : {}),
+      };
+    }),
+  };
+}
+
+// Verdict from a live broker tab: record it, drop the tab's tracking key, and
+// advance the run.
 async function handleVerdict(itemId: string, verdict: Verdict, listingUrl?: string, tabId?: number): Promise<void> {
   return serialWrite(async () => {
     const run = await loadRun();
     if (!run) return;
 
-    const updated: RunState = {
-      ...run,
-      items: run.items.map(i => {
-        if (i.id !== itemId) return i;
-        return {
-          ...i,
-          status: 'verdicted' as WorkItemStatus,
-          verdict,
-          listingUrl,
-          ...(verdict === 'hit' ? { matchedAs: i.nameVariant } : {}),
-        };
-      }),
-    };
+    const updated = withVerdict(run, itemId, verdict, listingUrl);
     await saveRun(updated);
 
     if (tabId !== undefined) {
@@ -198,6 +224,25 @@ async function handleVerdict(itemId: string, verdict: Verdict, listingUrl?: stri
 
     await updateBadge(updated);
     await openNextBatch(updated);
+  });
+}
+
+// Re-verdict from the results dashboard: a pure state edit of an already-recorded
+// item. Never touches tab tracking or opens tabs.
+async function handleReverdict(itemId: string, verdict: Verdict, listingUrl?: string): Promise<void> {
+  return serialWrite(async () => {
+    const run = await loadRun();
+    if (!run) return;
+
+    // Only edit an already-verdicted item. Item ids are deterministic and reused
+    // across runs, so a stale dashboard re-verdict (button from a prior run) must
+    // not clobber a pending/open item in a freshly-started run.
+    const target = run.items.find(i => i.id === itemId);
+    if (!target || target.status !== 'verdicted') return;
+
+    const updated = withVerdict(run, itemId, verdict, listingUrl);
+    await saveRun(updated);
+    await updateBadge(updated);
   });
 }
 
@@ -304,6 +349,15 @@ browser.runtime.onMessage.addListener(
       return { type: 'ACK', itemId: m.itemId };
     }
 
+    if (m.type === 'REVERDICT') {
+      await handleReverdict(
+        m.itemId as string,
+        m.verdict as Verdict,
+        m.listingUrl as string | undefined,
+      );
+      return { type: 'ACK', itemId: m.itemId };
+    }
+
     if (m.type === 'STOP_RUN') {
       await handleStopRun();
       return { ok: true };
@@ -366,19 +420,12 @@ browser.runtime.onMessage.addListener(
       const gate = evaluateGate(broker, 'hit');
       if (!gate.pass) return { draft: null, reason: gate.reason };
 
-      let draftProfile = profile;
-      if (hitItem.nameVariant.startsWith('aka_')) {
-        const idx = parseInt(hitItem.nameVariant.replace('aka_', ''), 10);
-        const aka = profile.also_known_as?.[idx];
-        if (aka) {
-          const sp = aka.indexOf(' ');
-          draftProfile = {
-            ...profile,
-            first: sp >= 0 ? aka.slice(0, sp) : aka,
-            last:  sp >= 0 ? aka.slice(sp + 1) : '',
-          };
-        }
-      }
+      // AKA hits use the name resolved at run time (frozen on the item) — re-parsing
+      // the mutable also_known_as list would drift. The primary variant has no such
+      // drift (it's the raw profile name), so it tracks the live profile.
+      const draftProfile: Profile = hitItem.nameVariant === 'primary'
+        ? profile
+        : { ...profile, first: hitItem.variantFirst, last: hitItem.variantLast };
       const draft = buildDraft(draftProfile, broker, gate.channel, hitItem.listingUrl);
       return { draft };
     }
@@ -400,7 +447,8 @@ browser.runtime.onMessage.addListener(
         const updated: RunState = {
           ...run,
           items: run.items.map(i =>
-            i.id === (m.itemId as string) && i.verdict === 'hit'
+            // Don't re-stamp an already-sent item — preserves the original send date.
+            i.id === (m.itemId as string) && i.verdict === 'hit' && !i.optedOutAt
               ? { ...i, optedOutAt: new Date().toISOString() }
               : i
           ),

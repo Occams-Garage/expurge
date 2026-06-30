@@ -39,3 +39,4 @@
 - 2026-06-30 | 2026-06-30-aka-name-in-drafts | AKA name used in opt-out draft body | areas: opt-out-drafts | topics: data-model | stories: [] | active
 - 2026-06-30 | 2026-06-30-results-broker-grouped | Results page redesigned: broker-grouped layout | areas: coverage-report, matching-overlay | topics: ux, data-model | stories: [] | active
 - 2026-06-30 | 2026-06-30-overlay-tab-vs-overlay | Overlay-on-page vs side-by-side tab | areas: matching-overlay | topics: ux | stories: [] | active
+- 2026-06-30 | 2026-06-30-stop-only-run-control | Run control is stop-only; pause dropped | areas: run-model | topics: ux, webextensions | stories: [] | active

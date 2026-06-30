@@ -14,6 +14,7 @@ let currentRun: RunState | null = null;
 let currentProfile: Profile | null = null;
 let sendMethod: SendMethod = 'mailto';
 let pollHandle: number | null = null;
+let lastResultsSig = ''; // results view signature of the last render — gates the 2s poll
 
 // ── section routing ──────────────────────────────────────────────────────────
 
@@ -30,6 +31,23 @@ function showSection(id: Section): void {
 
 function esc(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+// Escape for use inside a double-quoted HTML attribute (esc() alone leaves " intact).
+function escAttr(s: string): string {
+  return esc(s).replace(/"/g, '&quot;');
+}
+
+// Only allow http(s) URLs to be rendered as links in this privileged page.
+// Blocks javascript:/data:/etc. schemes; returns '' for anything unsafe.
+function safeHttpUrl(url: string | undefined): string {
+  if (!url) return '';
+  try {
+    const u = new URL(url);
+    return (u.protocol === 'http:' || u.protocol === 'https:') ? url : '';
+  } catch {
+    return '';
+  }
 }
 
 // ── run section ──────────────────────────────────────────────────────────────
@@ -75,10 +93,11 @@ function showRunDisplayState(state: RunDisplayState, run?: RunState | null): voi
       );
       const hits  = run.items.filter(i => i.verdict === 'hit').length;
       const sites = new Set(checkable.map(i => i.brokerId)).size;
+      const hitSites = new Set(run.items.filter(i => i.verdict === 'hit').map(i => i.brokerId)).size;
       const names = new Set(checkable.map(i => i.nameVariant)).size;
       let desc: string;
       if (hits > 0) {
-        desc = `Found ${hits} listing${hits !== 1 ? 's' : ''} across ${sites} site${sites !== 1 ? 's' : ''}. Check Results for opt-out requests.`;
+        desc = `Found ${hits} listing${hits !== 1 ? 's' : ''} across ${hitSites} site${hitSites !== 1 ? 's' : ''}. Check Results for opt-out requests.`;
       } else if (names > 1) {
         desc = `Checked ${names} names across ${sites} site${sites !== 1 ? 's' : ''} — no listings found.`;
       } else {
@@ -178,9 +197,85 @@ function stopPolling(): void {
 
 // ── results section ───────────────────────────────────────────────────────────
 
+// One item's contribution to its group's rendered output — must include every field
+// buildItemRow renders, or a change to it won't refresh the row. status collapses to
+// a verdicted-or-not flag (pending and open render identically as "checking…"), and
+// optedOutAt to a boolean (only its presence is rendered, and the optimistic client
+// timestamp never equals the background's). nameForVariant is included so editing the
+// (live) primary profile name re-renders its rows. A row whose signature is unchanged
+// is left untouched on re-render.
+function itemRowSignature(i: WorkItem): string {
+  return [
+    nameForVariant(i),
+    i.verdict ?? '',
+    i.status === 'verdicted' ? 'v' : '_',
+    i.skipReason ?? '',
+    i.optedOutAt ? '1' : '',
+    i.listingUrl ?? '',
+  ].join('|');
+}
+
+// A broker group's signature is the ordered concatenation of its item row signatures.
+function groupSignature(items: WorkItem[]): string {
+  return items.map(i => `${i.id}:${itemRowSignature(i)}`).join(';');
+}
+
+function brokerSummary(items: WorkItem[]): string {
+  const hits     = items.filter(i => i.verdict === 'hit').length;
+  const clears   = items.filter(i => i.verdict === 'clear').length;
+  const unknowns = items.filter(i => i.verdict === 'unknown').length;
+  const skipped  = items.filter(i => i.verdict === 'skipped').length;
+  const checking = items.filter(i => i.status !== 'verdicted').length;
+  const parts: string[] = [];
+  if (hits > 0)     parts.push(`${hits} hit${hits !== 1 ? 's' : ''}`);
+  if (clears > 0)   parts.push(`${clears} not found`);
+  if (unknowns > 0) parts.push(`${unknowns} couldn't tell`);
+  if (checking > 0) parts.push(`${checking} checking`);
+  if (skipped > 0)  parts.push(`${skipped} skipped`);
+  return parts.join(' · ') || 'no results';
+}
+
+// Item display order within a group: hits, then unknowns, clears, everything else.
+function sortItems(items: WorkItem[]): WorkItem[] {
+  return [
+    ...items.filter(i => i.verdict === 'hit'),
+    ...items.filter(i => i.verdict === 'unknown'),
+    ...items.filter(i => i.verdict === 'clear'),
+    ...items.filter(i => i.verdict !== 'hit' && i.verdict !== 'unknown' && i.verdict !== 'clear'),
+  ];
+}
+
+// Update a group header's summary text and opt-out status pill in place. Single
+// source of header rendering, shared by buildBrokerGroup, reconcileBrokerGroup, and
+// the optimistic mark-sent refresh.
+function updateGroupHeader(groupEl: HTMLElement, items: WorkItem[]): void {
+  groupEl.querySelector<HTMLElement>('.broker-group-summary')!.textContent = brokerSummary(items);
+  const hits = items.filter(i => i.verdict === 'hit');
+  const sentCount = hits.filter(i => i.optedOutAt).length;
+  const opt = optStatusFor(hits.length, sentCount);
+  let span = groupEl.querySelector<HTMLElement>('.broker-group-optstatus');
+  if (!opt) { span?.remove(); return; }
+  if (!span) {
+    span = document.createElement('span');
+    groupEl.querySelector('.broker-group-header')!.appendChild(span);
+  }
+  span.textContent = opt.text;
+  span.className = `broker-group-optstatus ${opt.className}`;
+}
+
 function renderResults(run: RunState): void {
   document.getElementById('results-empty')!.classList.add('hidden');
   document.getElementById('results-content')!.classList.remove('hidden');
+
+  const inRun = new Set(run.items.map(i => i.brokerId));
+  const notInRun = BROKERS.filter(b => !inRun.has(b.id));
+  const ncSig = notInRun.map(b => `${b.id}:${b.status}`).join(';');
+
+  // Top-level early-out: skip the whole reconcile when nothing the results view
+  // renders has changed since the last render (the common case on the 2s poll).
+  const renderSig = run.items.map(i => `${i.id}:${itemRowSignature(i)}`).join(';') + '#' + ncSig;
+  if (renderSig === lastResultsSig) return;
+  lastResultsSig = renderSig;
 
   const groups = new Map<string, WorkItem[]>();
   for (const item of run.items) {
@@ -189,60 +284,82 @@ function renderResults(run: RunState): void {
     groups.set(item.brokerId, g);
   }
 
-  const inRun = new Set(run.items.map(i => i.brokerId));
-  const notInRun = BROKERS.filter(b => !inRun.has(b.id));
-
   const container = document.getElementById('results-groups')!;
-  container.innerHTML = '';
-  for (const [brokerId, items] of groups) {
-    container.appendChild(buildBrokerGroup(brokerId, items));
+
+  // Reconcile per broker group, keyed on data-broker. An unchanged group is left
+  // alone; a changed group is reconciled IN PLACE with rows keyed by item id, so an
+  // expanded draft panel on an unrelated row in the same group — plus the group's
+  // collapse state and scroll position — survives the 2s poll and re-verdicts,
+  // instead of being torn down by a full rebuild.
+  const existing = new Map<string, HTMLElement>();
+  for (const el of Array.from(container.querySelectorAll<HTMLElement>('.broker-group[data-broker]'))) {
+    existing.set(el.dataset['broker']!, el);
   }
-  if (notInRun.length > 0) container.appendChild(buildNotCheckedGroup(notInRun));
+  const notCheckedEl = container.querySelector<HTMLElement>('.broker-group:not([data-broker])');
+
+  for (const [brokerId, items] of groups) {
+    const prev = existing.get(brokerId);
+    if (prev) {
+      if (prev.dataset['sig'] !== groupSignature(items)) reconcileBrokerGroup(prev, items);
+    } else {
+      const fresh = buildBrokerGroup(brokerId, items);
+      if (notCheckedEl) container.insertBefore(fresh, notCheckedEl);
+      else container.appendChild(fresh);
+    }
+  }
+
+  // Drop groups for brokers no longer in this run (e.g. after a new run starts).
+  for (const [brokerId, el] of existing) {
+    if (!groups.has(brokerId)) el.remove();
+  }
+
+  // "Not checked" group: rebuild only when its membership/status set changes
+  // (e.g. a new run with a different broker set, or a dataset update).
+  if (notInRun.length === 0) {
+    notCheckedEl?.remove();
+  } else if (!notCheckedEl || notCheckedEl.dataset['sig'] !== ncSig) {
+    const nc = buildNotCheckedGroup(notInRun);
+    nc.dataset['sig'] = ncSig;
+    if (notCheckedEl) notCheckedEl.replaceWith(nc);
+    else container.appendChild(nc);
+  }
 }
 
-function nameForVariant(nameVariant: string): string {
-  if (nameVariant === 'primary') {
-    return currentProfile ? `${currentProfile.first} ${currentProfile.last}` : 'primary';
+function nameForVariant(item: WorkItem): string {
+  // Primary tracks the live profile (no drift); AKA variants use the name frozen
+  // on the item at run time, so labels stay correct after the AKA list is edited.
+  if (item.nameVariant === 'primary') {
+    return currentProfile ? `${currentProfile.first} ${currentProfile.last}`.trim() : 'primary';
   }
-  const idx = parseInt(nameVariant.replace('aka_', ''), 10);
-  return (!isNaN(idx) && currentProfile?.also_known_as?.[idx])
-    ? currentProfile.also_known_as[idx]
-    : nameVariant;
+  return [item.variantFirst, item.variantLast].filter(Boolean).join(' ') || item.nameVariant;
+}
+
+// Opt-out send status for a broker's hits — single source of truth for the
+// header pill (text + class), shared by initial render and the mark-sent patch.
+// Returns null when there are no hits (no pill).
+function optStatusFor(hitCount: number, sentCount: number): { text: string; className: string } | null {
+  if (hitCount === 0) return null;
+  const className = sentCount === hitCount ? 'status-done' : 'status-partial';
+  const text = sentCount === hitCount ? 'all sent'
+    : sentCount > 0 ? `${sentCount}/${hitCount} sent`
+    : 'not started';
+  return { text, className };
 }
 
 function buildBrokerGroup(brokerId: string, items: WorkItem[]): HTMLElement {
   const brokerName = getBroker(brokerId)?.name ?? brokerId;
-  const hits     = items.filter(i => i.verdict === 'hit');
-  const clears   = items.filter(i => i.verdict === 'clear');
-  const unknowns = items.filter(i => i.verdict === 'unknown');
-  const sentCount = hits.filter(i => i.optedOutAt).length;
-
-  const parts: string[] = [];
-  if (hits.length > 0)     parts.push(`${hits.length} hit${hits.length !== 1 ? 's' : ''}`);
-  if (clears.length > 0)   parts.push(`${clears.length} not found`);
-  if (unknowns.length > 0) parts.push(`${unknowns.length} couldn't tell`);
-  const otherCount = items.length - hits.length - clears.length - unknowns.length;
-  if (otherCount > 0)      parts.push(`${otherCount} skipped`);
-  const summary = parts.join(' · ') || 'no results';
-
-  let optStatus = '';
-  if (hits.length > 0) {
-    if (sentCount === hits.length)  optStatus = 'all sent';
-    else if (sentCount > 0)         optStatus = `${sentCount}/${hits.length} sent`;
-    else                            optStatus = 'not started';
-  }
 
   const div = document.createElement('div');
   div.className = 'broker-group';
   div.dataset['broker'] = brokerId;
+  div.dataset['sig'] = groupSignature(items);
 
   const header = document.createElement('button');
   header.className = 'broker-group-header';
   header.innerHTML = `
     <span class="broker-group-chevron">▾</span>
     <span class="broker-group-name">${esc(brokerName)}</span>
-    <span class="broker-group-summary">${esc(summary)}</span>
-    ${optStatus ? `<span class="broker-group-optstatus ${sentCount === hits.length ? 'status-done' : 'status-partial'}">${esc(optStatus)}</span>` : ''}
+    <span class="broker-group-summary"></span>
   `;
 
   const body = document.createElement('div');
@@ -253,23 +370,51 @@ function buildBrokerGroup(brokerId: string, items: WorkItem[]): HTMLElement {
     header.querySelector<HTMLElement>('.broker-group-chevron')!.textContent = collapsed ? '▸' : '▾';
   });
 
-  const sorted = [
-    ...hits,
-    ...unknowns,
-    ...clears,
-    ...items.filter(i => i.verdict !== 'hit' && i.verdict !== 'unknown' && i.verdict !== 'clear'),
-  ];
-  for (const item of sorted) body.appendChild(buildItemRow(item));
+  for (const item of sortItems(items)) body.appendChild(buildItemRow(item));
 
   div.appendChild(header);
   div.appendChild(body);
+
+  updateGroupHeader(div, items);
   return div;
 }
 
+// Update an existing broker group in place: header summary + pill, and body rows
+// keyed by item id. A row whose signature is unchanged keeps its DOM node — so an
+// open draft panel on it survives a sibling item's change; only changed rows are
+// rebuilt, and rows are reordered to match the current sort.
+function reconcileBrokerGroup(groupEl: HTMLElement, items: WorkItem[]): void {
+  updateGroupHeader(groupEl, items);
+
+  const body = groupEl.querySelector<HTMLElement>('.broker-group-body')!;
+  const existingRows = new Map<string, HTMLElement>();
+  for (const r of Array.from(body.children) as HTMLElement[]) {
+    if (r.dataset['item']) existingRows.set(r.dataset['item'], r);
+  }
+
+  let anchor: HTMLElement | null = null;
+  for (const item of sortItems(items)) {
+    const prev = existingRows.get(item.id);
+    const rowEl = (prev && prev.dataset['rowsig'] === itemRowSignature(item))
+      ? prev                       // unchanged — keep node (preserves an open draft panel)
+      : buildItemRow(item);
+    if (anchor) { if (anchor.nextElementSibling !== rowEl) anchor.after(rowEl); }
+    else        { if (body.firstElementChild !== rowEl)    body.prepend(rowEl); }
+    anchor = rowEl;
+  }
+
+  const liveIds = new Set(items.map(i => i.id));
+  for (const [id, r] of existingRows) if (!liveIds.has(id)) r.remove();
+
+  groupEl.dataset['sig'] = groupSignature(items);
+}
+
 function buildItemRow(item: WorkItem): HTMLElement {
-  const name = nameForVariant(item.nameVariant);
+  const name = nameForVariant(item);
   const row = document.createElement('div');
   row.className = 'broker-item-row';
+  row.dataset['item'] = item.id;
+  row.dataset['rowsig'] = itemRowSignature(item);
 
   if (item.verdict === 'hit') {
     const sentAt = item.optedOutAt;
@@ -277,7 +422,7 @@ function buildItemRow(item: WorkItem): HTMLElement {
       <div class="broker-item-header">
         <span class="broker-item-name">${esc(name)}</span>
         <span class="broker-item-verdict verdict-hit">hit</span>
-        <button class="btn-draft-toggle${sentAt ? ' sent' : ''}" data-item="${esc(item.id)}">
+        <button class="btn-draft-toggle${sentAt ? ' sent' : ''}" data-item="${escAttr(item.id)}">
           ${sentAt ? 'Sent ✓' : 'Get opt-out request'}
         </button>
       </div>
@@ -288,15 +433,22 @@ function buildItemRow(item: WorkItem): HTMLElement {
     btn.addEventListener('click', () => {
       if (panel.classList.contains('hidden')) {
         panel.classList.remove('hidden');
-        loadDraftPanel(panel, item).catch(console.error);
+        if (!panel.dataset['loaded']) {
+          panel.dataset['loaded'] = '1'; // set first so a double-click doesn't double-load
+          loadDraftPanel(panel, item).catch(err => {
+            console.error(err);
+            delete panel.dataset['loaded']; // transient failure — allow reopen to retry
+          });
+        }
       } else {
         panel.classList.add('hidden');
       }
     });
 
   } else if (item.verdict === 'unknown') {
-    const listingLink = item.listingUrl
-      ? `<a class="review-listing-link" href="${esc(item.listingUrl)}" target="_blank">Open listing →</a>` : '';
+    const listingHref = safeHttpUrl(item.listingUrl);
+    const listingLink = listingHref
+      ? `<a class="review-listing-link" href="${escAttr(listingHref)}" target="_blank" rel="noopener noreferrer">Open listing →</a>` : '';
     row.innerHTML = `
       <div class="broker-item-header">
         <span class="broker-item-name">${esc(name)}</span>
@@ -317,7 +469,7 @@ function buildItemRow(item: WorkItem): HTMLElement {
       statusEl.textContent = 'Saving…';
       try {
         await browser.runtime.sendMessage({
-          type: 'VERDICT', itemId: item.id, verdict, listingUrl: item.listingUrl,
+          type: 'REVERDICT', itemId: item.id, verdict, listingUrl: item.listingUrl,
         });
         if (currentRun) {
           currentRun = {
@@ -347,11 +499,15 @@ function buildItemRow(item: WorkItem): HTMLElement {
     `;
 
   } else {
-    const reason = item.skipReason?.replace('missing:', 'missing ') ?? 'skipped';
+    // No verdict yet → still in the run; a verdicted item here is a real skip.
+    const label = item.status !== 'verdicted'
+      ? 'checking…'
+      : (item.skipReason?.replace('missing:', 'missing ') ?? 'skipped');
+    const cls = item.status !== 'verdicted' ? 'verdict-unknown' : 'verdict-skipped';
     row.innerHTML = `
       <div class="broker-item-header">
         <span class="broker-item-name">${esc(name)}</span>
-        <span class="broker-item-verdict verdict-skipped">${esc(reason)}</span>
+        <span class="broker-item-verdict ${cls}">${esc(label)}</span>
       </div>
     `;
   }
@@ -400,28 +556,36 @@ function buildNotCheckedGroup(brokers: readonly (typeof BROKERS)[number][]): HTM
 
 function refreshBrokerGroupHeader(brokerId: string): void {
   if (!currentRun) return;
-  const groupEl = Array.from(document.querySelectorAll<HTMLElement>('.broker-group'))
-    .find(el => el.dataset['broker'] === brokerId);
+  const groupEl = document.querySelector<HTMLElement>(`.broker-group[data-broker="${CSS.escape(brokerId)}"]`);
   if (!groupEl) return;
   const items = currentRun.items.filter(i => i.brokerId === brokerId);
-  const hits = items.filter(i => i.verdict === 'hit');
-  if (hits.length === 0) return;
-  const sentCount = hits.filter(i => i.optedOutAt).length;
-  let optStatus: string;
-  let statusClass: string;
-  if (sentCount === hits.length)  { optStatus = 'all sent'; statusClass = 'status-done'; }
-  else if (sentCount > 0)         { optStatus = `${sentCount}/${hits.length} sent`; statusClass = 'status-partial'; }
-  else                            { optStatus = 'not started'; statusClass = 'status-partial'; }
-  let statusEl = groupEl.querySelector<HTMLElement>('.broker-group-optstatus');
-  if (!statusEl) {
-    statusEl = document.createElement('span');
-    groupEl.querySelector('.broker-group-header')?.appendChild(statusEl);
+  updateGroupHeader(groupEl, items);
+
+  // Keep the stored group + row signatures current so the next poll-driven
+  // renderResults sees this group as unchanged and leaves the (now open) draft
+  // panel in place, rather than reconciling the row and tearing it down.
+  for (const item of items) {
+    const rowEl = groupEl.querySelector<HTMLElement>(`.broker-item-row[data-item="${CSS.escape(item.id)}"]`);
+    if (rowEl) rowEl.dataset['rowsig'] = itemRowSignature(item);
   }
-  statusEl.textContent = optStatus;
-  statusEl.className = `broker-group-optstatus ${statusClass}`;
+  groupEl.dataset['sig'] = groupSignature(items);
 }
 
 // ── draft loading + rendering ─────────────────────────────────────────────────
+
+// Drafts are built from the live profile, so a profile edit makes every cached
+// panel stale. Drop the load cache; reload any panel that's currently open.
+function invalidateDraftPanels(): void {
+  for (const panel of Array.from(document.querySelectorAll<HTMLElement>('.draft-panel'))) {
+    delete panel.dataset['loaded'];
+    if (panel.classList.contains('hidden')) continue;
+    const itemId = (panel.closest('.broker-item-row') as HTMLElement | null)?.dataset['item'];
+    const item = itemId ? currentRun?.items.find(i => i.id === itemId) : undefined;
+    if (!item) continue;
+    panel.dataset['loaded'] = '1';
+    loadDraftPanel(panel, item).catch(err => { console.error(err); delete panel.dataset['loaded']; });
+  }
+}
 
 async function loadDraftPanel(panel: HTMLElement, item: WorkItem): Promise<void> {
   panel.textContent = 'Loading…';
@@ -456,7 +620,9 @@ function renderEmailDraftInPanel(panel: HTMLElement, draft: EmailDraft, item: Wo
     </div>
     <div class="copy-area hidden"><textarea readonly>${esc(copyText)}</textarea></div>
     <div class="draft-mark-sent">
-      <button class="btn-quiet" data-action="mark-sent">Mark as sent</button>
+      ${item.optedOutAt
+        ? '<span class="sent-badge">Sent ✓</span>'
+        : '<button class="btn-quiet" data-action="mark-sent">Mark as sent</button>'}
     </div>
   `;
 
@@ -467,7 +633,7 @@ function renderEmailDraftInPanel(panel: HTMLElement, draft: EmailDraft, item: Wo
   panel.querySelector<HTMLButtonElement>('[data-action="eml"]')!.onclick = async () => {
     const url = URL.createObjectURL(new Blob([toEml(draft)], { type: 'message/rfc822' }));
     try {
-      await browser.downloads.download({ url, filename: `expurge-optout-${item.brokerId}.eml`, saveAs: false });
+      await browser.downloads.download({ url, filename: `expurge-optout-${item.brokerId}-${item.nameVariant}.eml`, saveAs: false });
     } finally {
       URL.revokeObjectURL(url);
     }
@@ -486,16 +652,21 @@ function renderEmailDraftInPanel(panel: HTMLElement, draft: EmailDraft, item: Wo
     }
   };
 
-  panel.querySelector<HTMLButtonElement>('[data-action="mark-sent"]')!.onclick = async () => {
-    await browser.runtime.sendMessage({ type: 'MARK_SENT', itemId: item.id });
+  const markSentBtn = panel.querySelector<HTMLButtonElement>('[data-action="mark-sent"]');
+  if (markSentBtn) markSentBtn.onclick = async () => {
+    try {
+      await browser.runtime.sendMessage({ type: 'MARK_SENT', itemId: item.id });
+    } catch {
+      return; // leave the button actionable so the user can retry
+    }
     panel.querySelector('.draft-mark-sent')!.innerHTML = '<span class="sent-badge">Sent ✓</span>';
-    const toggleBtn = document.querySelector<HTMLButtonElement>(`.btn-draft-toggle[data-item="${item.id}"]`);
+    const toggleBtn = document.querySelector<HTMLButtonElement>(`.btn-draft-toggle[data-item="${CSS.escape(item.id)}"]`);
     if (toggleBtn) { toggleBtn.textContent = 'Sent ✓'; toggleBtn.classList.add('sent'); }
     if (currentRun) {
       currentRun = {
         ...currentRun,
         items: currentRun.items.map(i =>
-          i.id === item.id ? { ...i, optedOutAt: new Date().toISOString() } : i
+          i.id === item.id && !i.optedOutAt ? { ...i, optedOutAt: new Date().toISOString() } : i
         ),
       };
       refreshBrokerGroupHeader(item.brokerId);
@@ -504,7 +675,6 @@ function renderEmailDraftInPanel(panel: HTMLElement, draft: EmailDraft, item: Wo
 }
 
 function renderFormDraftInPanel(panel: HTMLElement, draft: FormDraft, item: WorkItem): void {
-  const brokerId = item.brokerId;
   const fieldsHtml = draft.fields.map(f => `
     <tr>
       <td class="form-field-label">${esc(f.label)}</td>
@@ -529,7 +699,9 @@ function renderFormDraftInPanel(panel: HTMLElement, draft: FormDraft, item: Work
     </div>
     <button class="btn-send btn-send-primary" data-action="open-form">Open opt-out form →</button>
     <div class="draft-mark-sent">
-      <button class="btn-quiet" data-action="mark-submitted">Mark as submitted</button>
+      ${item.optedOutAt
+        ? '<span class="sent-badge">Submitted ✓</span>'
+        : '<button class="btn-quiet" data-action="mark-submitted">Mark as submitted</button>'}
     </div>
   `;
 
@@ -537,16 +709,21 @@ function renderFormDraftInPanel(panel: HTMLElement, draft: FormDraft, item: Work
     browser.tabs.create({ url: draft.formUrl }).catch(console.error);
   };
 
-  panel.querySelector<HTMLButtonElement>('[data-action="mark-submitted"]')!.onclick = async () => {
-    await browser.runtime.sendMessage({ type: 'MARK_SENT', itemId: item.id });
+  const markSubmittedBtn = panel.querySelector<HTMLButtonElement>('[data-action="mark-submitted"]');
+  if (markSubmittedBtn) markSubmittedBtn.onclick = async () => {
+    try {
+      await browser.runtime.sendMessage({ type: 'MARK_SENT', itemId: item.id });
+    } catch {
+      return; // leave the button actionable so the user can retry
+    }
     panel.querySelector('.draft-mark-sent')!.innerHTML = '<span class="sent-badge">Submitted ✓</span>';
-    const toggleBtn = document.querySelector<HTMLButtonElement>(`.btn-draft-toggle[data-item="${item.id}"]`);
+    const toggleBtn = document.querySelector<HTMLButtonElement>(`.btn-draft-toggle[data-item="${CSS.escape(item.id)}"]`);
     if (toggleBtn) { toggleBtn.textContent = 'Submitted ✓'; toggleBtn.classList.add('sent'); }
     if (currentRun) {
       currentRun = {
         ...currentRun,
         items: currentRun.items.map(i =>
-          i.id === item.id ? { ...i, optedOutAt: new Date().toISOString() } : i
+          i.id === item.id && !i.optedOutAt ? { ...i, optedOutAt: new Date().toISOString() } : i
         ),
       };
       refreshBrokerGroupHeader(item.brokerId);
@@ -614,6 +791,7 @@ async function handleProfileSave(e: Event): Promise<void> {
   btn.disabled = true;
   await browser.runtime.sendMessage({ type: 'SAVE_PROFILE', profile });
   currentProfile = profile;
+  invalidateDraftPanels(); // drafts are built from the profile — drop stale cached panels
   btn.disabled = false;
   savedEl.classList.remove('hidden');
   setTimeout(() => savedEl.classList.add('hidden'), 3000);
@@ -667,6 +845,7 @@ async function handleDeleteAll(): Promise<void> {
   await browser.runtime.sendMessage({ type: 'DELETE_ALL' });
   currentProfile = null;
   currentRun = null;
+  lastResultsSig = ''; // run cleared — drop the early-out cache so the next render rebuilds
   stopPolling();
   (document.getElementById('profile-form') as HTMLFormElement).reset();
   document.getElementById('delete-confirm-panel')!.classList.add('hidden');
