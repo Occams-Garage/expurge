@@ -514,8 +514,12 @@ async function sendVerdict(
 
 // Ask the background to close this tab (a content script can't reliably close a
 // tab it didn't open). The short delay lets the user read the "✓ recorded" status
-// before the tab disappears.
+// before the tab disappears. The latch makes the close idempotent regardless of
+// whether callers disabled their buttons, so rapid actions can't stack timers.
+let closingSelf = false;
 function closeSelfTab(): void {
+  if (closingSelf) return;
+  closingSelf = true;
   setTimeout(() => {
     browser.runtime.sendMessage({ type: 'CLOSE_TAB' }).catch(() => {});
   }, 800);

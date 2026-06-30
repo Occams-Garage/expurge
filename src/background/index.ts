@@ -193,11 +193,15 @@ function withVerdict(run: RunState, itemId: string, verdict: Verdict, listingUrl
     ...run,
     items: run.items.map(i => {
       if (i.id !== itemId) return i;
+      // Drop matchedAs first, then re-add only for a hit — so a hit→non-hit
+      // re-verdict can't leave a stale match. Keep the existing listingUrl unless
+      // a new one is supplied (don't wipe a captured URL with undefined).
+      const { matchedAs: _drop, ...rest } = i;
       return {
-        ...i,
+        ...rest,
         status: 'verdicted' as WorkItemStatus,
         verdict,
-        listingUrl,
+        ...(listingUrl !== undefined ? { listingUrl } : {}),
         ...(verdict === 'hit' ? { matchedAs: i.nameVariant } : {}),
       };
     }),
