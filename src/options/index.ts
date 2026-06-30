@@ -70,13 +70,21 @@ function showRunDisplayState(state: RunDisplayState, run?: RunState | null): voi
       if (!run) break;
       stopPolling();
       document.getElementById('run-done')!.classList.remove('hidden');
-      const hits = run.items.filter(i => i.verdict === 'hit').length;
-      const total = run.items.filter(
+      const checkable = run.items.filter(
         i => !(typeof i.skipReason === 'string' && i.skipReason.startsWith('missing:'))
-      ).length;
-      document.getElementById('run-done-desc')!.textContent = hits > 0
-        ? `Found your data on ${hits} site${hits !== 1 ? 's' : ''} out of ${total} checked. Check Results for opt-out requests.`
-        : `Checked ${total} site${total !== 1 ? 's' : ''} — your data wasn't found on any of them.`;
+      );
+      const hits  = run.items.filter(i => i.verdict === 'hit').length;
+      const sites = new Set(checkable.map(i => i.brokerId)).size;
+      const names = new Set(checkable.map(i => i.nameVariant)).size;
+      let desc: string;
+      if (hits > 0) {
+        desc = `Found ${hits} listing${hits !== 1 ? 's' : ''} across ${sites} site${sites !== 1 ? 's' : ''}. Check Results for opt-out requests.`;
+      } else if (names > 1) {
+        desc = `Checked ${names} names across ${sites} site${sites !== 1 ? 's' : ''} — no listings found.`;
+      } else {
+        desc = `Checked ${sites} site${sites !== 1 ? 's' : ''} — no listings found.`;
+      }
+      document.getElementById('run-done-desc')!.textContent = desc;
       break;
     }
   }
@@ -181,153 +189,256 @@ function renderResults(run: RunState): void {
     groups.set(item.brokerId, g);
   }
 
-  const listed: WorkItem[] = [], unknown: WorkItem[] = [];
-  const skipped: WorkItem[] = [], clear: WorkItem[] = [];
-
-  for (const items of groups.values()) {
-    const rep = items.find(i => i.verdict === 'hit')
-      ?? items.find(i => i.verdict === 'unknown')
-      ?? items.find(i => i.verdict === 'clear')
-      ?? items[0];
-    if (!rep) continue;
-    if (rep.verdict === 'hit')          listed.push(rep);
-    else if (rep.verdict === 'unknown') unknown.push(rep);
-    else if (rep.verdict === 'clear')   clear.push(rep);
-    else                                skipped.push(rep);
-  }
-
   const inRun = new Set(run.items.map(i => i.brokerId));
   const notInRun = BROKERS.filter(b => !inRun.has(b.id));
 
   const container = document.getElementById('results-groups')!;
   container.innerHTML = '';
-
-  if (listed.length > 0)   container.appendChild(buildResultGroup('Listed', listed, true, run));
-  if (unknown.length > 0)  container.appendChild(buildResultGroup("Couldn't tell", unknown, false, run));
-  if (skipped.length > 0)  container.appendChild(buildResultGroup('Skipped', skipped, false, run));
-  if (clear.length > 0)    container.appendChild(buildCollapsibleGroup('Not found', clear));
+  for (const [brokerId, items] of groups) {
+    container.appendChild(buildBrokerGroup(brokerId, items));
+  }
   if (notInRun.length > 0) container.appendChild(buildNotCheckedGroup(notInRun));
 }
 
-function buildResultGroup(title: string, items: WorkItem[], hasDraft: boolean, run: RunState): HTMLElement {
+function nameForVariant(nameVariant: string): string {
+  if (nameVariant === 'primary') {
+    return currentProfile ? `${currentProfile.first} ${currentProfile.last}` : 'primary';
+  }
+  const idx = parseInt(nameVariant.replace('aka_', ''), 10);
+  return (!isNaN(idx) && currentProfile?.also_known_as?.[idx])
+    ? currentProfile.also_known_as[idx]
+    : nameVariant;
+}
+
+function buildBrokerGroup(brokerId: string, items: WorkItem[]): HTMLElement {
+  const brokerName = getBroker(brokerId)?.name ?? brokerId;
+  const hits     = items.filter(i => i.verdict === 'hit');
+  const clears   = items.filter(i => i.verdict === 'clear');
+  const unknowns = items.filter(i => i.verdict === 'unknown');
+  const sentCount = hits.filter(i => i.optedOutAt).length;
+
+  const parts: string[] = [];
+  if (hits.length > 0)     parts.push(`${hits.length} hit${hits.length !== 1 ? 's' : ''}`);
+  if (clears.length > 0)   parts.push(`${clears.length} not found`);
+  if (unknowns.length > 0) parts.push(`${unknowns.length} couldn't tell`);
+  const otherCount = items.length - hits.length - clears.length - unknowns.length;
+  if (otherCount > 0)      parts.push(`${otherCount} skipped`);
+  const summary = parts.join(' · ') || 'no results';
+
+  let optStatus = '';
+  if (hits.length > 0) {
+    if (sentCount === hits.length)  optStatus = 'all sent';
+    else if (sentCount > 0)         optStatus = `${sentCount}/${hits.length} sent`;
+    else                            optStatus = 'not started';
+  }
+
   const div = document.createElement('div');
-  div.className = 'results-group';
-  div.innerHTML = `
-    <div class="results-group-header">
-      <span class="results-group-title">${esc(title)}</span>
-      <span class="results-count">${items.length}</span>
-    </div>
+  div.className = 'broker-group';
+  div.dataset['broker'] = brokerId;
+
+  const header = document.createElement('button');
+  header.className = 'broker-group-header';
+  header.innerHTML = `
+    <span class="broker-group-chevron">▾</span>
+    <span class="broker-group-name">${esc(brokerName)}</span>
+    <span class="broker-group-summary">${esc(summary)}</span>
+    ${optStatus ? `<span class="broker-group-optstatus ${sentCount === hits.length ? 'status-done' : 'status-partial'}">${esc(optStatus)}</span>` : ''}
   `;
 
-  for (const item of items) {
-    const name     = getBroker(item.brokerId)?.name ?? item.brokerId;
-    const hitItem  = run.items.find(i => i.brokerId === item.brokerId && i.verdict === 'hit');
-    const sentAt   = hitItem?.optedOutAt;
-
-    const row = document.createElement('div');
-    row.className = 'result-item';
-    row.innerHTML = `
-      <div class="result-item-header">
-        <span class="result-broker-name">${esc(name)}</span>
-        <div>
-          ${hasDraft
-            ? `<button class="btn-draft-toggle${sentAt ? ' sent' : ''}" data-broker="${esc(item.brokerId)}">
-                 ${sentAt ? 'Sent ✓' : 'Get opt-out request'}
-               </button>`
-            : `<span class="skip-reason">${esc(item.skipReason ?? item.verdict ?? '')}</span>`}
-        </div>
-      </div>
-      <div class="draft-panel hidden"></div>
-    `;
-
-    if (hasDraft && !sentAt) {
-      const btn   = row.querySelector<HTMLButtonElement>('.btn-draft-toggle')!;
-      const panel = row.querySelector<HTMLElement>('.draft-panel')!;
-      btn.addEventListener('click', () => {
-        if (panel.classList.contains('hidden')) {
-          panel.classList.remove('hidden');
-          if (!panel.dataset['loaded']) {
-            panel.dataset['loaded'] = '1';
-            loadDraftPanel(panel, item.brokerId).catch(console.error);
-          }
-        } else {
-          panel.classList.add('hidden');
-        }
-      });
-    }
-
-    div.appendChild(row);
-  }
-  return div;
-}
-
-function buildCollapsibleGroup(title: string, items: WorkItem[]): HTMLElement {
-  return buildToggleGroup(title, items, item => {
-    const row = document.createElement('div');
-    row.className = 'result-item';
-    row.innerHTML = `
-      <div class="result-item-header">
-        <span class="result-broker-name">${esc(getBroker(item.brokerId)?.name ?? item.brokerId)}</span>
-        <span class="badge badge-clear">not listed</span>
-      </div>`;
-    return row;
-  });
-}
-
-function buildNotCheckedGroup(brokers: readonly (typeof BROKERS)[number][]): HTMLElement {
-  return buildToggleGroup('Not checked', brokers as unknown as WorkItem[], b => {
-    const broker = b as unknown as (typeof BROKERS)[number];
-    const row = document.createElement('div');
-    row.className = 'result-item';
-    row.innerHTML = `
-      <div class="result-item-header">
-        <span class="result-broker-name">${esc(broker.name)}</span>
-        <span class="badge badge-skipped">${broker.status}</span>
-      </div>`;
-    return row;
-  });
-}
-
-function buildToggleGroup<T>(title: string, items: T[], renderItem: (item: T) => HTMLElement): HTMLElement {
-  const div = document.createElement('div');
-  div.className = 'results-group';
-
-  const toggle = document.createElement('button');
-  toggle.className = 'results-group-toggle';
-  toggle.innerHTML = `<span class="results-group-title">${esc(title)}</span><span class="results-count">${items.length} ▸</span>`;
-
   const body = document.createElement('div');
-  body.className = 'hidden';
+  body.className = 'broker-group-body';
 
-  toggle.addEventListener('click', () => {
+  header.addEventListener('click', () => {
     const collapsed = body.classList.toggle('hidden');
-    toggle.querySelector<HTMLElement>('.results-count')!.textContent = `${items.length} ${collapsed ? '▸' : '▾'}`;
+    header.querySelector<HTMLElement>('.broker-group-chevron')!.textContent = collapsed ? '▸' : '▾';
   });
 
-  for (const item of items) body.appendChild(renderItem(item));
-  div.appendChild(toggle);
+  const sorted = [
+    ...hits,
+    ...unknowns,
+    ...clears,
+    ...items.filter(i => i.verdict !== 'hit' && i.verdict !== 'unknown' && i.verdict !== 'clear'),
+  ];
+  for (const item of sorted) body.appendChild(buildItemRow(item));
+
+  div.appendChild(header);
   div.appendChild(body);
   return div;
 }
 
+function buildItemRow(item: WorkItem): HTMLElement {
+  const name = nameForVariant(item.nameVariant);
+  const row = document.createElement('div');
+  row.className = 'broker-item-row';
+
+  if (item.verdict === 'hit') {
+    const sentAt = item.optedOutAt;
+    row.innerHTML = `
+      <div class="broker-item-header">
+        <span class="broker-item-name">${esc(name)}</span>
+        <span class="broker-item-verdict verdict-hit">hit</span>
+        <button class="btn-draft-toggle${sentAt ? ' sent' : ''}" data-item="${esc(item.id)}">
+          ${sentAt ? 'Sent ✓' : 'Get opt-out request'}
+        </button>
+      </div>
+      <div class="draft-panel hidden"></div>
+    `;
+    const btn   = row.querySelector<HTMLButtonElement>('.btn-draft-toggle')!;
+    const panel = row.querySelector<HTMLElement>('.draft-panel')!;
+    btn.addEventListener('click', () => {
+      if (panel.classList.contains('hidden')) {
+        panel.classList.remove('hidden');
+        loadDraftPanel(panel, item).catch(console.error);
+      } else {
+        panel.classList.add('hidden');
+      }
+    });
+
+  } else if (item.verdict === 'unknown') {
+    const listingLink = item.listingUrl
+      ? `<a class="review-listing-link" href="${esc(item.listingUrl)}" target="_blank">Open listing →</a>` : '';
+    row.innerHTML = `
+      <div class="broker-item-header">
+        <span class="broker-item-name">${esc(name)}</span>
+        <span class="broker-item-verdict verdict-unknown">couldn't tell</span>
+      </div>
+      <div class="review-verdict-row">
+        ${listingLink}
+        <button class="btn-review-hit">Yes, this is me</button>
+        <button class="btn-review-clear">No, not me</button>
+      </div>
+      <div class="review-status"></div>
+    `;
+    const statusEl = row.querySelector<HTMLElement>('.review-status')!;
+    const hitBtn   = row.querySelector<HTMLButtonElement>('.btn-review-hit')!;
+    const clearBtn = row.querySelector<HTMLButtonElement>('.btn-review-clear')!;
+    const reverdictFrom = async (verdict: 'hit' | 'clear'): Promise<void> => {
+      hitBtn.disabled = clearBtn.disabled = true;
+      statusEl.textContent = 'Saving…';
+      try {
+        await browser.runtime.sendMessage({
+          type: 'VERDICT', itemId: item.id, verdict, listingUrl: item.listingUrl,
+        });
+        if (currentRun) {
+          currentRun = {
+            ...currentRun,
+            items: currentRun.items.map(i =>
+              i.id === item.id
+                ? { ...i, verdict, ...(verdict === 'hit' ? { matchedAs: i.nameVariant } : {}) }
+                : i
+            ),
+          };
+          renderResults(currentRun);
+        }
+      } catch {
+        statusEl.textContent = 'Save failed — try again.';
+        hitBtn.disabled = clearBtn.disabled = false;
+      }
+    };
+    hitBtn.addEventListener('click',   () => { reverdictFrom('hit').catch(console.error); });
+    clearBtn.addEventListener('click', () => { reverdictFrom('clear').catch(console.error); });
+
+  } else if (item.verdict === 'clear') {
+    row.innerHTML = `
+      <div class="broker-item-header">
+        <span class="broker-item-name">${esc(name)}</span>
+        <span class="broker-item-verdict verdict-clear">not listed</span>
+      </div>
+    `;
+
+  } else {
+    const reason = item.skipReason?.replace('missing:', 'missing ') ?? 'skipped';
+    row.innerHTML = `
+      <div class="broker-item-header">
+        <span class="broker-item-name">${esc(name)}</span>
+        <span class="broker-item-verdict verdict-skipped">${esc(reason)}</span>
+      </div>
+    `;
+  }
+
+  return row;
+}
+
+function buildNotCheckedGroup(brokers: readonly (typeof BROKERS)[number][]): HTMLElement {
+  const div = document.createElement('div');
+  div.className = 'broker-group';
+
+  const header = document.createElement('button');
+  header.className = 'broker-group-header';
+  header.innerHTML = `
+    <span class="broker-group-chevron">▸</span>
+    <span class="broker-group-name">Not checked</span>
+    <span class="broker-group-summary">${brokers.length} broker${brokers.length !== 1 ? 's' : ''} not in this run</span>
+  `;
+
+  const body = document.createElement('div');
+  body.className = 'broker-group-body hidden';
+
+  header.addEventListener('click', () => {
+    const collapsed = body.classList.toggle('hidden');
+    header.querySelector<HTMLElement>('.broker-group-chevron')!.textContent = collapsed ? '▸' : '▾';
+  });
+
+  for (const broker of brokers) {
+    const row = document.createElement('div');
+    row.className = 'broker-item-row';
+    row.innerHTML = `
+      <div class="broker-item-header">
+        <span class="broker-item-name">${esc(broker.name)}</span>
+        <span class="broker-item-verdict verdict-skipped">${broker.status}</span>
+      </div>
+    `;
+    body.appendChild(row);
+  }
+
+  div.appendChild(header);
+  div.appendChild(body);
+  return div;
+}
+
+// ── broker group header refresh ───────────────────────────────────────────────
+
+function refreshBrokerGroupHeader(brokerId: string): void {
+  if (!currentRun) return;
+  const groupEl = Array.from(document.querySelectorAll<HTMLElement>('.broker-group'))
+    .find(el => el.dataset['broker'] === brokerId);
+  if (!groupEl) return;
+  const items = currentRun.items.filter(i => i.brokerId === brokerId);
+  const hits = items.filter(i => i.verdict === 'hit');
+  if (hits.length === 0) return;
+  const sentCount = hits.filter(i => i.optedOutAt).length;
+  let optStatus: string;
+  let statusClass: string;
+  if (sentCount === hits.length)  { optStatus = 'all sent'; statusClass = 'status-done'; }
+  else if (sentCount > 0)         { optStatus = `${sentCount}/${hits.length} sent`; statusClass = 'status-partial'; }
+  else                            { optStatus = 'not started'; statusClass = 'status-partial'; }
+  let statusEl = groupEl.querySelector<HTMLElement>('.broker-group-optstatus');
+  if (!statusEl) {
+    statusEl = document.createElement('span');
+    groupEl.querySelector('.broker-group-header')?.appendChild(statusEl);
+  }
+  statusEl.textContent = optStatus;
+  statusEl.className = `broker-group-optstatus ${statusClass}`;
+}
+
 // ── draft loading + rendering ─────────────────────────────────────────────────
 
-async function loadDraftPanel(panel: HTMLElement, brokerId: string): Promise<void> {
+async function loadDraftPanel(panel: HTMLElement, item: WorkItem): Promise<void> {
   panel.textContent = 'Loading…';
-  const res = await browser.runtime.sendMessage({ type: 'GET_DRAFT', brokerId }) as { draft?: Draft; reason?: string };
+  const res = await browser.runtime.sendMessage({ type: 'GET_DRAFT', itemId: item.id }) as { draft?: Draft; reason?: string };
   if (!res.draft) {
     panel.innerHTML = `<p class="note">No opt-out request available. ${esc(res.reason ?? '')}</p>`;
     return;
   }
-  renderDraftInPanel(panel, res.draft, brokerId);
+  renderDraftInPanel(panel, res.draft, item);
 }
 
-function renderDraftInPanel(panel: HTMLElement, draft: Draft, brokerId: string): void {
-  if (draft.kind === 'form') renderFormDraftInPanel(panel, draft as FormDraft, brokerId);
-  else                       renderEmailDraftInPanel(panel, draft as EmailDraft, brokerId);
+function renderDraftInPanel(panel: HTMLElement, draft: Draft, item: WorkItem): void {
+  if (draft.kind === 'form') renderFormDraftInPanel(panel, draft as FormDraft, item);
+  else                       renderEmailDraftInPanel(panel, draft as EmailDraft, item);
 }
 
-function renderEmailDraftInPanel(panel: HTMLElement, draft: EmailDraft, brokerId: string): void {
+function renderEmailDraftInPanel(panel: HTMLElement, draft: EmailDraft, item: WorkItem): void {
   const copyText = toCopyText(draft);
   panel.innerHTML = `
     <div class="draft-meta">
@@ -356,7 +467,7 @@ function renderEmailDraftInPanel(panel: HTMLElement, draft: EmailDraft, brokerId
   panel.querySelector<HTMLButtonElement>('[data-action="eml"]')!.onclick = async () => {
     const url = URL.createObjectURL(new Blob([toEml(draft)], { type: 'message/rfc822' }));
     try {
-      await browser.downloads.download({ url, filename: `expurge-optout-${brokerId}.eml`, saveAs: false });
+      await browser.downloads.download({ url, filename: `expurge-optout-${item.brokerId}.eml`, saveAs: false });
     } finally {
       URL.revokeObjectURL(url);
     }
@@ -376,24 +487,24 @@ function renderEmailDraftInPanel(panel: HTMLElement, draft: EmailDraft, brokerId
   };
 
   panel.querySelector<HTMLButtonElement>('[data-action="mark-sent"]')!.onclick = async () => {
-    await browser.runtime.sendMessage({ type: 'MARK_SENT', brokerId });
+    await browser.runtime.sendMessage({ type: 'MARK_SENT', itemId: item.id });
     panel.querySelector('.draft-mark-sent')!.innerHTML = '<span class="sent-badge">Sent ✓</span>';
-    const toggleBtn = document.querySelector<HTMLButtonElement>(`.btn-draft-toggle[data-broker="${brokerId}"]`);
+    const toggleBtn = document.querySelector<HTMLButtonElement>(`.btn-draft-toggle[data-item="${item.id}"]`);
     if (toggleBtn) { toggleBtn.textContent = 'Sent ✓'; toggleBtn.classList.add('sent'); }
     if (currentRun) {
       currentRun = {
         ...currentRun,
         items: currentRun.items.map(i =>
-          i.brokerId === brokerId && i.verdict === 'hit' && !i.optedOutAt
-            ? { ...i, optedOutAt: new Date().toISOString() }
-            : i
+          i.id === item.id ? { ...i, optedOutAt: new Date().toISOString() } : i
         ),
       };
+      refreshBrokerGroupHeader(item.brokerId);
     }
   };
 }
 
-function renderFormDraftInPanel(panel: HTMLElement, draft: FormDraft, brokerId: string): void {
+function renderFormDraftInPanel(panel: HTMLElement, draft: FormDraft, item: WorkItem): void {
+  const brokerId = item.brokerId;
   const fieldsHtml = draft.fields.map(f => `
     <tr>
       <td class="form-field-label">${esc(f.label)}</td>
@@ -427,19 +538,18 @@ function renderFormDraftInPanel(panel: HTMLElement, draft: FormDraft, brokerId: 
   };
 
   panel.querySelector<HTMLButtonElement>('[data-action="mark-submitted"]')!.onclick = async () => {
-    await browser.runtime.sendMessage({ type: 'MARK_SENT', brokerId });
+    await browser.runtime.sendMessage({ type: 'MARK_SENT', itemId: item.id });
     panel.querySelector('.draft-mark-sent')!.innerHTML = '<span class="sent-badge">Submitted ✓</span>';
-    const toggleBtn = document.querySelector<HTMLButtonElement>(`.btn-draft-toggle[data-broker="${brokerId}"]`);
+    const toggleBtn = document.querySelector<HTMLButtonElement>(`.btn-draft-toggle[data-item="${item.id}"]`);
     if (toggleBtn) { toggleBtn.textContent = 'Submitted ✓'; toggleBtn.classList.add('sent'); }
     if (currentRun) {
       currentRun = {
         ...currentRun,
         items: currentRun.items.map(i =>
-          i.brokerId === brokerId && i.verdict === 'hit' && !i.optedOutAt
-            ? { ...i, optedOutAt: new Date().toISOString() }
-            : i
+          i.id === item.id ? { ...i, optedOutAt: new Date().toISOString() } : i
         ),
       };
+      refreshBrokerGroupHeader(item.brokerId);
     }
   };
 }
