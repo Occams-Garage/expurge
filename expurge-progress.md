@@ -14,7 +14,7 @@ sections, redesigned popup (run-control-panel only). No persistence opt-ins.
 
 | File | What it does |
 |------|--------------|
-| `manifest.json` | MV3, Firefox 140+, data-taxonomy declaration, optional_host_permissions for TruePeopleSearch, permissions: storage/tabs/downloads/scripting; `options_ui.open_in_tab: true` |
+| `manifest.json` | MV3, Firefox 140+, data-taxonomy declaration; permissions: storage/tabs/downloads/scripting/webNavigation (webNavigation declared for `onErrorOccurred`, not yet wired in background); host_permissions: updates.expurge.dev (M7 remote fetch); optional_host_permissions: TruePeopleSearch; `options_ui.open_in_tab: true`; `_notes` block documents M7/M9 requirements (strip before AMO submission) |
 | `package.json` | webextension-polyfill, esbuild, typescript; scripts: build / dev (--watch) / typecheck |
 | `tsconfig.json` | ES2022 target, moduleResolution: bundler, noEmit: true |
 | `build.mjs` | esbuild; five IIFE bundles (background, content, popup, options, options.css); copies popup.html, options.html, style.css to dist/ |
@@ -105,6 +105,7 @@ these move to the options page in M4+. The popup becomes a compact run control p
 | `src/shared/templates.ts` | `buildFormCard()` fields are TPS-specific (role dropdown step, hCaptcha step); generalize when adding more form_required brokers |
 | `src/background/index.ts` | AKA parsing splits on first space only — "Mary Jane Smith" gives first="Mary", last="Jane Smith"; smarter parsing (e.g. last-space split) deferred |
 | `src/options/index.ts` | Settings section has no import JSON (export only); import deferred to M8 alongside persistence opt-ins |
+| `src/background/index.ts` | `webNavigation` is declared in manifest permissions but `browser.webNavigation.onErrorOccurred` is not yet wired — add when M9 broker set makes load-error detection meaningful |
 
 ---
 
