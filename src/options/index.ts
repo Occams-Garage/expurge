@@ -822,18 +822,33 @@ function resetAkaRows(akas: AkaName[]): void {
   for (const aka of akas) container.appendChild(buildAkaRow(aka));
 }
 
-// Read rows back into AkaName[], dropping rows with no first name and omitting
-// empty middle/last fields.
+// Read one row's trimmed First/Middle/Last values.
+function readAkaRow(row: HTMLElement): { first: string; middle: string; last: string } {
+  const val = (key: keyof AkaName) =>
+    (row.querySelector<HTMLInputElement>(`input[data-aka="${key}"]`)?.value ?? '').trim();
+  return { first: val('first'), middle: val('middle'), last: val('last') };
+}
+
+// First row that has data but is missing a first or last name (an unsearchable,
+// incomplete name), else null. A searchable name needs both, mirroring the primary
+// name. handleProfileSave blocks the save on such a row, so readAkaRows never drops one.
+function firstIncompleteAkaRow(): HTMLElement | null {
+  for (const row of Array.from(document.querySelectorAll<HTMLElement>('#aka-rows .aka-row'))) {
+    const { first, middle, last } = readAkaRow(row);
+    const hasData = first || middle || last;
+    if (hasData && (!first || !last)) return row;
+  }
+  return null;
+}
+
+// Read rows back into AkaName[], skipping empty and incomplete rows (the latter are
+// caught at save time) and omitting empty middle fields.
 function readAkaRows(): AkaName[] {
   const out: AkaName[] = [];
   for (const row of Array.from(document.querySelectorAll<HTMLElement>('#aka-rows .aka-row'))) {
-    const val = (key: keyof AkaName) =>
-      (row.querySelector<HTMLInputElement>(`input[data-aka="${key}"]`)?.value ?? '').trim();
-    const first = val('first');
-    if (!first) continue;
-    const middle = val('middle');
-    const last = val('last');
-    out.push({ first, ...(middle ? { middle } : {}), ...(last ? { last } : {}) });
+    const { first, middle, last } = readAkaRow(row);
+    if (!first || !last) continue;
+    out.push({ first, last, ...(middle ? { middle } : {}) });
   }
   return out;
 }
@@ -849,6 +864,15 @@ async function handleProfileSave(e: Event): Promise<void> {
   if (!profile) {
     errEl.textContent = 'First name, last name, city, and state are required.';
     errEl.classList.remove('hidden');
+    return;
+  }
+
+  const badRow = firstIncompleteAkaRow();
+  if (badRow) {
+    errEl.textContent = 'Each additional name needs a first and last name (or clear the row).';
+    errEl.classList.remove('hidden');
+    const missing = readAkaRow(badRow).first ? 'last' : 'first';
+    badRow.querySelector<HTMLInputElement>(`input[data-aka="${missing}"]`)?.focus();
     return;
   }
 

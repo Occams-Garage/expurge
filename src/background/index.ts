@@ -83,8 +83,8 @@ function buildItems(profile: Profile): WorkItem[] {
     { nameVariant: 'primary', first: profile.first.trim(), last: profile.last.trim() },
     ...normalizeAkas(profile.also_known_as).map((aka, i) => ({
       nameVariant: `aka_${i}`,
-      first: aka.first.trim(),
-      last:  (aka.last ?? '').trim(),
+      first: aka.first,
+      last:  aka.last,
     })),
   ];
 

@@ -31,11 +31,12 @@ export interface RunState {
 }
 
 // One additional name to search, captured as separate atomic fields (mirrors the
-// primary name). middle is stored but not yet used in search URLs — see normalizeAkas.
+// primary name, which requires both first and last). middle is stored but not yet
+// used in search URLs — see normalizeAkas.
 export interface AkaName {
   first: string;
   middle?: string;
-  last?: string;   // may be empty for single-token names
+  last: string;
 }
 
 export interface Profile {
