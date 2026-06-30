@@ -251,7 +251,8 @@ h2 {
 .field:last-child { margin-bottom: 0; }
 .field-narrow { max-width: 200px; }
 
-label {
+label,
+.field-label {
   display: block;
   font-size: var(--fs-small);
   font-weight: var(--fw-medium);
@@ -313,9 +314,12 @@ textarea {
 .aka-cols,
 .aka-row {
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr var(--s-7);
+  grid-template-columns: 1fr 1fr 1fr var(--s-8);
   gap: var(--s-2);
 }
+
+/* Let the inputs shrink within their grid tracks instead of forcing overflow. */
+.aka-row input { min-width: 0; }
 
 .aka-cols {
   margin-bottom: var(--s-1);
@@ -332,7 +336,8 @@ textarea {
 }
 
 .aka-remove {
-  min-height: 0;
+  min-width: var(--s-8);   /* 48px — meets the 44px touch-target minimum */
+  min-height: var(--s-8);
   padding: var(--s-1);
   font-size: var(--fs-body);
   line-height: 1;
