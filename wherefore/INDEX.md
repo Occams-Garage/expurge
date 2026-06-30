@@ -32,3 +32,4 @@
 - 2026-06-28 | 2026-06-28-tps-form-required | TPS opt-out channel corrected to web form; Draft discriminated union (EmailDraft | FormDraft); form card in popup | areas: opt-out-drafts, broker-dataset | topics: ux, data-model, verification | stories: [] | active
 - 2026-06-29 | 2026-06-29-autofill-optout-forms | Auto-fill opt-out forms deferred to v2 | areas: opt-out-drafts, matching-overlay | topics: webextensions, privacy, ux | stories: [] | active
 - 2026-06-29 | 2026-06-29-local-llm-field-discovery | Local LLM for opt-out form field discovery | areas: matching-overlay, opt-out-drafts | topics: webextensions, privacy, local-llm | stories: [] | active
+- 2026-06-29 | 2026-06-29-cloudflare-challenge-handling | Cloudflare challenge handling and Restore Overlay | areas: matching-overlay, run-model | topics: webextensions, ux | stories: [] | active
