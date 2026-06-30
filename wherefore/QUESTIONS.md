@@ -11,3 +11,4 @@
 - Q-009 | resolved | 2026-06-28 | 2026-06-28-permissions-flow | permissions.request() requires user gesture; resolved by design (Start button click IS the gesture) | areas: permissions
 - Q-010 | open | 2026-06-28 | 2026-06-28-email-templates | CCPA template legal language and DROP-registry overlap verification | areas: opt-out-drafts
 - Q-011 | open | 2026-06-29 | 2026-06-29-per-component-licensing | Confirm ODbL vs alternatives for the dataset and verify actual license texts before committing LICENSE files | areas: broker-dataset
+- Q-012 | open | 2026-06-30 | 2026-06-30-results-broker-grouped | Should multiple AKA tabs for the same broker site open simultaneously, or one at a time? | areas: run-model

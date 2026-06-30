@@ -4,11 +4,13 @@ title: "Results section: four verdict groups, clear collapsed, nudge pattern, mi
 areas: [coverage-report, run-model]
 topics: [ux, data-model]
 stories: []
-status: active
+status: superseded
 supersedes:
-superseded-by:
-superseded-date:
+superseded-by: 2026-06-30-results-broker-grouped
+superseded-date: 2026-06-30
 ---
+
+SUPERSEDED 2026-06-30 -> see 2026-06-30-results-broker-grouped. Kept for history, not current.
 
 ## Summary
 The Results section groups outcomes into four named buckets, collapses the "not found" majority to reduce visual noise, surfaces profile gaps as inline nudge cards, and offers a mini-run to re-check skipped items. Most recent run is expanded by default; prior runs are collapsed. See also: 2026-06-28-run-section-states, 2026-06-28-ux-architecture.
