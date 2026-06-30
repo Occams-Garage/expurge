@@ -40,11 +40,14 @@ export function normalizeAkas(raw: unknown): AkaName[] {
       if (!first || !last) continue;
       out.push({ first, last });
     } else if (entry && typeof entry === 'object') {
-      const e = entry as Partial<AkaName>;
-      const first = (e.first ?? '').trim();
-      const last = (e.last ?? '').trim();
+      // Field values come from unknown stored/imported data — coerce non-strings to
+      // '' instead of calling .trim() on them (which would throw on e.g. a number).
+      const e = entry as Record<string, unknown>;
+      const str = (v: unknown) => (typeof v === 'string' ? v.trim() : '');
+      const first = str(e['first']);
+      const last = str(e['last']);
       if (!first || !last) continue;
-      const middle = (e.middle ?? '').trim();
+      const middle = str(e['middle']);
       out.push({ first, last, ...(middle ? { middle } : {}) });
     }
   }
