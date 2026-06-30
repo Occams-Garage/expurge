@@ -285,6 +285,18 @@ function nameForVariant(item: WorkItem): string {
     : item.nameVariant;
 }
 
+// Opt-out send status for a broker's hits — single source of truth for the
+// header pill (text + class), shared by initial render and the mark-sent patch.
+// Returns null when there are no hits (no pill).
+function optStatusFor(hitCount: number, sentCount: number): { text: string; className: string } | null {
+  if (hitCount === 0) return null;
+  const className = sentCount === hitCount ? 'status-done' : 'status-partial';
+  const text = sentCount === hitCount ? 'all sent'
+    : sentCount > 0 ? `${sentCount}/${hitCount} sent`
+    : 'not started';
+  return { text, className };
+}
+
 function buildBrokerGroup(brokerId: string, items: WorkItem[]): HTMLElement {
   const brokerName = getBroker(brokerId)?.name ?? brokerId;
   const hits     = items.filter(i => i.verdict === 'hit');
@@ -303,12 +315,7 @@ function buildBrokerGroup(brokerId: string, items: WorkItem[]): HTMLElement {
   if (skipped > 0)         parts.push(`${skipped} skipped`);
   const summary = parts.join(' · ') || 'no results';
 
-  let optStatus = '';
-  if (hits.length > 0) {
-    if (sentCount === hits.length)  optStatus = 'all sent';
-    else if (sentCount > 0)         optStatus = `${sentCount}/${hits.length} sent`;
-    else                            optStatus = 'not started';
-  }
+  const opt = optStatusFor(hits.length, sentCount);
 
   const div = document.createElement('div');
   div.className = 'broker-group';
@@ -320,7 +327,7 @@ function buildBrokerGroup(brokerId: string, items: WorkItem[]): HTMLElement {
     <span class="broker-group-chevron">▾</span>
     <span class="broker-group-name">${esc(brokerName)}</span>
     <span class="broker-group-summary">${esc(summary)}</span>
-    ${optStatus ? `<span class="broker-group-optstatus ${sentCount === hits.length ? 'status-done' : 'status-partial'}">${esc(optStatus)}</span>` : ''}
+    ${opt ? `<span class="broker-group-optstatus ${opt.className}">${esc(opt.text)}</span>` : ''}
   `;
 
   const body = document.createElement('div');
@@ -495,13 +502,9 @@ function refreshBrokerGroupHeader(brokerId: string): void {
   const statusEl = groupEl.querySelector<HTMLElement>('.broker-group-optstatus');
   if (!statusEl) return;
   const sentCount = hits.filter(i => i.optedOutAt).length;
-  let optStatus: string;
-  let statusClass: string;
-  if (sentCount === hits.length)  { optStatus = 'all sent'; statusClass = 'status-done'; }
-  else if (sentCount > 0)         { optStatus = `${sentCount}/${hits.length} sent`; statusClass = 'status-partial'; }
-  else                            { optStatus = 'not started'; statusClass = 'status-partial'; }
-  statusEl.textContent = optStatus;
-  statusEl.className = `broker-group-optstatus ${statusClass}`;
+  const opt = optStatusFor(hits.length, sentCount)!; // hits.length > 0 guaranteed above
+  statusEl.textContent = opt.text;
+  statusEl.className = `broker-group-optstatus ${opt.className}`;
 
   // Keep the stored signature current so the next poll-driven renderResults sees
   // this group as unchanged and leaves the (now open) draft panel in place.
