@@ -46,12 +46,12 @@ export interface Profile {
 
 export interface StartRunMsg    { type: 'START_RUN';    profile: Profile }
 export interface GetRunStateMsg { type: 'GET_RUN_STATE' }
-export interface GetDraftMsg    { type: 'GET_DRAFT';    brokerId: string }
+export interface GetDraftMsg    { type: 'GET_DRAFT';    itemId: string }
 export interface GetItemMsg     { type: 'GET_ITEM' }
 export interface VerdictMsg     { type: 'VERDICT'; itemId: string; verdict: Verdict; skipReason?: SkipReason; listingUrl?: string }
 export interface SaveProfileMsg { type: 'SAVE_PROFILE'; profile: Profile }
 export interface GetProfileMsg  { type: 'GET_PROFILE' }
-export interface MarkSentMsg    { type: 'MARK_SENT';    brokerId: string }
+export interface MarkSentMsg    { type: 'MARK_SENT';    itemId: string }
 export interface DeleteAllMsg   { type: 'DELETE_ALL' }
 export interface CloseTabMsg    { type: 'CLOSE_TAB' }
 
