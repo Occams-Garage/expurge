@@ -53,6 +53,7 @@ export interface SaveProfileMsg { type: 'SAVE_PROFILE'; profile: Profile }
 export interface GetProfileMsg  { type: 'GET_PROFILE' }
 export interface MarkSentMsg    { type: 'MARK_SENT';    brokerId: string }
 export interface DeleteAllMsg   { type: 'DELETE_ALL' }
+export interface CloseTabMsg    { type: 'CLOSE_TAB' }
 
 // ── messages background → content/popup ─────────────────────────────────────
 
@@ -73,4 +74,4 @@ export interface StopRunMsg { type: 'STOP_RUN' }
 
 export type ToBackground =
   | StartRunMsg | GetRunStateMsg | GetDraftMsg | GetItemMsg | VerdictMsg
-  | PingMsg | ReinjMsg | StopRunMsg | SaveProfileMsg | GetProfileMsg | MarkSentMsg | DeleteAllMsg;
+  | PingMsg | ReinjMsg | StopRunMsg | SaveProfileMsg | GetProfileMsg | MarkSentMsg | DeleteAllMsg | CloseTabMsg;

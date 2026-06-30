@@ -129,7 +129,12 @@ async function openNextBatch(run: RunState, focusFirst = false): Promise<void> {
   const slots = BATCH_SIZE - openCount;
   if (slots <= 0) return;
 
-  const pending = run.items.filter(i => i.status === 'pending').slice(0, slots);
+  // At most one open tab per broker — prevents hammering the same site with
+  // multiple AKA queries in parallel, which triggers bot-detection / CAPTCHAs.
+  const openBrokers = new Set(run.items.filter(i => i.status === 'open').map(i => i.brokerId));
+  const pending = run.items
+    .filter(i => i.status === 'pending' && !openBrokers.has(i.brokerId))
+    .slice(0, slots);
   if (pending.length === 0) return;
 
   const pendingIds = new Set(pending.map(p => p.id));
@@ -389,6 +394,14 @@ browser.runtime.onMessage.addListener(
         };
         await saveRun(updated);
       });
+      return { ok: true };
+    }
+
+    if (m.type === 'CLOSE_TAB') {
+      const tabId = sender.tab?.id;
+      if (tabId !== undefined) {
+        await browser.tabs.remove(tabId).catch(() => {});
+      }
       return { ok: true };
     }
 
