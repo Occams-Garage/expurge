@@ -10,6 +10,8 @@ superseded-by:
 superseded-date:
 ---
 
+CORRECTION 2026-06-30: pause/resume was dropped — run control is stop-only. See 2026-06-30-stop-only-run-control. The rest of this entry (four states, monitor, pacing, badge) remains accurate.
+
 ## Summary
 The Run section of the options page moves through four states: welcome/pitch (no profile), ready (profile set, no active run), active (run in progress), and done (run complete). Pause and stop are first-class controls during active runs. The run monitor shows one row per broker with AKA variants folded in. See also: 2026-06-28-ux-architecture, 2026-06-28-run-model-mechanics.
 
