@@ -79,7 +79,7 @@ function buildItems(profile: Profile): WorkItem[] {
   // first/last are stored on each WorkItem so drafts and labels never re-parse the
   // (mutable) profile later.
   const variants: Array<{ nameVariant: string; first: string; last: string }> = [
-    { nameVariant: 'primary', first: profile.first, last: profile.last },
+    { nameVariant: 'primary', first: profile.first.trim(), last: profile.last.trim() },
     ...(profile.also_known_as ?? []).map((aka, i) => {
       const t  = aka.trim();
       const sp = t.indexOf(' ');
@@ -410,13 +410,12 @@ browser.runtime.onMessage.addListener(
       const gate = evaluateGate(broker, 'hit');
       if (!gate.pass) return { draft: null, reason: gate.reason };
 
-      // Use the name resolved at run time (frozen on the item), not a re-parse of the
-      // current profile — editing/reordering AKAs after a hit must not change the draft.
-      const draftProfile: Profile = {
-        ...profile,
-        first: hitItem.variantFirst ?? profile.first,
-        last:  hitItem.variantLast  ?? profile.last,
-      };
+      // AKA hits use the name resolved at run time (frozen on the item) — re-parsing
+      // the mutable also_known_as list would drift. The primary variant has no such
+      // drift (it's the raw profile name), so it tracks the live profile.
+      const draftProfile: Profile = hitItem.nameVariant === 'primary'
+        ? profile
+        : { ...profile, first: hitItem.variantFirst, last: hitItem.variantLast };
       const draft = buildDraft(draftProfile, broker, gate.channel, hitItem.listingUrl);
       return { draft };
     }
