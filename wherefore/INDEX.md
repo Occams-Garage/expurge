@@ -38,3 +38,4 @@
 - 2026-06-29 | 2026-06-29-m6-grilling-bugs | M6 grilling: three bugs found | areas: run-model, opt-out-drafts | topics: webextensions, data-model | stories: [] | active
 - 2026-06-30 | 2026-06-30-aka-name-in-drafts | AKA name used in opt-out draft body | areas: opt-out-drafts | topics: data-model | stories: [] | active
 - 2026-06-30 | 2026-06-30-results-broker-grouped | Results page redesigned: broker-grouped layout | areas: coverage-report, matching-overlay | topics: ux, data-model | stories: [] | active
+- 2026-06-30 | 2026-06-30-overlay-tab-vs-overlay | Overlay-on-page vs side-by-side tab | areas: matching-overlay | topics: ux | stories: [] | active
