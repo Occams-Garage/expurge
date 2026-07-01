@@ -1,6 +1,7 @@
 import browser from 'webextension-polyfill';
 import type { Verdict, ItemInfoMsg } from '../shared/types';
-import { detectChallenge, isResultsPage, brokerHostname } from './classify';
+import { detectChallenge } from './classify';
+import { isResultsPage, brokerHostname } from '../shared/url';
 
 // ── Shadow DOM overlay ───────────────────────────────────────────────────────
 // The overlay NEVER injects the user's profile data into the page DOM.
