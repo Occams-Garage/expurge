@@ -32,6 +32,11 @@ export interface RunState {
   items: WorkItem[];
 }
 
+// Run progress counts, computed by coordinator.progressOf and shared by every readout
+// (popup, options, sidebar, ITEM_INFO). `done`/`total` exclude `missing:` skips; `deferred`
+// counts toward `total` but not `done`.
+export interface RunProgress { done: number; total: number; hits: number }
+
 // One additional name to search, captured as separate atomic fields (mirrors the
 // primary name, which requires both first and last). middle is stored but not yet
 // used in search URLs — see normalizeAkas.
@@ -93,7 +98,7 @@ export interface ItemInfoMsg {
   exposes: string[];
   guidance?: string;   // broker's generic search.guidance note, when present (results-state)
   renderedUrl: string;
-  progress: { done: number; total: number; hits: number };
+  progress: RunProgress;
 }
 export interface AckMsg  { type: 'ACK';  itemId: string }
 export interface PongMsg { type: 'PONG'; hasOverlay: boolean }
@@ -106,3 +111,38 @@ export type ToBackground =
   | StartRunMsg | GetRunStateMsg | GetDraftMsg | GetItemMsg | VerdictMsg | ReverdictMsg
   | PingMsg | ReinjMsg | StopRunMsg | SaveProfileMsg | GetProfileMsg | MarkSentMsg | DeleteAllMsg | CloseTabMsg
   | SidebarGetStateMsg | DeferMsg | NavigateBrokerTabMsg | ChallengeDetectedMsg | ChallengeResolvedMsg;
+
+// ── sidebar view model ──────────────────────────────────────────────────────
+// The sidebar's display is derived purely from run state + focus (src/sidebar/state.ts).
+
+// Which half of a broker's flow the focused tab is on: the results listing (show guidance)
+// or a details/profile page (show the verdict cluster).
+export type PageType = 'results' | 'details';
+
+// Everything the sidebar needs to render an active broker item — the ItemInfoMsg payload
+// (sans message `type`) plus the derived page-type. `guidance` is present only when the
+// broker defines search.guidance.
+export interface ActiveItemInfo {
+  itemId: string;
+  brokerId: string;
+  exposes: string[];
+  guidance?: string;
+  renderedUrl: string;
+  pageType: PageType;
+  progress: RunProgress;
+}
+
+// The sidebar's current display. The six resting views are produced by deriveView from run
+// state + focus; `saving`/`recorded` are transient interaction states the UI layer sets
+// imperatively around a verdict send (never derived), kept here for union completeness.
+export type SidebarView =
+  | { view: 'no-run' }
+  | { view: 'guidance';  item: ActiveItemInfo }
+  | { view: 'verdict';   item: ActiveItemInfo }
+  | { view: 'challenge'; item: ActiveItemInfo }
+  | { view: 'revisit';   waiting: number; progress: RunProgress }
+  | { view: 'done';      progress: RunProgress }
+  | { view: 'saving';    item: ActiveItemInfo }
+  | { view: 'recorded';  item: ActiveItemInfo };
+
+export interface SidebarUpdateMsg { type: 'SIDEBAR_UPDATE'; view: SidebarView }
