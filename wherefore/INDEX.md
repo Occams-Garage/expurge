@@ -42,3 +42,4 @@
 - 2026-06-30 | 2026-06-30-stop-only-run-control | Run control is stop-only; pause dropped | areas: run-model | topics: ux, webextensions | stories: [] | active
 - 2026-06-30 | 2026-06-30-aka-structured-name-fields | Structured first/middle/last for other names | areas: profile | topics: data-model, ux | stories: [] | active
 - 2026-06-30 | 2026-06-30-vitest-test-runner | Vitest for unit tests; e2e deferred | areas: (none) | topics: testing, webextensions | stories: [] | active
+- 2026-07-01 | 2026-07-01-test-suite-buildout | Test suite: extract pure logic, cover shipped code | areas: (none) | topics: testing, webextensions | stories: [] | active
