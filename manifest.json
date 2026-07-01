@@ -23,7 +23,8 @@
   },
   "sidebar_action": {
     "default_panel": "dist/sidebar.html",
-    "default_title": "expurge"
+    "default_title": "expurge",
+    "open_at_install": false
   },
   "permissions": ["storage", "tabs", "downloads"],
   "host_permissions": [
