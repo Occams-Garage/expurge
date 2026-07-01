@@ -1,5 +1,6 @@
 import browser from 'webextension-polyfill';
 import type { Verdict, ItemInfoMsg } from '../shared/types';
+import { detectChallenge, isResultsPage, brokerHostname } from './classify';
 
 // ── Shadow DOM overlay ───────────────────────────────────────────────────────
 // The overlay NEVER injects the user's profile data into the page DOM.
@@ -368,7 +369,7 @@ function buildVerdictPanel(
 
 function buildGuidancePanel(
   exposes: string[],
-  brokerHostname: string,
+  hostname: string,
   progress: { done: number; total: number } | null,
   onVerdict: (verdict: Verdict, listingUrl: string) => void,
 ): HTMLElement {
@@ -393,7 +394,7 @@ function buildGuidancePanel(
         <input class="paste-input" id="paste-input" type="text"
                placeholder="Paste a link to your listing…" autocomplete="off">
         <div class="paste-warning" id="paste-warning">
-          This doesn't look like a ${brokerHostname} URL — double-check before confirming.
+          This doesn't look like a ${hostname} URL — double-check before confirming.
         </div>
         <div class="buttons" id="paste-btns" style="display:none">
           <button class="btn btn-hit"     id="btn-hit">Yes, this is me</button>
@@ -443,8 +444,8 @@ function buildGuidancePanel(
     try {
       const parsed = new URL(val);
       const matches =
-        parsed.hostname === brokerHostname ||
-        parsed.hostname.endsWith('.' + brokerHostname);
+        parsed.hostname === hostname ||
+        parsed.hostname.endsWith('.' + hostname);
       pasteWarn.classList.toggle('visible', !matches);
     } catch {
       pasteWarn.classList.add('visible');
@@ -544,38 +545,6 @@ if (!w.__expurgePingBound) {
   });
 }
 
-// ── challenge detection ──────────────────────────────────────────────────────
-
-function detectChallenge(): boolean {
-  // These elements only exist on CF interstitial challenge pages; they're removed on redirect.
-  const blocking = [
-    '#challenge-running',
-    '#challenge-stage',
-    '.cf-browser-verification',
-    '#cf-challenge-running',
-  ];
-  if (blocking.some(sel => document.querySelector(sel) !== null)) return true;
-
-  // Turnstile: the container div persists in the DOM after solving (only the iframe content
-  // changes). Treat as blocking only when the response token hasn't been set yet.
-  const turnstile = document.querySelector<HTMLElement>('.cf-turnstile');
-  if (turnstile) {
-    const resp = document.querySelector<HTMLInputElement>('input[name="cf-turnstile-response"]');
-    if (!resp?.value) return true; // unsolved
-    // Solved — don't count the CF challenge iframe inside this container as a separate block.
-  } else if (document.querySelector('iframe[src*="challenges.cloudflare.com"]') !== null) {
-    return true; // standalone CF iframe (non-Turnstile challenge)
-  }
-
-  // Other embedded CAPTCHA widgets
-  return [
-    'iframe[src*="hcaptcha.com"]',
-    'iframe[src*="recaptcha/api2/bframe"]',
-    '.g-recaptcha',
-    'iframe[src*="geo.captcha-delivery.com"]',
-  ].some(sel => document.querySelector(sel) !== null);
-}
-
 // ── challenge panel ──────────────────────────────────────────────────────────
 
 function buildChallengePanel(info: ItemInfoMsg, onResolved: () => void): void {
@@ -646,19 +615,10 @@ function buildChallengePanel(info: ItemInfoMsg, onResolved: () => void): void {
 function showMainPanel(info: ItemInfoMsg): void {
   const { itemId, exposes, renderedUrl, progress } = info;
 
-  const isResultsPage = (() => {
-    try {
-      return window.location.pathname === new URL(renderedUrl).pathname;
-    } catch {
-      return false;
-    }
-  })();
+  const onResults = isResultsPage(window.location.pathname, renderedUrl);
+  const hostname = brokerHostname(renderedUrl);
 
-  const brokerHostname = (() => {
-    try { return new URL(renderedUrl).hostname; } catch { return ''; }
-  })();
-
-  if (isResultsPage) {
+  if (onResults) {
     const onVerdict = async (verdict: Verdict, listingUrl: string) => {
       const host     = document.getElementById('expurge-host')!;
       const shadow   = host.shadowRoot!;
@@ -669,7 +629,7 @@ function showMainPanel(info: ItemInfoMsg): void {
       if (ok) closeSelfTab();
     };
 
-    const host = buildGuidancePanel(exposes, brokerHostname, progress, onVerdict);
+    const host = buildGuidancePanel(exposes, hostname, progress, onVerdict);
     document.documentElement.appendChild(host);
   } else {
     const { host, refs } = buildVerdictPanel(exposes, progress);

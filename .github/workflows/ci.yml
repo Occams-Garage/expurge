@@ -1,0 +1,26 @@
+name: ci
+
+# NOTE: this does NOT enforce the broker trust-bit rule (CLAUDE.md — "contributed records
+# always land trust: unverified; CI enforces this mechanically"). That contributed-record
+# gate is an unbuilt M9 item. brokers.test.ts checks trust *hygiene* (a verified channel
+# carries its provenance) but not author-gated trust changes — green CI does not vouch trust.
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          # Single source of truth for the Node version (see .nvmrc). Pinned to 22: addons-linter
+          # (web-ext lint) is unstable on very new Node builds, and the lockfile is resolved by
+          # this Node's npm — keeping local (`nvm use`) and CI on the same npm avoids lock drift.
+          node-version-file: '.nvmrc'
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run coverage # vitest run --coverage — enforces the gate.ts/templates.ts thresholds
+      - run: npm run build
+      - run: npm run lint:ext # web-ext lint against the built dist/
