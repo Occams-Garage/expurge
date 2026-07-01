@@ -15,16 +15,17 @@ export default defineConfig({
       {
         test: {
           name: 'dom',
-          environment: 'happy-dom',
+          // jsdom over happy-dom: it materializes <iframe> elements inertly (no subresource
+          // fetch, no throw), which the challenge-detection fixtures rely on.
+          environment: 'jsdom',
           include: ['src/content/**/*.test.ts', 'src/options/**/*.test.ts'],
-          // setupFiles: ['tests/setup/dom.ts'] — added with the first DOM test (Phase 3)
         },
       },
     ],
     coverage: {
       provider: 'v8',
       // Scoped to the modules under test; widen as tiers land.
-      include: ['src/shared/**', 'src/background/coordinator.ts'],
+      include: ['src/shared/**', 'src/background/coordinator.ts', 'src/content/classify.ts'],
       exclude: ['src/shared/types.ts', '**/*.test.ts'],
       reporter: ['text', 'html'],
       thresholds: {
