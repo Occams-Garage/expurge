@@ -20,6 +20,8 @@ const entries = [
   { entryPoints: ['src/popup/style.css'],     outfile: 'dist/style.css'     },
   { entryPoints: ['src/options/index.ts'],    outfile: 'dist/options.js'    },
   { entryPoints: ['src/options/style.css'],   outfile: 'dist/options.css'   },
+  { entryPoints: ['src/sidebar/index.ts'],    outfile: 'dist/sidebar.js'    },
+  { entryPoints: ['src/sidebar/style.css'],   outfile: 'dist/sidebar.css'   },
 ];
 
 function copyStatics() {
@@ -28,6 +30,7 @@ function copyStatics() {
   writeFileSync('dist/manifest.json', manifest);
   copyFileSync('src/popup/index.html',   'dist/popup.html');
   copyFileSync('src/options/index.html', 'dist/options.html');
+  copyFileSync('src/sidebar/index.html', 'dist/sidebar.html');
 }
 
 if (watch) {

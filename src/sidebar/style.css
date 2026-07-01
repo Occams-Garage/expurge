@@ -1,0 +1,71 @@
+@import "../styles/tokens.css";
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body { height: 100%; }
+
+body {
+  font-family: var(--font-ui);
+  font-size: var(--fs-small);
+  line-height: var(--lh-small);
+  background: var(--bg);
+  color: var(--text);
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── header ──────────────────────────────────────────────────────────────── */
+
+header {
+  padding: var(--s-3) var(--s-4);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.xpg-wordmark {
+  font-family: var(--font-display);
+  font-weight: var(--fw-semibold);
+  font-size: 20px;
+  letter-spacing: var(--tracking-display);
+  color: var(--text);
+  line-height: 1;
+}
+.xpg-strip {
+  position: relative;
+  isolation: isolate;
+  color: var(--strip-knockout);
+  margin: 0 0.065em 0 0.05em;
+}
+.xpg-strip::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  left: -0.02em; right: -0.035em;
+  top: 0.24em; bottom: -0.05em;
+  background: var(--strip-bg);
+  border-radius: var(--r-strip);
+  border-top: 0.045em dashed var(--bg);
+  border-bottom: 0.045em dashed var(--bg);
+  box-sizing: border-box;
+}
+
+.progress-line {
+  font-family: var(--font-mono);
+  font-size: var(--fs-mono);
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  margin-top: var(--s-2);
+  min-height: 1em;
+}
+
+/* ── detail ──────────────────────────────────────────────────────────────── */
+
+#detail { padding: var(--s-4); flex-shrink: 0; }
+
+/* ── checklist ───────────────────────────────────────────────────────────── */
+
+#checklist {
+  padding: 0 var(--s-4) var(--s-4);
+  overflow-y: auto;
+  flex: 1;
+}
