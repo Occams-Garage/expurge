@@ -48,10 +48,16 @@ export function deriveView(
 
   // Nothing actionable is focused, but the run isn't done — work is waiting. Covers the
   // deferred pile and (Slice-1 review finding #2) pending items stranded behind a deferred
-  // sibling broker: no open tab exists to act on, yet the run isn't complete. Background's
-  // revisit action reopens/focuses the first waiting item. `waiting` is the count of
-  // non-terminal items (== total − done, since missing: skips are already excluded from both).
-  return { view: 'revisit', waiting: progress.total - progress.done, progress };
+  // sibling broker: no open tab exists to act on, yet the run isn't complete. `waiting` is the
+  // count of non-terminal items (== total − done, since missing: skips are already excluded
+  // from both). `focusId` is the item the revisit button jumps to — first deferred, else first
+  // pending (the blocked-behind-deferred case; FOCUS_ITEM's ensureItemTab opens a pending one).
+  // Carried in the view so the sidebar needn't re-fetch run state to find it.
+  const focusId =
+    run.items.find(i => i.status === 'deferred')?.id ??
+    run.items.find(i => i.status === 'pending')?.id ??
+    null;
+  return { view: 'revisit', waiting: progress.total - progress.done, focusId, progress };
 }
 
 // Assemble the render payload for a focused broker item: identity + rendered URL from the

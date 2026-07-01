@@ -90,6 +90,7 @@ describe('deriveView — revisit', () => {
   it('a lone deferred item, nothing focused → revisit (not no-run)', () => {
     const v = expectView(deriveView(run([item({ status: 'deferred' })]), null, brokers), 'revisit');
     expect(v.waiting).toBe(1);
+    expect(v.focusId).toBe('b:primary');
     expect(v.progress).toEqual({ done: 0, total: 1, hits: 0 });
   });
 
@@ -104,6 +105,12 @@ describe('deriveView — revisit', () => {
     expect(v.view).not.toBe('no-run');
     const rv = expectView(v, 'revisit');
     expect(rv.waiting).toBe(2);
+    expect(rv.focusId).toBe('b:primary'); // first deferred, not the blocked pending sibling
+  });
+
+  it('focusId falls back to the first pending when no deferred remain', () => {
+    const v = expectView(deriveView(run([item({ status: 'pending' })]), null, brokers), 'revisit');
+    expect(v.focusId).toBe('b:primary');
   });
 
   it('focus present but on a non-broker tab (item=null), run incomplete → revisit', () => {
