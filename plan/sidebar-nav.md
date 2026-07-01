@@ -90,12 +90,19 @@ No new `permissions` — `sidebarAction` is available whenever `sidebar_action` 
 
 The **Defer** control is present alongside the active-item detail in `guidance`/`verdict`/`challenge`, visually separated from the verdict cluster, labeled with what it does ("Still loading — set aside, come back at the end").
 
-### 4. `src/background/coordinator.ts` (pure — extend, don't rewrite)
+### 4. `src/background/coordinator.ts` (pure — extend, don't rewrite) — ✅ DONE (commit `5398e5a`)
 
-- **`selectBatch`** — count only `open` items against the window (exclude `deferred`), still one-per-broker. **Add the ceiling:** if `(open + deferred) >= MAX_OPEN_TABS`, open nothing. New constant `MAX_OPEN_TABS = 15`.
-- **New transition `applyDefer(run, itemId)`** — `open → deferred` (only from `open`; never overrides a verdict). Pure, unit-tested.
-- **Completion** — a run is done only when **no** `pending`/`open`/`deferred` items remain. Add a helper (e.g. `isComplete(run)` / `progressOf(run)`) so popup + options + sidebar share one definition. `deferred` counts toward `total`, not `done`.
-- Untouched: `buildItems`, `withVerdict`, `applySkip`, `applyStop`, `applyMarkSent` (the pure judgments survive).
+- **`selectBatch`** — counts only `open` against the window (exclude `deferred`), still one-per-broker. Ceiling: `slots = min(batchSize − open, MAX_OPEN_TABS − heldTabs)` where `heldTabs = open + deferred` — opens up to remaining headroom (not a hard zero at the ceiling). New constant `MAX_OPEN_TABS = 15`. **`claimed` now includes deferred brokers** (a deferred tab is still live — no second variant against it).
+- **`applyDefer(run, itemId)`** — `open → deferred` only; never re-defers, never touches pending, never overrides a verdict. Pure, unit-tested.
+- **`applyStop`** — also sweeps `deferred` → `run_stopped` (was not in the original plan; required, else a stopped run strands deferred items as non-terminal).
+- **Completion** — `isComplete(run)` (no `pending`/`open`/`deferred` remain) and `progressOf(run)` (`deferred` counts toward `total`, not `done`; `missing:` skips excluded from both) — one shared definition for popup + options + sidebar.
+- Untouched: `buildItems`, `withVerdict`, `applySkip`, `applyMarkSent`.
+
+**⚠ Carried forward from the Slice-1 review — handle these in §5/§7, they're not yet done:**
+
+1. **Wire `progressOf` into `background/index.ts:217`, not just the popup.** The background's `ITEM_INFO` handler still computes progress inline as `done = all verdicted`, `total = run.items.length` — which *includes* `missing:` skips, unlike `progressOf`. When you route the sidebar's progress through `progressOf`, replace the inline math in **both** `background/index.ts:217` **and** `popup/index.ts`. Expect the visible counter to shift (missing-field skips drop out of done/total). That's the intended single definition — just make it deliberate.
+2. **The revisit trigger must handle "pending blocked behind a deferred sibling."** Because `selectBatch` claims deferred brokers, a broker with `primary=deferred, aka_0=pending` leaves `aka_0` unopenable while nothing else is open — a state with *both* pending and deferred items and no open tab (reachable today: TruePeopleSearch + one AKA). A naïve `pending.length === 0 && deferred.length > 0` revisit check **misses this** and shows nothing actionable. The §5 focus-drive/revisit logic must route "nothing open, only deferred (or deferred-blocked-pending) remain" → the Waiting/revisit view. Resolving the deferred item unblocks the pending AKA on the next `openNextBatch`. Add a test for it.
+3. **Decide what `deferred` does on resume/rehydrate.** `saveRun` strips `tabId`, so a resumed `deferred` item keeps its status but has no live tab — you can't `tabs.update` a tabId that's gone. Per the plan, revisiting a resumed deferred item must open a **fresh** tab from its `renderedUrl`. The §5 background work (and the resume note under Open questions) must handle this explicitly; the pure coordinator doesn't preclude it.
 
 ### 5. `src/background/index.ts` (coordination — the real surgery)
 
