@@ -68,7 +68,6 @@ export interface Profile {
 export interface StartRunMsg    { type: 'START_RUN';    profile: Profile; windowId?: number }
 export interface GetRunStateMsg { type: 'GET_RUN_STATE' }
 export interface GetDraftMsg    { type: 'GET_DRAFT';    itemId: string }
-export interface GetItemMsg     { type: 'GET_ITEM' }
 export interface VerdictMsg     { type: 'VERDICT'; itemId: string; verdict: Verdict; skipReason?: SkipReason; listingUrl?: string; windowId?: number }
 export interface ReverdictMsg   { type: 'REVERDICT'; itemId: string; verdict: Verdict; listingUrl?: string }
 export interface SaveProfileMsg { type: 'SAVE_PROFILE'; profile: Profile }
@@ -104,15 +103,15 @@ export interface ItemInfoMsg {
   progress: RunProgress;
 }
 export interface AckMsg  { type: 'ACK';  itemId: string }
-export interface PongMsg { type: 'PONG'; hasOverlay: boolean }
 
-export interface PingMsg    { type: 'PING' }
+// REINJECT_OVERLAY is dead in the background (the overlay is gone), but the popup/options
+// "Restore overlay" buttons still send it until §7 deletes them, so the type stays until then.
 export interface ReinjMsg  { type: 'REINJECT_OVERLAY'; tabId?: number }
 export interface StopRunMsg { type: 'STOP_RUN' }
 
 export type ToBackground =
-  | StartRunMsg | GetRunStateMsg | GetDraftMsg | GetItemMsg | VerdictMsg | ReverdictMsg
-  | PingMsg | ReinjMsg | StopRunMsg | SaveProfileMsg | GetProfileMsg | MarkSentMsg | DeleteAllMsg | CloseTabMsg
+  | StartRunMsg | GetRunStateMsg | GetDraftMsg | VerdictMsg | ReverdictMsg
+  | ReinjMsg | StopRunMsg | SaveProfileMsg | GetProfileMsg | MarkSentMsg | DeleteAllMsg | CloseTabMsg
   | SidebarGetStateMsg | DeferMsg | NavigateBrokerTabMsg | ChallengeDetectedMsg | ChallengeResolvedMsg;
 
 // ── sidebar view model ──────────────────────────────────────────────────────
