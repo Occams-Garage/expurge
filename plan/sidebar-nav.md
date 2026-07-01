@@ -88,9 +88,10 @@ No new `permissions` — `sidebarAction` is available whenever `sidebar_action` 
 - `saving` — action sent, awaiting ACK
 - `recorded` — ACK received (tab closes 800 ms later for terminal verdicts)
 - `revisit` — main pass empty, deferred items remain: "N sites waiting — revisit". Carries `focusId` (first `deferred`, else first `pending` — the blocked-behind-deferred case, opened via `FOCUS_ITEM`→`ensureItemTab`; `null` only if neither remains). The button `FOCUS_ITEM`s `focusId`, so it works on the sidebar's very first render without re-fetching run state
-- `done` — run finished (no `pending`/`open`/`deferred` remain): terminal summary from `progressOf` (done / total / hits). Distinct from `no-run` (never started / no run in this window)
+- `done` — run finished naturally (no `pending`/`open`/`deferred` remain): terminal summary from `progressOf` (done / total / hits). Distinct from `no-run` (never started / no run in this window)
+- `stopped` — run finished via **Stop** (`isComplete` AND some item has `skipReason: 'run_stopped'`): honest "Scan stopped — checked X of Y" summary, where `checked` **excludes** the abandoned `run_stopped` items (they're still counted in `total`). Chosen over `done` so a stopped run doesn't claim "all clear"
 
-The pure `deriveView` (Slice 3) returns only the six **resting** views — `no-run` / `guidance` / `verdict` / `challenge` / `revisit` / `done`. `saving` and `recorded` are **transient** interaction states, not derivable from run state; the sidebar UI layer (Slice 6) sets them imperatively around a verdict send. They stay in the `SidebarView` union for completeness.
+The pure `deriveView` (Slice 3) returns only the seven **resting** views — `no-run` / `guidance` / `verdict` / `challenge` / `revisit` / `done` / `stopped`. `saving` and `recorded` are **transient** interaction states, not derivable from run state; the sidebar UI layer (Slice 6) sets them imperatively around a verdict send. They stay in the `SidebarView` union for completeness.
 
 The **Defer** control is present alongside the active-item detail in `guidance`/`verdict`/`challenge`, visually separated from the verdict cluster, labeled with what it does ("Still loading — set aside, come back at the end").
 

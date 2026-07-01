@@ -76,6 +76,7 @@ function renderView(view: SidebarView): void {
     case 'challenge': renderChallenge(d, view.item); break;
     case 'revisit':   renderRevisit(d, view.waiting, view.focusId); break;
     case 'done':      renderDone(d, view.progress.done, view.progress.total, view.progress.hits); break;
+    case 'stopped':   renderStopped(d, view.checked, view.total, view.hits); break;
     case 'saving':    renderSaving(d); break;
     case 'recorded':  renderRecorded(d); break;
   }
@@ -169,6 +170,14 @@ function renderDone(d: HTMLElement, done: number, total: number, hits: number): 
     ? `Checked ${done} of ${total}. Open the dashboard to send your opt-out requests.`
     : `Checked ${done} of ${total}. You're all clear here.`;
   d.appendChild(make('p', 'empty-sub', sub));
+  d.appendChild(button('View results', 'btn-primary wide', () => { browser.runtime.openOptionsPage().catch(() => {}); }));
+}
+
+// Stop leaves the run isComplete but with abandoned items — honest copy, no "all clear".
+function renderStopped(d: HTMLElement, checked: number, total: number, hits: number): void {
+  d.appendChild(make('p', 'question', 'Scan stopped.'));
+  const found = hits > 0 ? ` Found on ${hits} site${hits !== 1 ? 's' : ''}.` : '';
+  d.appendChild(make('p', 'empty-sub', `Checked ${checked} of ${total}.${found} The rest are still on your list — start again anytime.`));
   d.appendChild(button('View results', 'btn-primary wide', () => { browser.runtime.openOptionsPage().catch(() => {}); }));
 }
 
