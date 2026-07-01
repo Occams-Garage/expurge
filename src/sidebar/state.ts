@@ -5,7 +5,7 @@
 
 import type { RunState, WorkItem, SidebarView, ActiveItemInfo, PageType, RunProgress } from '../shared/types';
 import { BROKERS, type Broker } from '../shared/brokers';
-import { isResultsPage } from '../shared/url';
+import { isResultsPage, isOnHost } from '../shared/url';
 import { progressOf, isComplete } from '../background/coordinator';
 
 // The focused tab's contribution to the view: the work item it maps to (null if the active
@@ -45,11 +45,15 @@ export function deriveView(
     return { view: 'done', progress };
   }
 
-  // A focused broker tab → show its active-item detail. Challenge outranks page-type: a
-  // CAPTCHA hides the listing, so there's nothing to judge until it clears.
+  // A focused broker tab → show its active-item detail. Challenge outranks everything: a CAPTCHA
+  // hides the listing (and its interstitial is often off-host), so there's nothing to judge yet.
   if (focus?.item) {
     const item = activeItemInfo(focus.item, focus.tabUrl, progress, brokers);
     if (focus.challenge) return { view: 'challenge', item };
+    // The verdict/guidance controls act on the broker's OWN page — never let them apply to an
+    // off-host page the tab wandered to (address bar, a link, a redirect), or a listing could be
+    // "confirmed" on, e.g., google.com. Gate both on the tab being on the broker's host.
+    if (!isOnHost(focus.tabUrl ?? '', focus.item.renderedUrl)) return { view: 'offsite', item };
     return item.pageType === 'results'
       ? { view: 'guidance', item }
       : { view: 'verdict', item };

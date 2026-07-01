@@ -76,6 +76,7 @@ function renderView(view: SidebarView): void {
     case 'guidance':  renderGuidance(d, view.item); break;
     case 'verdict':   renderVerdict(d, view.item); break;
     case 'challenge': renderChallenge(d, view.item); break;
+    case 'offsite':   renderOffsite(d, view.item); break;
     case 'revisit':   renderRevisit(d, view.waiting, view.focusId); break;
     case 'done':      renderDone(d, view.progress.done, view.progress.total, view.progress.hits); break;
     case 'stopped':   renderStopped(d, view.checked, view.total, view.hits); break;
@@ -153,6 +154,17 @@ function renderChallenge(d: HTMLElement, item: ActiveItemInfo): void {
   d.appendChild(make('div', 'label', 'Security check'));
   d.appendChild(make('p', 'question', 'This site is running a security check. Complete it on the page, then expurge will show your results.'));
   d.appendChild(button('Skip this site', 'btn-skip wide', () => castVerdict(item.itemId, 'skipped')));
+  deferControl(d, item.itemId);
+}
+
+// The tab left the broker's site — no verdict controls (you can't confirm a listing on another
+// site). Offer to go back to the results (renderedUrl is used as a nav target, never displayed).
+function renderOffsite(d: HTMLElement, item: ActiveItemInfo): void {
+  const name = getBroker(item.brokerId)?.name ?? 'this site';
+  d.appendChild(make('p', 'question', `This tab isn't on ${name} right now.`));
+  d.appendChild(make('p', 'empty-sub', `expurge only checks ${name}'s own pages, so there's nothing to confirm here. Go back to your results, or set this aside for later.`));
+  d.appendChild(button('Back to my results', 'btn-primary wide', () =>
+    send({ type: 'NAVIGATE_BROKER_TAB', windowId, itemId: item.itemId, url: item.renderedUrl })));
   deferControl(d, item.itemId);
 }
 
