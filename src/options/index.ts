@@ -4,6 +4,15 @@ import type { Draft, EmailDraft, FormDraft } from '../shared/templates';
 import { mailtoUrl, toEml, toCopyText } from '../shared/templates';
 import { normalizeAkas } from '../shared/transforms';
 import { BROKERS, getBroker } from '../shared/brokers';
+import {
+  buildAkaRow,
+  addAkaRow,
+  ensureOneAkaRow,
+  resetAkaRows,
+  readAkaRow,
+  firstIncompleteAkaRow,
+  readAkaRows,
+} from './aka-form';
 
 type Section = 'run' | 'results' | 'profile' | 'settings';
 type RunDisplayState = 'welcome' | 'ready' | 'active' | 'done';
@@ -780,86 +789,8 @@ function readProfileFromForm(): Profile | null {
   };
 }
 
-// ── "Other names" (also_known_as) dynamic rows ────────────────────────────────
-// Each name is captured as separate First/Middle/Last inputs, mirroring the
-// primary name. The container always holds at least one row.
-
-function buildAkaRow(aka?: AkaName): HTMLElement {
-  const row = document.createElement('div');
-  row.className = 'aka-row';
-
-  const mkInput = (key: keyof AkaName, label: string): HTMLInputElement => {
-    const input = document.createElement('input');
-    input.type = 'text';
-    input.autocomplete = 'off';
-    input.placeholder = label;
-    input.setAttribute('aria-label', label);
-    input.dataset['aka'] = key;
-    input.value = aka?.[key] ?? '';
-    return input;
-  };
-
-  const remove = document.createElement('button');
-  remove.type = 'button';
-  remove.className = 'btn-quiet aka-remove';
-  remove.textContent = '×';
-  remove.setAttribute('aria-label', 'Remove this name');
-  remove.addEventListener('click', () => {
-    const focusAfter = (row.nextElementSibling ?? row.previousElementSibling) as HTMLElement | null;
-    row.remove();
-    ensureOneAkaRow(); // never leave the list empty
-    const target = focusAfter ?? document.querySelector<HTMLElement>('#aka-rows .aka-row');
-    target?.querySelector<HTMLInputElement>('input[data-aka="first"]')?.focus();
-  });
-
-  row.append(mkInput('first', 'First'), mkInput('middle', 'Middle'), mkInput('last', 'Last'), remove);
-  return row;
-}
-
-function addAkaRow(aka?: AkaName): void {
-  const row = buildAkaRow(aka);
-  document.getElementById('aka-rows')!.appendChild(row);
-  row.querySelector<HTMLInputElement>('input[data-aka="first"]')?.focus();
-}
-
-// The "Other names" list always keeps at least one row. Querying `.aka-row` (not the
-// raw child count) keeps the invariant robust if a non-row node is ever added here.
-function ensureOneAkaRow(): void {
-  const container = document.getElementById('aka-rows')!;
-  if (!container.querySelector('.aka-row')) container.appendChild(buildAkaRow());
-}
-
-// Clear and repopulate the rows; always leave at least one (empty) row.
-function resetAkaRows(akas: AkaName[]): void {
-  document.getElementById('aka-rows')!.replaceChildren(...akas.map(aka => buildAkaRow(aka)));
-  ensureOneAkaRow();
-}
-
-// Read one row's trimmed First/Middle/Last values.
-function readAkaRow(row: HTMLElement): { first: string; middle: string; last: string } {
-  const val = (key: keyof AkaName) =>
-    (row.querySelector<HTMLInputElement>(`input[data-aka="${key}"]`)?.value ?? '').trim();
-  return { first: val('first'), middle: val('middle'), last: val('last') };
-}
-
-// First row that has data but is missing a first or last name (an unsearchable,
-// incomplete name), else null. A searchable name needs both, mirroring the primary
-// name. handleProfileSave blocks the save on such a row, so readAkaRows never drops one.
-function firstIncompleteAkaRow(): HTMLElement | null {
-  for (const row of Array.from(document.querySelectorAll<HTMLElement>('#aka-rows .aka-row'))) {
-    const { first, middle, last } = readAkaRow(row);
-    const hasData = first || middle || last;
-    if (hasData && (!first || !last)) return row;
-  }
-  return null;
-}
-
-// Read rows into AkaName[] via the single canonicalizer — normalizeAkas applies the
-// same trim + drop-if-missing-first/last rules (incomplete rows are blocked at save).
-function readAkaRows(): AkaName[] {
-  const rows = Array.from(document.querySelectorAll<HTMLElement>('#aka-rows .aka-row')).map(readAkaRow);
-  return normalizeAkas(rows);
-}
+// "Other names" (also_known_as) dynamic-row helpers are in ./aka-form (extracted so they
+// can be unit-tested against a bare #aka-rows element).
 
 async function handleProfileSave(e: Event): Promise<void> {
   e.preventDefault();
