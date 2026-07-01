@@ -1,6 +1,7 @@
 import browser from 'webextension-polyfill';
 import type { RunState, WorkItem, Verdict, SidebarView, SidebarUpdateMsg, ActiveItemInfo } from '../shared/types';
 import { getBroker } from '../shared/brokers';
+import { brokerHostname, isOnHost } from '../shared/url';
 import { progressOf } from '../background/coordinator';
 
 // The sidebar is a thin render layer over the view the background derives (deriveView) — it
@@ -112,17 +113,27 @@ function renderGuidance(d: HTMLElement, item: ActiveItemInfo): void {
   d.appendChild(make('p', 'question', 'Find yourself in the list, then open your details page to confirm.'));
   d.appendChild(button('Not found / no results', 'btn-secondary wide', () => castVerdict(item.itemId, 'clear')));
 
-  // Paste-URL fallback: navigate the broker tab to a listing the user pastes.
+  // Paste-URL fallback: navigate THIS item's broker tab to a listing the user pastes. Warn (never
+  // block) when the pasted host isn't the broker's — the hostname is safe to show; the full
+  // renderedUrl (which carries the searched name) is not, so only its host is used.
+  const host = brokerHostname(item.renderedUrl);
   const paste = make('div', 'paste');
   const input = make('input', 'paste-input');
   input.type = 'text';
   input.placeholder = 'Or paste a link to your listing…';
   input.autocomplete = 'off';
+  const warn = make('p', 'paste-warning', `This doesn't look like a ${host} URL — double-check before confirming.`);
+  warn.hidden = true;
+  input.addEventListener('input', () => {
+    const url = input.value.trim();
+    warn.hidden = !url || isOnHost(url, item.renderedUrl);
+  });
   const go = button('Go to my listing', 'btn-quiet wide', () => {
     const url = input.value.trim();
-    if (url) send({ type: 'NAVIGATE_BROKER_TAB', windowId, url });
+    if (url) send({ type: 'NAVIGATE_BROKER_TAB', windowId, itemId: item.itemId, url });
   });
   paste.appendChild(input);
+  paste.appendChild(warn);
   paste.appendChild(go);
   d.appendChild(paste);
 

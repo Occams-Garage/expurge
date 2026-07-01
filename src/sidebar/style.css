@@ -214,6 +214,9 @@ button:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--focus-ring-sha
 }
 .paste-input:focus { outline: none; border-color: var(--focus-ring); box-shadow: 0 0 0 3px var(--focus-ring-shadow); }
 
+/* Off-host paste warning — a single small accent detail (STYLEGUIDE §2), never a blocker. */
+.paste-warning { color: var(--accent); font-size: var(--fs-mono); line-height: var(--lh-small); margin-bottom: var(--s-2); }
+
 /* ── transient status ────────────────────────────────────────────────────── */
 
 @keyframes spin { to { transform: rotate(360deg); } }

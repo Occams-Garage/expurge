@@ -86,7 +86,7 @@ export interface DeferMsg             { type: 'DEFER';               itemId: str
 // the first deferred item). The sidebar can't focus a tab itself (tab ids are background-only),
 // so it names the item and background activates its tab.
 export interface FocusItemMsg         { type: 'FOCUS_ITEM';          itemId: string; windowId: number }
-export interface NavigateBrokerTabMsg { type: 'NAVIGATE_BROKER_TAB'; windowId: number; url: string }
+export interface NavigateBrokerTabMsg { type: 'NAVIGATE_BROKER_TAB'; windowId: number; itemId: string; url: string }
 
 // ── messages content → background ───────────────────────────────────────────
 // The headless content script only reports whether a bot-challenge is up; the
