@@ -1,5 +1,5 @@
 import * as esbuild from 'esbuild';
-import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
+import { copyFileSync, cpSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 
 const watch = process.argv.includes('--watch');
 
@@ -20,6 +20,8 @@ const entries = [
   { entryPoints: ['src/popup/style.css'],     outfile: 'dist/style.css'     },
   { entryPoints: ['src/options/index.ts'],    outfile: 'dist/options.js'    },
   { entryPoints: ['src/options/style.css'],   outfile: 'dist/options.css'   },
+  { entryPoints: ['src/sidebar/index.ts'],    outfile: 'dist/sidebar.js'    },
+  { entryPoints: ['src/sidebar/style.css'],   outfile: 'dist/sidebar.css'   },
 ];
 
 function copyStatics() {
@@ -28,6 +30,11 @@ function copyStatics() {
   writeFileSync('dist/manifest.json', manifest);
   copyFileSync('src/popup/index.html',   'dist/popup.html');
   copyFileSync('src/options/index.html', 'dist/options.html');
+  copyFileSync('src/sidebar/index.html', 'dist/sidebar.html');
+  // Self-hosted fonts: fonts.css is loaded by all three surfaces; its url()s resolve to
+  // dist/fonts/*.woff2 (copied verbatim — not bundled, so esbuild never touches the woff2).
+  copyFileSync('src/styles/fonts.css', 'dist/fonts.css');
+  cpSync('src/styles/fonts', 'dist/fonts', { recursive: true });
 }
 
 if (watch) {

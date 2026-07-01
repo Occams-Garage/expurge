@@ -4,9 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>expurge</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600&family=IBM+Plex+Mono&family=Newsreader:opsz,wght@6..72,600&display=swap">
+  <link rel="stylesheet" href="fonts.css">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -25,7 +23,7 @@
     <div id="popup-active" class="hidden">
       <p id="popup-progress" class="run-progress"></p>
       <div class="popup-actions">
-        <button id="btn-restore-overlay" class="btn-secondary">Restore overlay</button>
+        <button id="btn-show-sidebar-active" class="btn-secondary">Show scan panel</button>
         <button id="btn-stop-run" class="btn-quiet">Stop</button>
       </div>
       <button id="btn-open-dashboard-active" class="btn-primary">Dashboard →</button>
@@ -34,6 +32,9 @@
     <!-- Run done -->
     <div id="popup-done" class="hidden">
       <p id="popup-done-summary" class="run-progress"></p>
+      <div class="popup-actions">
+        <button id="btn-show-sidebar-done" class="btn-secondary">Show scan panel</button>
+      </div>
       <button id="btn-open-dashboard-done" class="btn-primary">View results</button>
     </div>
   </div>

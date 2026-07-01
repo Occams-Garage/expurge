@@ -21,7 +21,12 @@
     "default_popup": "dist/popup.html",
     "default_title": "expurge"
   },
-  "permissions": ["storage", "tabs", "downloads", "scripting", "webNavigation"],
+  "sidebar_action": {
+    "default_panel": "dist/sidebar.html",
+    "default_title": "expurge",
+    "open_at_install": false
+  },
+  "permissions": ["storage", "tabs", "downloads"],
   "host_permissions": [
     "*://updates.expurge.dev/*"
   ],
@@ -38,9 +43,9 @@
     }
   },
   "_notes": {
-    "webNavigation": "In permissions for background webNavigation.onErrorOccurred (load-error skipping). Not yet wired in background/index.ts — implement when adding M9 brokers.",
+    "webNavigation": "Removed — was reserved for background webNavigation.onErrorOccurred (load-error skipping) but never wired. Re-add to permissions when M9 wires webNavigation.onErrorOccurred.",
     "host_permissions_update_server": "updates.expurge.dev: confirm subdomain before M7 ships. Background fetch needs host_permissions (not optional) to bypass CORS without user consent. If URL changes, update here.",
-    "m9_new_brokers": "Each new broker domain needs TWO entries: (1) optional_host_permissions so browser.permissions.request() can offer it at run start; (2) content_scripts.matches so the overlay injects. Both are required — either alone does not work.",
+    "m9_new_brokers": "Each new broker domain needs TWO entries: (1) optional_host_permissions so browser.permissions.request() can offer it at run start; (2) content_scripts.matches so the headless challenge reporter injects (challenge detection). Both are required — either alone does not work. Verdict UI lives in the window-level sidebar (sidebar_action), which needs no per-domain entry.",
     "m8_no_new_permissions": "Persistence opt-ins (M8) use storage.local only — no new permissions needed.",
     "firefox_ignores_underscore_keys": "Firefox logs a warning for unknown top-level keys but loads the extension. Remove _notes before AMO submission if it causes review friction."
   }

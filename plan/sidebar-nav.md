@@ -59,7 +59,7 @@ Rides the existing bundled + Ed25519-signed remote dataset. **Not** subject to t
 
 ## Implementation
 
-### 1. `manifest.json`
+### 1. `manifest.json` — ✅ DONE (commit `1de0829`)
 
 Add:
 ```json
@@ -67,61 +67,76 @@ Add:
 ```
 No new `permissions` — `sidebarAction` is available whenever `sidebar_action` is present. Content-script `matches` stays (still needed for challenge detection).
 
-### 2. `build.mjs`
+### 2. `build.mjs` — ✅ DONE (commit `1de0829`)
 
 - esbuild entry: `src/sidebar/index.ts` → `dist/sidebar.js`, `src/sidebar/style.css` → `dist/sidebar.css`.
 - `copyStatics()` copies `src/sidebar/index.html` → `dist/sidebar.html`.
 
-### 3. `src/sidebar/` (new — the checklist UI)
+### 3. `src/sidebar/` (new — the checklist UI) — ✅ DONE (commits `1de0829`, `87a7179`)
 
 - **`index.html`** — links `sidebar.css` + `sidebar.js`.
 - **`style.css`** — `@import "../styles/tokens.css"` directly (no shadow-DOM isolation needed). Follow `design/STYLEGUIDE.md` for voice/components; reference tokens, never hard-code values.
-- **`state.ts`** — **pure** state-derivation, extracted for tests (mirrors `coordinator.ts` / `classify.ts`). Maps `(run, activeItem, focusedTabUrl, challengeFlag)` → a tagged `SidebarView`. This is where the seven view states live (see below).
+- **`state.ts`** — **pure** state-derivation, extracted for tests (mirrors `coordinator.ts` / `classify.ts`). Maps `(run, activeItem, focusedTabUrl, challengeFlag)` → a tagged `SidebarView`. This is where the eight view states live (see below).
 - **`index.ts`** — thin render layer. On load: `browser.windows.getCurrent()` → `windowId`, send `SIDEBAR_GET_STATE({ windowId })`. Subscribe to background-pushed `SIDEBAR_UPDATE`. Render the checklist (grouped **In progress / Waiting / Done**) plus the active-item detail (broker `guidance`, "look for" chips, verdict cluster, separate Defer control). Wire the buttons to send messages. **All rendering via `textContent`** for any dataset-sourced text.
+  - **Decision A — checklist data source (settled in Slice 6).** The active-item **detail** and which **view** come from the pushed `SidebarView` (background's `deriveView`; the UI never re-derives). The grouped **checklist** is rendered from `GET_RUN_STATE`, re-fetched on each `SIDEBAR_UPDATE`. Skew is negligible — pushes happen at the end of a serialized background mutation, so the run the checklist re-fetches already reflects it. No contract change. The revisit button reads the first `deferred` item from that same `GET_RUN_STATE` for its `FOCUS_ITEM`. **PII invariant:** the checklist shows broker name (dataset), a generic `alternate name` tag for AKA variants (from `nameVariant`, never the actual name), and a `listed` marker — never `variantFirst`/`variantLast`/`renderedUrl`/`listingUrl`.
 
 **Sidebar views** (the `state.ts` tagged union):
 - `no-run` — no active run in this window
 - `guidance` — active tab on the results page: `search.guidance` + "look for" chips + a **Not found / no results** action (records `clear` without visiting a details page) + a paste-URL fallback
 - `verdict` — active tab on a details page: four verdicts (hit / clear / unknown / skip)
 - `challenge` — active tab showing a CAPTCHA/challenge: explanation + **Skip this site**
+- `offsite` — the broker tab wandered off the broker's host (address bar / a link / a redirect): **no** verdict controls (a listing can't be confirmed on, e.g., google.com) + a **Back to my results** action + Defer. Gated on `isOnHost(tabUrl, renderedUrl)`, checked before results/details so a lookalike host at the results pathname can't read as `guidance` either. Challenge outranks it (a Cloudflare interstitial is legitimately off-host mid-check)
 - `saving` — action sent, awaiting ACK
 - `recorded` — ACK received (tab closes 800 ms later for terminal verdicts)
-- `revisit` — main pass empty, deferred items remain: "N sites waiting — revisit" (click focuses first deferred tab)
+- `revisit` — main pass empty, deferred items remain: "N sites waiting — revisit". Carries `focusId` (first `deferred`, else first `pending` — the blocked-behind-deferred case, opened via `FOCUS_ITEM`→`ensureItemTab`; `null` only if neither remains). The button `FOCUS_ITEM`s `focusId`, so it works on the sidebar's very first render without re-fetching run state
+- `done` — run finished naturally (no `pending`/`open`/`deferred` remain): terminal summary from `progressOf` (done / total / hits). Distinct from `no-run` (never started / no run in this window)
+- `stopped` — run finished via **Stop** (`isComplete` AND some item has `skipReason: 'run_stopped'`): honest "Scan stopped — checked X of Y" summary, where `checked` **excludes** the abandoned `run_stopped` items (they're still counted in `total`). Chosen over `done` so a stopped run doesn't claim "all clear"
+
+The pure `deriveView` (Slice 3) returns only the eight **resting** views — `no-run` / `guidance` / `verdict` / `challenge` / `offsite` / `revisit` / `done` / `stopped`. `saving` and `recorded` are **transient** interaction states, not derivable from run state; the sidebar UI layer (Slice 6) sets them imperatively around a verdict send. They stay in the `SidebarView` union for completeness.
 
 The **Defer** control is present alongside the active-item detail in `guidance`/`verdict`/`challenge`, visually separated from the verdict cluster, labeled with what it does ("Still loading — set aside, come back at the end").
 
-### 4. `src/background/coordinator.ts` (pure — extend, don't rewrite)
+### 4. `src/background/coordinator.ts` (pure — extend, don't rewrite) — ✅ DONE (commit `5398e5a`)
 
-- **`selectBatch`** — count only `open` items against the window (exclude `deferred`), still one-per-broker. **Add the ceiling:** if `(open + deferred) >= MAX_OPEN_TABS`, open nothing. New constant `MAX_OPEN_TABS = 15`.
-- **New transition `applyDefer(run, itemId)`** — `open → deferred` (only from `open`; never overrides a verdict). Pure, unit-tested.
-- **Completion** — a run is done only when **no** `pending`/`open`/`deferred` items remain. Add a helper (e.g. `isComplete(run)` / `progressOf(run)`) so popup + options + sidebar share one definition. `deferred` counts toward `total`, not `done`.
-- Untouched: `buildItems`, `withVerdict`, `applySkip`, `applyStop`, `applyMarkSent` (the pure judgments survive).
+- **`selectBatch`** — counts only `open` against the window (exclude `deferred`), still one-per-broker. Ceiling: `slots = min(batchSize − open, MAX_OPEN_TABS − heldTabs)` where `heldTabs = open + deferred` — opens up to remaining headroom (not a hard zero at the ceiling). New constant `MAX_OPEN_TABS = 15`. **`claimed` now includes deferred brokers** (a deferred tab is still live — no second variant against it).
+- **`applyDefer(run, itemId)`** — `open → deferred` only; never re-defers, never touches pending, never overrides a verdict. Pure, unit-tested.
+- **`applyStop`** — also sweeps `deferred` → `run_stopped` (was not in the original plan; required, else a stopped run strands deferred items as non-terminal).
+- **Completion** — `isComplete(run)` (no `pending`/`open`/`deferred` remain) and `progressOf(run)` (`deferred` counts toward `total`, not `done`; `missing:` skips excluded from both) — one shared definition for popup + options + sidebar.
+- Untouched: `buildItems`, `withVerdict`, `applySkip`, `applyMarkSent`.
 
-### 5. `src/background/index.ts` (coordination — the real surgery)
+**⚠ Carried forward from the Slice-1 review — handle these in §5/§7, they're not yet done:**
+
+1. **Wire `progressOf` into `background/index.ts:217`, not just the popup.** The background's `ITEM_INFO` handler still computes progress inline as `done = all verdicted`, `total = run.items.length` — which *includes* `missing:` skips, unlike `progressOf`. When you route the sidebar's progress through `progressOf`, replace the inline math in **both** `background/index.ts:217` **and** `popup/index.ts`. Expect the visible counter to shift (missing-field skips drop out of done/total). That's the intended single definition — just make it deliberate.
+2. **The revisit trigger must handle "pending blocked behind a deferred sibling."** Because `selectBatch` claims deferred brokers, a broker with `primary=deferred, aka_0=pending` leaves `aka_0` unopenable while nothing else is open — a state with *both* pending and deferred items and no open tab (reachable today: TruePeopleSearch + one AKA). A naïve `pending.length === 0 && deferred.length > 0` revisit check **misses this** and shows nothing actionable. The §5 focus-drive/revisit logic must route "nothing open, only deferred (or deferred-blocked-pending) remain" → the Waiting/revisit view. Resolving the deferred item unblocks the pending AKA on the next `openNextBatch`. Add a test for it.
+3. **Decide what `deferred` does on resume/rehydrate.** `saveRun` strips `tabId`, so a resumed `deferred` item keeps its status but has no live tab — you can't `tabs.update` a tabId that's gone. Per the plan, revisiting a resumed deferred item must open a **fresh** tab from its `renderedUrl`. The §5 background work (and the resume note under Open questions) must handle this explicitly; the pure coordinator doesn't preclude it.
+
+### 5. `src/background/index.ts` (coordination — the real surgery) — ✅ DONE (commits `057f878`, `55f7d0a`, `913ba8e`, `83fd2c6`, `46502a4`)
 
 - **Thread `windowId`.** `handleStartRun` receives `windowId` (captured at the Start click), stores it in session run state, and `openNextBatch` creates tabs with `browser.tabs.create({ url, active, windowId })`.
 - **Drive focus.** After a terminal verdict/skip (tab closes) *or* a defer (tab stays open), activate the next `pending`/`open` item's tab (`tabs.update(nextTabId, { active: true })`), opening one if a slot freed. If none remain but deferred exist → push the `revisit` view; if nothing remains → done.
 - **`SIDEBAR_GET_STATE({ windowId })`** — resolve window → active broker tab → item; return the `ItemInfoMsg` fields (`itemId`, `brokerId`, `exposes`, `guidance`, `renderedUrl`, `progress { done, total, hits }`) **plus** `pageType` (results/details, via the moved `isResultsPage`) and the current view. Adapt `findActiveBrokerTab` into a window-scoped variant that prefers the active tab.
 - **Push `SIDEBAR_UPDATE`** on: `tabs.onActivated` (focus moved to a tracked broker tab), `tabs.onUpdated` complete (broker tab finished navigating → recompute page-type; keep the existing off-host redirect guard), and challenge messages.
+  - **Sticky-view contract (from the Slice-3 review).** When focus moves to a **non-broker** tab, **do NOT push** an update — leave the sidebar showing the last broker item. `deriveView` returns `revisit` for *any* unfocused-and-incomplete run (it can't tell "genuinely nothing open" from "user glanced at their email"), so only call it with `focus.item = null` when there is genuinely no open broker tab. Concretely: build `SidebarFocus` from the active tab **only if that tab is a tracked broker tab in the run's window**; otherwise skip the push. This keeps `revisit` meaning its intended thing (deferred/blocked-pending await) instead of firing every time the user looks away mid-run. Add an integration check for "activate a non-broker tab mid-run → sidebar unchanged."
 - **`DEFER` handler** — `applyDefer`, keep the tab, drive focus, then `openNextBatch` (a slot freed).
 - **`VERDICT` handler** — unchanged pipeline (`withVerdict` → `selectBatch`); sidebar sends `windowId`, background resolves the broker `tabId` to drop its tracking key + close it.
 - **`CLOSE_TAB`** — now carries `windowId` (the sidebar is not in the broker tab, so `sender.tab?.id` no longer identifies it); background resolves the tracked tab.
-- **Forward challenge** — `CHALLENGE_DETECTED` / `CHALLENGE_RESOLVED` from the content script → push `SIDEBAR_UPDATE`.
+- **Forward challenge** — `CHALLENGE_DETECTED` / `CHALLENGE_RESOLVED` from the content script → set/clear a per-tab challenge flag → push `SIDEBAR_UPDATE`.
+  - **The content script reports challenge state on every load, so the flag is authoritative per-load** (revised in the Slice-5 review). Background clears the flag ONLY on `CHALLENGE_RESOLVED` (or on tab close). It does **not** guess challenge state from `tabs.onUpdated` navigation — that heuristic misfired on an *on-host* Cloudflare interstitial (`broker.com/cdn-cgi/...`): the content script set the flag at `document_end`, then the later `onUpdated complete` cleared it on the same load, so the sidebar showed `verdict` over a "checking your browser" page. The on-host interstitial now reports `CHALLENGE_DETECTED` and stays challenged until the redirect to the real page — a fresh load that reports `CHALLENGE_RESOLVED`. No race, single per-load source of truth. (`tabs.onUpdated` still fires `pushActiveView` to recompute page-type on results→details.)
 - **Remove:** `reinjectIfMissing`, `REINJECT_OVERLAY` handler, `PING`/`PONG` handler, and the reinject body of `tabs.onUpdated` (repurposed to push updates). Retain `findActiveBrokerTab`'s tab-scan logic (adapted for window→tab resolution). `tabs.onRemoved → skipped/tab_closed` stays (closing a deferred tab = skip, same as an open one).
 
-### 6. `src/content/index.ts` — strip to a headless challenge reporter (~50 lines)
+### 6. `src/content/index.ts` — strip to a headless challenge reporter (~50 lines) — ✅ DONE (commits `6bf6270`, `9b33823`)
 
 **Remove** (~630 lines): all styles, all panel builders (`buildVerdictPanel` / `buildGuidancePanel` / `buildChallengePanel` / `showMainPanel`), `sendVerdict`, `closeSelfTab`, the `GET_ITEM` call, and the `PING` listener.
 
 **Keep / new:**
 - Reuse the already-extracted, tested **`detectChallenge()`** from `classify.ts`.
-- On load: if `detectChallenge()`, send `{ type: 'CHALLENGE_DETECTED' }`.
-- `MutationObserver` on `document.documentElement`; when the challenge clears (250 ms debounce, lifted from the old `buildChallengePanel`), send `{ type: 'CHALLENGE_RESOLVED' }`.
+- On load, report challenge state **either way** — `{ type: 'CHALLENGE_DETECTED' }` if `detectChallenge()`, else `{ type: 'CHALLENGE_RESOLVED' }`. This makes the content script the single per-load source of truth: an on-host interstitial reports `DETECTED`; its redirect to the real page is a fresh load that reports `RESOLVED`.
+- When challenged, also set a `MutationObserver` on `document.documentElement` to catch an **in-page** clear (e.g. Turnstile solved inline, no navigation): 250 ms debounce (lifted from the old `buildChallengePanel`), then send `{ type: 'CHALLENGE_RESOLVED' }`. (Out of scope: a challenge *appearing* after a clean load without a navigation.)
 - **No UI at all.** The content script never touches the page DOM.
 
 **Move** `isResultsPage()` / `brokerHostname()` out of `content/classify.ts` into `src/shared/` (e.g. `src/shared/url.ts`) — the *background* now needs them to classify page-type, and the sidebar/content boundary shouldn't own shared pure helpers. `detectChallenge()` (DOM-dependent) stays in `content/classify.ts`. Move their tests with them.
 
-### 7. Popup + options — remove "Restore overlay", add sidebar-open on Start
+### 7. Popup + options — remove "Restore overlay", add sidebar-open on Start — ✅ DONE (commit `8442273`)
 
 - Delete the "Restore overlay" button + `REINJECT_OVERLAY` handler from **all four** spots: `src/popup/index.html:28`, `src/popup/index.ts:41`, `src/options/index.html:51`, `src/options/index.ts:~989`.
 - In the **Start-run click handler** (popup and options), call `browser.sidebarAction.open()` **synchronously in the same tick**, capture `windowId`, then send `START_RUN` with it. Do **not** route the open through background.
