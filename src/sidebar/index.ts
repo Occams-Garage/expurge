@@ -1,7 +1,8 @@
 import browser from 'webextension-polyfill';
 import type { RunState, WorkItem, Verdict, SidebarView, SidebarUpdateMsg, ActiveItemInfo } from '../shared/types';
 import { getBroker } from '../shared/brokers';
-import { brokerHostname, isOnHost } from '../shared/url';
+import { brokerHostname } from '../shared/url';
+import { wirePasteWarning } from './paste';
 import { progressOf } from '../background/coordinator';
 
 // The sidebar is a thin render layer over the view the background derives (deriveView) — it
@@ -123,11 +124,7 @@ function renderGuidance(d: HTMLElement, item: ActiveItemInfo): void {
   input.placeholder = 'Or paste a link to your listing…';
   input.autocomplete = 'off';
   const warn = make('p', 'paste-warning', `This doesn't look like a ${host} URL — double-check before confirming.`);
-  warn.hidden = true;
-  input.addEventListener('input', () => {
-    const url = input.value.trim();
-    warn.hidden = !url || isOnHost(url, item.renderedUrl);
-  });
+  wirePasteWarning(input, warn, item.renderedUrl);
   const go = button('Go to my listing', 'btn-quiet wide', () => {
     const url = input.value.trim();
     if (url) send({ type: 'NAVIGATE_BROKER_TAB', windowId, itemId: item.itemId, url });
