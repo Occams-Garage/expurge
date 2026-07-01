@@ -503,12 +503,14 @@ browser.runtime.onMessage.addListener(
     }
 
     if (m.type === 'NAVIGATE_BROKER_TAB') {
-      // Paste-URL fallback: point the window's broker tab at the pasted listing. The ensuing
-      // onUpdated recomputes page-type (results → details) and pushes the verdict view.
+      // Paste-URL fallback: point the PASTED ITEM's own broker tab at the listing (via
+      // tabIdForItem, not the active-preferred findWindowBrokerTab — the active tab may have
+      // changed since the guidance view rendered, so the paste can't land in the wrong tab).
+      // The ensuing onUpdated recomputes page-type (results → details) and pushes verdict.
       const windowId = m.windowId as number;
       const run = await loadRun();
       if (run && run.windowId === windowId) {
-        const tabId = await findWindowBrokerTab(windowId, run);
+        const tabId = await tabIdForItem(m.itemId as string);
         if (tabId !== null) await browser.tabs.update(tabId, { url: m.url as string }).catch(() => {});
       }
       return { ok: true };
