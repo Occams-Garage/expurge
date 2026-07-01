@@ -6,7 +6,9 @@ export type SkipReason =
   | 'run_stopped'
   | 'permission_denied'
   | `missing:${string}`;
-export type WorkItemStatus = 'pending' | 'open' | 'verdicted';
+// pending → not yet opened. open → tab open, holds a batch slot. deferred → tab open but
+// set aside (non-terminal, frees its slot, revisited at run end). verdicted → terminal.
+export type WorkItemStatus = 'pending' | 'open' | 'deferred' | 'verdicted';
 
 export interface WorkItem {
   id: string;              // "{brokerId}:{nameVariant}"
