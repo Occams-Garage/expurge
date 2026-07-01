@@ -37,15 +37,24 @@ sections, redesigned popup (run-control-panel only). No persistence opt-ins.
 The popup currently contains the profile form and draft surfaces. Per the design interview,
 these move to the options page in M4+. The popup becomes a compact run control panel only.
 
-### Planned: overlay → sidebar migration (decided 2026-07-01, not yet built)
+### Done: overlay → sidebar migration (decided + built 2026-07-01)
 
-The shipped in-page shadow-DOM overlay (`src/content/index.ts`) and its Restore-Overlay /
-PING / reinjection machinery are slated for replacement by a Firefox native **sidebar** — a
-persistent run-wide checklist that drives navigation. Adds a first-class `deferred` work-item
-state, a `MAX_OPEN_TABS=15` ceiling, per-broker `search.guidance`, and shrinks the content
-script to a headless challenge reporter. Full plan in **`plan/sidebar-nav.md`**; rationale in
-wherefore `2026-07-01-sidebar-run-navigation` (resolves Q-013, opens Q-015). The `content` /
-`popup` / `background` rows above document the **current** overlay build, not the target.
+The in-page shadow-DOM overlay was **replaced by a Firefox native `sidebar_action`** — a
+persistent, window-level run-wide checklist that drives navigation itself. Beyond what the
+per-tab overlay could do, the sidebar adds an **interactive checklist** (grouped In progress /
+Waiting / Done; click any non-terminal row to jump to that tab) and an always-available
+**Defer** control. The migration also added a first-class `deferred` work-item state, a
+`MAX_OPEN_TABS=15` ceiling, per-broker `search.guidance`, a shared `progressOf`/`isComplete`
+definition, and shrank the content script to a **headless challenge reporter** (no UI, ~45
+lines). The reinjection machinery (Restore-Overlay / PING / `reinjectIfMissing` / `GET_ITEM`)
+is gone, and the dead `scripting` permission was dropped.
+
+View truth lives in one pure function, `deriveView` (`src/sidebar/state.ts`); the background
+builds its inputs and pushes `SIDEBAR_UPDATE`, and the sidebar renders without re-deriving.
+Full plan (§-by-§ with commit refs) in **`plan/sidebar-nav.md`**; rationale in wherefore
+`2026-07-01-sidebar-run-navigation` (resolves Q-013; Q-015 pending empirical Firefox check).
+The `content` / `popup` / `background` rows above describe the **pre-migration** build and are
+superseded by the sidebar architecture — see `sidebar-nav.md` for the current shape.
 
 ---
 
