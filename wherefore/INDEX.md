@@ -40,3 +40,5 @@
 - 2026-06-30 | 2026-06-30-results-broker-grouped | Results page redesigned: broker-grouped layout | areas: coverage-report, matching-overlay | topics: ux, data-model | stories: [] | active
 - 2026-06-30 | 2026-06-30-overlay-tab-vs-overlay | Overlay-on-page vs side-by-side tab | areas: matching-overlay | topics: ux | stories: [] | active
 - 2026-06-30 | 2026-06-30-stop-only-run-control | Run control is stop-only; pause dropped | areas: run-model | topics: ux, webextensions | stories: [] | active
+- 2026-06-30 | 2026-06-30-aka-structured-name-fields | Structured first/middle/last for other names | areas: profile | topics: data-model, ux | stories: [] | active
+- 2026-06-30 | 2026-06-30-vitest-test-runner | Vitest for unit tests; e2e deferred | areas: (none) | topics: testing, webextensions | stories: [] | active
