@@ -145,6 +145,9 @@ export type SidebarView =
   | { view: 'challenge'; item: ActiveItemInfo }
   | { view: 'revisit';   waiting: number; focusId: string | null; progress: RunProgress }
   | { view: 'done';      progress: RunProgress }
+  // A stopped run is `isComplete` (everything's verdicted), but the run_stopped items were
+  // abandoned, not checked — so `checked` excludes them (they're still counted in `total`).
+  | { view: 'stopped';   checked: number; total: number; hits: number }
   | { view: 'saving';    item: ActiveItemInfo }
   | { view: 'recorded';  item: ActiveItemInfo };
 

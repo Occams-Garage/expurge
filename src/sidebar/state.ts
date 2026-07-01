@@ -34,7 +34,16 @@ export function deriveView(
   if (!run) return { view: 'no-run' };
 
   const progress = progressOf(run);
-  if (isComplete(run)) return { view: 'done', progress };
+  if (isComplete(run)) {
+    // A stopped run is "complete" (nothing pending/open/deferred), but its run_stopped items
+    // were abandoned by the Stop, not checked. Show an honest `stopped` summary whose `checked`
+    // count excludes them (they're all verdicted, so they sit inside progress.total).
+    const stoppedCount = run.items.filter(i => i.skipReason === 'run_stopped').length;
+    if (stoppedCount > 0) {
+      return { view: 'stopped', checked: progress.total - stoppedCount, total: progress.total, hits: progress.hits };
+    }
+    return { view: 'done', progress };
+  }
 
   // A focused broker tab → show its active-item detail. Challenge outranks page-type: a
   // CAPTCHA hides the listing, so there's nothing to judge until it clears.

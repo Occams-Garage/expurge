@@ -43,6 +43,37 @@ describe('deriveView — done', () => {
   });
 });
 
+describe('deriveView — stopped', () => {
+  it('isComplete with a run_stopped item → stopped; checked excludes the abandoned ones', () => {
+    const r = run([
+      item({ id: 'a', status: 'verdicted', verdict: 'hit' }),
+      item({ id: 'b', status: 'verdicted', verdict: 'clear' }),
+      item({ id: 'c', status: 'verdicted', verdict: 'skipped', skipReason: 'run_stopped' }),
+    ]);
+    const v = expectView(deriveView(r, null, brokers), 'stopped');
+    expect(v).toMatchObject({ checked: 2, total: 3, hits: 1 });
+  });
+
+  it('a fully-verdicted run with no run_stopped item stays done', () => {
+    expect(deriveView(run([item({ status: 'verdicted', verdict: 'clear' })]), null, brokers).view).toBe('done');
+  });
+
+  it('stopped wins over a still-focused item (isComplete precedence)', () => {
+    const r = run([item({ status: 'verdicted', verdict: 'skipped', skipReason: 'run_stopped' })]);
+    expect(deriveView(r, focus({ challenge: true }), brokers).view).toBe('stopped');
+  });
+
+  it('total excludes missing: skips, checked excludes run_stopped', () => {
+    const r = run([
+      item({ id: 'm', status: 'verdicted', verdict: 'skipped', skipReason: 'missing:city' }),
+      item({ id: 'a', status: 'verdicted', verdict: 'clear' }),
+      item({ id: 's', status: 'verdicted', verdict: 'skipped', skipReason: 'run_stopped' }),
+    ]);
+    const v = expectView(deriveView(r, null, brokers), 'stopped');
+    expect(v).toMatchObject({ checked: 1, total: 2, hits: 0 });
+  });
+});
+
 describe('deriveView — challenge / guidance / verdict (focused item)', () => {
   const incomplete = run([item({ status: 'open' })]);
 
@@ -145,7 +176,7 @@ describe('deriveView — results↔details boundary', () => {
 });
 
 describe('deriveView — only ever returns resting views', () => {
-  const resting = new Set(['no-run', 'guidance', 'verdict', 'challenge', 'revisit', 'done']);
+  const resting = new Set(['no-run', 'guidance', 'verdict', 'challenge', 'revisit', 'done', 'stopped']);
   const cases: Array<[RunOrNull, SidebarFocus | null]> = [
     [null, null],
     [run([item({ status: 'verdicted', verdict: 'hit' })]), focus()],
@@ -153,6 +184,7 @@ describe('deriveView — only ever returns resting views', () => {
     [run([item({ status: 'open' })]), focus()],
     [run([item({ status: 'open' })]), focus({ tabUrl: DETAILS_URL })],
     [run([item({ status: 'deferred' })]), null],
+    [run([item({ status: 'verdicted', verdict: 'skipped', skipReason: 'run_stopped' })]), null],
   ];
   it('never emits the transient saving/recorded states', () => {
     for (const [r, f] of cases) {
