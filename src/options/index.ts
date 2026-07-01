@@ -993,6 +993,12 @@ document.querySelectorAll<HTMLElement>('[data-nav]').forEach(btn => {
 
 document.getElementById('btn-start')!.addEventListener('click', () => { handleStartRun().catch(console.error); });
 
+// Re-open a closed sidebar. Synchronous in the click gesture; opens in the active window,
+// which then SIDEBAR_GET_STATEs (shows the run if this is the run's window, else no-run).
+document.getElementById('btn-show-sidebar')!.addEventListener('click', () => {
+  browser.sidebarAction.open().catch(() => {});
+});
+
 document.getElementById('btn-stop')!.addEventListener('click', async () => {
   await browser.runtime.sendMessage({ type: 'STOP_RUN' });
   const res = await browser.runtime.sendMessage({ type: 'GET_RUN_STATE' }) as { run?: RunState };
