@@ -115,6 +115,21 @@ export function applyDefer(run: RunState, itemId: string): RunState {
   };
 }
 
+// The inverse of applyDefer: bring a set-aside item back, deferred → open, so it rejoins the
+// normal verdict/defer flow. Only from 'deferred' — a pending item must instead go through the
+// tab-creating path (ensureItemTab); promoteToOpen never conjures an `open` item with no live
+// tab. No-op on open/pending/verdicted. Pure; the caller (FOCUS_ITEM) activates the tab.
+export function promoteToOpen(run: RunState, itemId: string): RunState {
+  return {
+    ...run,
+    items: run.items.map(i =>
+      i.id === itemId && i.status === 'deferred'
+        ? { ...i, status: 'open' as WorkItemStatus }
+        : i,
+    ),
+  };
+}
+
 // Stop the run: every still-pending/open/deferred item becomes skipped:run_stopped.
 export function applyStop(run: RunState): RunState {
   return {

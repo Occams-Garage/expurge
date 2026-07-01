@@ -82,6 +82,10 @@ export interface CloseTabMsg    { type: 'CLOSE_TAB'; windowId?: number }
 
 export interface SidebarGetStateMsg   { type: 'SIDEBAR_GET_STATE';   windowId: number }
 export interface DeferMsg             { type: 'DEFER';               itemId: string; windowId: number }
+// One message for both a checklist row click and the revisit button (revisit = FOCUS_ITEM on
+// the first deferred item). The sidebar can't focus a tab itself (tab ids are background-only),
+// so it names the item and background activates its tab.
+export interface FocusItemMsg         { type: 'FOCUS_ITEM';          itemId: string; windowId: number }
 export interface NavigateBrokerTabMsg { type: 'NAVIGATE_BROKER_TAB'; windowId: number; url: string }
 
 // ── messages content → background ───────────────────────────────────────────
@@ -112,7 +116,7 @@ export interface StopRunMsg { type: 'STOP_RUN' }
 export type ToBackground =
   | StartRunMsg | GetRunStateMsg | GetDraftMsg | VerdictMsg | ReverdictMsg
   | ReinjMsg | StopRunMsg | SaveProfileMsg | GetProfileMsg | MarkSentMsg | DeleteAllMsg | CloseTabMsg
-  | SidebarGetStateMsg | DeferMsg | NavigateBrokerTabMsg | ChallengeDetectedMsg | ChallengeResolvedMsg;
+  | SidebarGetStateMsg | DeferMsg | FocusItemMsg | NavigateBrokerTabMsg | ChallengeDetectedMsg | ChallengeResolvedMsg;
 
 // ── sidebar view model ──────────────────────────────────────────────────────
 // The sidebar's display is derived purely from run state + focus (src/sidebar/state.ts).
