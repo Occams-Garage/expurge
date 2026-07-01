@@ -37,6 +37,16 @@ sections, redesigned popup (run-control-panel only). No persistence opt-ins.
 The popup currently contains the profile form and draft surfaces. Per the design interview,
 these move to the options page in M4+. The popup becomes a compact run control panel only.
 
+### Planned: overlay → sidebar migration (decided 2026-07-01, not yet built)
+
+The shipped in-page shadow-DOM overlay (`src/content/index.ts`) and its Restore-Overlay /
+PING / reinjection machinery are slated for replacement by a Firefox native **sidebar** — a
+persistent run-wide checklist that drives navigation. Adds a first-class `deferred` work-item
+state, a `MAX_OPEN_TABS=15` ceiling, per-broker `search.guidance`, and shrinks the content
+script to a headless challenge reporter. Full plan in **`plan/sidebar-nav.md`**; rationale in
+wherefore `2026-07-01-sidebar-run-navigation` (resolves Q-013, opens Q-015). The `content` /
+`popup` / `background` rows above document the **current** overlay build, not the target.
+
 ---
 
 ## Milestones

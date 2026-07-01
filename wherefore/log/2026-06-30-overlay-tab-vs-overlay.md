@@ -4,11 +4,13 @@ title: "Overlay-on-page vs side-by-side tab"
 areas: [matching-overlay]
 topics: [ux]
 stories: []
-status: active
+status: superseded
 supersedes:
-superseded-by:
-superseded-date:
+superseded-by: 2026-07-01-sidebar-run-navigation
+superseded-date: 2026-07-01
 ---
+
+SUPERSEDED 2026-07-01 -> see 2026-07-01-sidebar-run-navigation. Kept for history, not current.
 
 ## Summary
 Question raised about the on-page verdict UI: should the overlay stop painting *over* the broker page and instead live *alongside* it (some kind of docked tab / panel)? Not yet discussed or decided — recorded for a future design pass.
