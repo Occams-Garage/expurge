@@ -18,3 +18,4 @@
 - ux                   # information architecture, navigation, section states, interaction model
 - local-llm            # local LLM integration (Ollama), field discovery, localhost CORS, model selection
 - licensing            # per-component license model (GPL/AGPL/ODbL), copyleft, repo/LICENSE structure, contributor terms
+- testing              # test runner (Vitest), unit/coverage strategy, e2e (Playwright), Firefox-extension test tooling
