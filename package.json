@@ -19,7 +19,7 @@
     "@vitest/coverage-v8": "^4.1.9",
     "esbuild": "^0.23.0",
     "fast-check": "^4.8.0",
-    "happy-dom": "^20.10.6",
+    "jsdom": "^29.1.1",
     "typescript": "^5.5.0",
     "vitest": "^4.1.9",
     "web-ext": "^10.4.0",
