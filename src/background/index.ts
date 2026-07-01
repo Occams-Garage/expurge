@@ -134,6 +134,14 @@ async function handleVerdict(itemId: string, verdict: Verdict, explicitListingUr
     const run = await loadRun();
     if (!run) return;
 
+    // No-wedge: an already-recorded verdict wins over a later duplicate — a retry of a
+    // landed-but-ack-lost verdict, or a fast second click (Yes then No) clobbering a recorded
+    // hit. The message listener still returns {type:'ACK'}, so the retry is idempotent (it
+    // re-ACKs without re-recording, re-advancing, or re-closing the tab). The guard lives here,
+    // NOT in withVerdict — handleReverdict deliberately re-verdicts already-verdicted items.
+    const target = run.items.find(i => i.id === itemId);
+    if (!target || target.status === 'verdicted') return;
+
     const brokerTabId = await tabIdForItem(itemId);
     const listingUrl = await captureListingUrl(run, itemId, brokerTabId, explicitListingUrl);
 
