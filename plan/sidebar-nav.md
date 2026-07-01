@@ -76,7 +76,7 @@ No new `permissions` — `sidebarAction` is available whenever `sidebar_action` 
 
 - **`index.html`** — links `sidebar.css` + `sidebar.js`.
 - **`style.css`** — `@import "../styles/tokens.css"` directly (no shadow-DOM isolation needed). Follow `design/STYLEGUIDE.md` for voice/components; reference tokens, never hard-code values.
-- **`state.ts`** — **pure** state-derivation, extracted for tests (mirrors `coordinator.ts` / `classify.ts`). Maps `(run, activeItem, focusedTabUrl, challengeFlag)` → a tagged `SidebarView`. This is where the seven view states live (see below).
+- **`state.ts`** — **pure** state-derivation, extracted for tests (mirrors `coordinator.ts` / `classify.ts`). Maps `(run, activeItem, focusedTabUrl, challengeFlag)` → a tagged `SidebarView`. This is where the eight view states live (see below).
 - **`index.ts`** — thin render layer. On load: `browser.windows.getCurrent()` → `windowId`, send `SIDEBAR_GET_STATE({ windowId })`. Subscribe to background-pushed `SIDEBAR_UPDATE`. Render the checklist (grouped **In progress / Waiting / Done**) plus the active-item detail (broker `guidance`, "look for" chips, verdict cluster, separate Defer control). Wire the buttons to send messages. **All rendering via `textContent`** for any dataset-sourced text.
 
 **Sidebar views** (the `state.ts` tagged union):
@@ -87,6 +87,9 @@ No new `permissions` — `sidebarAction` is available whenever `sidebar_action` 
 - `saving` — action sent, awaiting ACK
 - `recorded` — ACK received (tab closes 800 ms later for terminal verdicts)
 - `revisit` — main pass empty, deferred items remain: "N sites waiting — revisit" (click focuses first deferred tab)
+- `done` — run finished (no `pending`/`open`/`deferred` remain): terminal summary from `progressOf` (done / total / hits). Distinct from `no-run` (never started / no run in this window)
+
+The pure `deriveView` (Slice 3) returns only the six **resting** views — `no-run` / `guidance` / `verdict` / `challenge` / `revisit` / `done`. `saving` and `recorded` are **transient** interaction states, not derivable from run state; the sidebar UI layer (Slice 6) sets them imperatively around a verdict send. They stay in the `SidebarView` union for completeness.
 
 The **Defer** control is present alongside the active-item detail in `guidance`/`verdict`/`challenge`, visually separated from the verdict cluster, labeled with what it does ("Still loading — set aside, come back at the end").
 
