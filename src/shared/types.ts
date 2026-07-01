@@ -61,13 +61,28 @@ export interface StartRunMsg    { type: 'START_RUN';    profile: Profile }
 export interface GetRunStateMsg { type: 'GET_RUN_STATE' }
 export interface GetDraftMsg    { type: 'GET_DRAFT';    itemId: string }
 export interface GetItemMsg     { type: 'GET_ITEM' }
-export interface VerdictMsg     { type: 'VERDICT'; itemId: string; verdict: Verdict; skipReason?: SkipReason; listingUrl?: string }
+export interface VerdictMsg     { type: 'VERDICT'; itemId: string; verdict: Verdict; skipReason?: SkipReason; listingUrl?: string; windowId?: number }
 export interface ReverdictMsg   { type: 'REVERDICT'; itemId: string; verdict: Verdict; listingUrl?: string }
 export interface SaveProfileMsg { type: 'SAVE_PROFILE'; profile: Profile }
 export interface GetProfileMsg  { type: 'GET_PROFILE' }
 export interface MarkSentMsg    { type: 'MARK_SENT';    itemId: string }
 export interface DeleteAllMsg   { type: 'DELETE_ALL' }
-export interface CloseTabMsg    { type: 'CLOSE_TAB' }
+export interface CloseTabMsg    { type: 'CLOSE_TAB'; windowId?: number }
+
+// ── messages sidebar → background ───────────────────────────────────────────
+// The sidebar lives in its own document (not a broker tab), so it can't rely on
+// `sender.tab` to identify the run — it passes the pinned `windowId` explicitly.
+
+export interface SidebarGetStateMsg   { type: 'SIDEBAR_GET_STATE';   windowId: number }
+export interface DeferMsg             { type: 'DEFER';               itemId: string; windowId: number }
+export interface NavigateBrokerTabMsg { type: 'NAVIGATE_BROKER_TAB'; windowId: number; url: string }
+
+// ── messages content → background ───────────────────────────────────────────
+// The headless content script only reports whether a bot-challenge is up; the
+// human casts every verdict from the sidebar, so no per-tab identity is needed.
+
+export interface ChallengeDetectedMsg { type: 'CHALLENGE_DETECTED' }
+export interface ChallengeResolvedMsg { type: 'CHALLENGE_RESOLVED' }
 
 // ── messages background → content/popup ─────────────────────────────────────
 
@@ -76,6 +91,7 @@ export interface ItemInfoMsg {
   itemId: string;
   brokerId: string;
   exposes: string[];
+  guidance?: string;   // broker's generic search.guidance note, when present (results-state)
   renderedUrl: string;
   progress: { done: number; total: number; hits: number };
 }
@@ -88,4 +104,5 @@ export interface StopRunMsg { type: 'STOP_RUN' }
 
 export type ToBackground =
   | StartRunMsg | GetRunStateMsg | GetDraftMsg | GetItemMsg | VerdictMsg | ReverdictMsg
-  | PingMsg | ReinjMsg | StopRunMsg | SaveProfileMsg | GetProfileMsg | MarkSentMsg | DeleteAllMsg | CloseTabMsg;
+  | PingMsg | ReinjMsg | StopRunMsg | SaveProfileMsg | GetProfileMsg | MarkSentMsg | DeleteAllMsg | CloseTabMsg
+  | SidebarGetStateMsg | DeferMsg | NavigateBrokerTabMsg | ChallengeDetectedMsg | ChallengeResolvedMsg;
