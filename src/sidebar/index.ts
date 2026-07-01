@@ -201,8 +201,34 @@ function recordedMsg(v: Verdict | null): string {
   return '✓ Skipped.';
 }
 
+function renderVerdictError(): void {
+  // Appended below the re-pulled view, so the verdict controls stay usable for a retry.
+  detail().appendChild(make('p', 'status error', "Couldn't save just now — check your connection and try again."));
+}
+
+// Send a verdict and confirm the background wrote it: race each send against a 6s timeout, up
+// to 3 attempts, true iff the reply is the {type:'ACK'} handshake (CLAUDE.md verdict contract).
+// The write is idempotent (handleVerdict no-wedge guard), so a retry after a landed-but-lost
+// ACK re-ACKs without re-recording.
+async function sendVerdictAck(itemId: string, verdict: Verdict, attempt = 0): Promise<boolean> {
+  const TIMEOUT_MS = 6_000;
+  const MAX_ATTEMPTS = 3;
+  try {
+    const reply = await Promise.race([
+      browser.runtime.sendMessage({ type: 'VERDICT', itemId, verdict, windowId }),
+      new Promise<never>((_, rej) => setTimeout(() => rej(new Error('timeout')), TIMEOUT_MS)),
+    ]);
+    return (reply as { type?: string })?.type === 'ACK';
+  } catch {
+    if (attempt < MAX_ATTEMPTS - 1) return sendVerdictAck(itemId, verdict, attempt + 1);
+    return false;
+  }
+}
+
 // Cast a verdict: own the panel through saving → recorded (~800 ms), then yield to the resting
-// view (the background already recorded, advanced focus, and closed the tab).
+// view (the background already recorded, advanced focus, and closed the tab). NEVER shows
+// recorded unless the ACK confirmed the write; on failure it re-pulls the true state and leaves
+// the controls usable so the user can retry.
 async function castVerdict(itemId: string, verdict: Verdict): Promise<void> {
   if (windowId === undefined) return;
   transient = true;
@@ -212,14 +238,19 @@ async function castVerdict(itemId: string, verdict: Verdict): Promise<void> {
   d.replaceChildren();
   renderSaving(d);
 
-  await browser.runtime.sendMessage({ type: 'VERDICT', itemId, verdict, windowId }).catch(() => {});
+  const ok = await sendVerdictAck(itemId, verdict);
+  transient = false;
+
+  if (!ok) {
+    await pullState().catch(() => {});   // reflect reality (verdict may not have landed)
+    renderVerdictError();
+    return;
+  }
 
   d.replaceChildren();
   renderRecorded(d);
   await delay(800);
-
-  transient = false;
-  await pullState();
+  await pullState().catch(() => {});     // guarded so a rejected re-pull can't dead-end the panel
 }
 
 // ── checklist (Decision A: rendered from GET_RUN_STATE, re-fetched on each update) ──

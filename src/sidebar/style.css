@@ -235,6 +235,7 @@ button:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--focus-ring-sha
   animation: spin 0.7s linear infinite;
 }
 .status.recorded { color: var(--primary); font-weight: var(--fw-semibold); }
+.status.error { color: var(--text-muted); font-weight: var(--fw-medium); }
 
 /* ── checklist ───────────────────────────────────────────────────────────── */
 
