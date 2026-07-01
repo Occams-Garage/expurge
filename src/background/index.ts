@@ -1,7 +1,7 @@
 import browser from 'webextension-polyfill';
 import type { Profile, RunState, WorkItem, WorkItemStatus, Verdict, SkipReason } from '../shared/types';
 import { BROKERS, getBroker } from '../shared/brokers';
-import { renderUrl } from '../shared/transforms';
+import { normalizeAkas, renderUrl } from '../shared/transforms';
 import { evaluateGate } from '../shared/gate';
 import { buildDraft } from '../shared/templates';
 
@@ -74,21 +74,18 @@ async function updateBadge(run: RunState): Promise<void> {
 function buildItems(profile: Profile): WorkItem[] {
   const items: WorkItem[] = [];
 
-  // Name variants: primary name first, then each AKA split on the first space.
-  // This split is the single source of truth for a variant's name — the resolved
-  // first/last are stored on each WorkItem so drafts and labels never re-parse the
-  // (mutable) profile later.
+  // Name variants: primary name first, then each AKA. The resolved first/last are
+  // stored on each WorkItem so drafts and labels never re-parse the (mutable)
+  // profile later. AKAs now carry separate first/last fields (middle is captured
+  // but not yet used in search), so there is no parsing here — normalizeAkas also
+  // bridges any legacy "First Last" profile.
   const variants: Array<{ nameVariant: string; first: string; last: string }> = [
     { nameVariant: 'primary', first: profile.first.trim(), last: profile.last.trim() },
-    ...(profile.also_known_as ?? []).map((aka, i) => {
-      const t  = aka.trim();
-      const sp = t.indexOf(' ');
-      return {
-        nameVariant: `aka_${i}`,
-        first: sp >= 0 ? t.slice(0, sp) : t,
-        last:  sp >= 0 ? t.slice(sp + 1).trim() : '',
-      };
-    }),
+    ...normalizeAkas(profile.also_known_as).map((aka, i) => ({
+      nameVariant: `aka_${i}`,
+      first: aka.first,
+      last:  aka.last,
+    })),
   ];
 
   for (const broker of BROKERS) {
