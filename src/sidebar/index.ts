@@ -80,7 +80,12 @@ function renderView(view: SidebarView): void {
     case 'saving':    renderSaving(d); break;
     case 'recorded':  renderRecorded(d); break;
   }
-  void refreshChecklist();
+  // The detail view is windowId-scoped, but GET_RUN_STATE returns the GLOBAL run. A `no-run`
+  // view means THIS window has no run, so showing another window's checklist would render
+  // rows whose FOCUS_ITEM{windowId} the background rejects (dead clicks) — clear it instead.
+  // For any other view, the single pinned run IS this window's run, so the fetch is correct.
+  if (view.view === 'no-run') clearChecklist();
+  else void refreshChecklist();
 }
 
 // ── active-item detail views ────────────────────────────────────────────────────
@@ -260,6 +265,12 @@ async function refreshChecklist(): Promise<void> {
   const run = res.run ?? null;
   renderChecklist(run);
   renderProgress(run);
+}
+
+// Used for the no-run view (this window has no run) — don't show the global run's checklist.
+function clearChecklist(): void {
+  document.getElementById('checklist')!.replaceChildren();
+  document.getElementById('progress')!.textContent = '';
 }
 
 function renderProgress(run: RunState | null): void {
