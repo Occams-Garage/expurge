@@ -143,6 +143,9 @@ export type SidebarView =
   | { view: 'guidance';  item: ActiveItemInfo }
   | { view: 'verdict';   item: ActiveItemInfo }
   | { view: 'challenge'; item: ActiveItemInfo }
+  // The broker tab wandered off the broker's host (address bar, a link, a redirect). No
+  // verdict/guidance controls — a listing can't be confirmed on, e.g., google.com.
+  | { view: 'offsite';   item: ActiveItemInfo }
   | { view: 'revisit';   waiting: number; focusId: string | null; progress: RunProgress }
   | { view: 'done';      progress: RunProgress }
   // A stopped run is `isComplete` (everything's verdicted), but the run_stopped items were

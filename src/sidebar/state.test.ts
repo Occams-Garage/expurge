@@ -93,8 +93,8 @@ describe('deriveView — challenge / guidance / verdict (focused item)', () => {
     expect(v.item.pageType).toBe('details');
   });
 
-  it('null tab URL → details/verdict (can\'t confirm results)', () => {
-    expect(deriveView(incomplete, focus({ tabUrl: null }), brokers).view).toBe('verdict');
+  it("null tab URL → offsite (can't confirm the tab is on the broker)", () => {
+    expect(deriveView(incomplete, focus({ tabUrl: null }), brokers).view).toBe('offsite');
   });
 
   it('carries the broker exposes + guidance into the active-item payload', () => {
@@ -175,14 +175,38 @@ describe('deriveView — results↔details boundary', () => {
   });
 });
 
+describe('deriveView — offsite (tab left the broker host)', () => {
+  const incomplete = run([item({ status: 'open' })]); // makeItem renderedUrl = https://b.com/x
+
+  it('an off-host tab → offsite, not verdict (no confirming a listing off the broker)', () => {
+    const v = expectView(deriveView(incomplete, focus({ tabUrl: 'https://www.google.com/' }), brokers), 'offsite');
+    expect(v.item.itemId).toBe('b:primary');
+  });
+
+  it('a lookalike host with the results pathname is still offsite (checks host, not just path)', () => {
+    // renderedUrl pathname is /x; an off-host page at /x must not read as the results page.
+    expect(deriveView(incomplete, focus({ tabUrl: 'https://evil.example/x' }), brokers).view).toBe('offsite');
+  });
+
+  it('challenge still wins even when off-host (Cloudflare interstitial)', () => {
+    expect(deriveView(incomplete, focus({ tabUrl: 'https://challenges.cloudflare.com/x', challenge: true }), brokers).view).toBe('challenge');
+  });
+
+  it('on-host pages are unaffected: results → guidance, details → verdict', () => {
+    expect(deriveView(incomplete, focus({ tabUrl: 'https://b.com/x?q=1' }), brokers).view).toBe('guidance');
+    expect(deriveView(incomplete, focus({ tabUrl: 'https://b.com/find/1' }), brokers).view).toBe('verdict');
+  });
+});
+
 describe('deriveView — only ever returns resting views', () => {
-  const resting = new Set(['no-run', 'guidance', 'verdict', 'challenge', 'revisit', 'done', 'stopped']);
+  const resting = new Set(['no-run', 'guidance', 'verdict', 'challenge', 'offsite', 'revisit', 'done', 'stopped']);
   const cases: Array<[RunOrNull, SidebarFocus | null]> = [
     [null, null],
     [run([item({ status: 'verdicted', verdict: 'hit' })]), focus()],
     [run([item({ status: 'open' })]), focus({ challenge: true })],
     [run([item({ status: 'open' })]), focus()],
     [run([item({ status: 'open' })]), focus({ tabUrl: DETAILS_URL })],
+    [run([item({ status: 'open' })]), focus({ tabUrl: 'https://www.google.com/' })],
     [run([item({ status: 'deferred' })]), null],
     [run([item({ status: 'verdicted', verdict: 'skipped', skipReason: 'run_stopped' })]), null],
   ];

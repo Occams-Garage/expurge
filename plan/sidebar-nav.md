@@ -85,13 +85,14 @@ No new `permissions` — `sidebarAction` is available whenever `sidebar_action` 
 - `guidance` — active tab on the results page: `search.guidance` + "look for" chips + a **Not found / no results** action (records `clear` without visiting a details page) + a paste-URL fallback
 - `verdict` — active tab on a details page: four verdicts (hit / clear / unknown / skip)
 - `challenge` — active tab showing a CAPTCHA/challenge: explanation + **Skip this site**
+- `offsite` — the broker tab wandered off the broker's host (address bar / a link / a redirect): **no** verdict controls (a listing can't be confirmed on, e.g., google.com) + a **Back to my results** action + Defer. Gated on `isOnHost(tabUrl, renderedUrl)`, checked before results/details so a lookalike host at the results pathname can't read as `guidance` either. Challenge outranks it (a Cloudflare interstitial is legitimately off-host mid-check)
 - `saving` — action sent, awaiting ACK
 - `recorded` — ACK received (tab closes 800 ms later for terminal verdicts)
 - `revisit` — main pass empty, deferred items remain: "N sites waiting — revisit". Carries `focusId` (first `deferred`, else first `pending` — the blocked-behind-deferred case, opened via `FOCUS_ITEM`→`ensureItemTab`; `null` only if neither remains). The button `FOCUS_ITEM`s `focusId`, so it works on the sidebar's very first render without re-fetching run state
 - `done` — run finished naturally (no `pending`/`open`/`deferred` remain): terminal summary from `progressOf` (done / total / hits). Distinct from `no-run` (never started / no run in this window)
 - `stopped` — run finished via **Stop** (`isComplete` AND some item has `skipReason: 'run_stopped'`): honest "Scan stopped — checked X of Y" summary, where `checked` **excludes** the abandoned `run_stopped` items (they're still counted in `total`). Chosen over `done` so a stopped run doesn't claim "all clear"
 
-The pure `deriveView` (Slice 3) returns only the seven **resting** views — `no-run` / `guidance` / `verdict` / `challenge` / `revisit` / `done` / `stopped`. `saving` and `recorded` are **transient** interaction states, not derivable from run state; the sidebar UI layer (Slice 6) sets them imperatively around a verdict send. They stay in the `SidebarView` union for completeness.
+The pure `deriveView` (Slice 3) returns only the eight **resting** views — `no-run` / `guidance` / `verdict` / `challenge` / `offsite` / `revisit` / `done` / `stopped`. `saving` and `recorded` are **transient** interaction states, not derivable from run state; the sidebar UI layer (Slice 6) sets them imperatively around a verdict send. They stay in the `SidebarView` union for completeness.
 
 The **Defer** control is present alongside the active-item detail in `guidance`/`verdict`/`challenge`, visually separated from the verdict cluster, labeled with what it does ("Still loading — set aside, come back at the end").
 
