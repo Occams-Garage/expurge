@@ -88,7 +88,8 @@ async function openNextBatch(run: RunState, focusFirst = false): Promise<void> {
   for (const item of toOpen) {
     const active = focusFirst && first;
     first = false;
-    const tab = await browser.tabs.create({ url: item.renderedUrl, active });
+    // Pin new broker tabs to the run's window so they share its sidebar (window-level surface).
+    const tab = await browser.tabs.create({ url: item.renderedUrl, active, windowId: run.windowId });
     if (tab.id !== undefined) {
       await browser.storage.session.set({ [`expurge_tab_${tab.id}`]: item.id });
     }
@@ -97,12 +98,16 @@ async function openNextBatch(run: RunState, focusFirst = false): Promise<void> {
 
 // ── handlers ─────────────────────────────────────────────────────────────────
 
-async function handleStartRun(profile: Profile): Promise<void> {
+async function handleStartRun(profile: Profile, windowId?: number): Promise<void> {
   await saveProfile(profile);
   return serialWrite(async () => {
+    // Pin the run to the Start-click's window. §7 wires popup/options to pass windowId
+    // explicitly (captured synchronously alongside the sidebar open); until then, fall back
+    // to the sender's window or the last-focused one.
+    const resolvedWindowId = windowId ?? (await browser.windows.getLastFocused()).id;
     const runId = crypto.randomUUID();
     const items = buildItems(profile);
-    const run: RunState = { runId, createdAt: new Date().toISOString(), items };
+    const run: RunState = { runId, createdAt: new Date().toISOString(), items, windowId: resolvedWindowId };
     // Persist before opening tabs so content scripts can find their items on load.
     await saveRun(run);
     await updateBadge(run);
@@ -195,7 +200,10 @@ browser.runtime.onMessage.addListener(
     const m = msg as Record<string, unknown>;
 
     if (m.type === 'START_RUN') {
-      await handleStartRun(m.profile as Profile);
+      // Prefer the window the sidebar was opened in (passed explicitly by popup/options in §7),
+      // else the message sender's window.
+      const windowId = (m.windowId as number | undefined) ?? sender.tab?.windowId;
+      await handleStartRun(m.profile as Profile, windowId);
       return { ok: true };
     }
 
