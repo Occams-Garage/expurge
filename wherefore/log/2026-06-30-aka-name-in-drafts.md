@@ -14,7 +14,7 @@ superseded-date:
 Opt-out drafts for AKA name-variant hits were always generated using the primary profile name. Brokers match removal requests against the name in the listing, so sending the wrong name would cause the request to fail. The fix: GET_DRAFT derives a modified profile substituting the AKA's first/last before calling buildDraft.
 
 ## Decisions / outcomes
-- GET_DRAFT handler in background.ts checks `hitItem.nameVariant`. If it starts with `aka_`, it looks up `profile.also_known_as[idx]`, splits on the first space into first/last, and passes a shallow-cloned profile with those values to `buildDraft`.
+- GET_DRAFT handler in background.ts checks `hitItem.nameVariant`. For AKA hits it passes a shallow-cloned profile carrying the first/last resolved at run time and frozen on the WorkItem (`hitItem.variantFirst` / `hitItem.variantLast`) to `buildDraft` — it does NOT re-parse the mutable `also_known_as` list. (`also_known_as` is now structured `AkaName[]` with separate first/last, so there is no split-on-space; the earlier "look up `also_known_as[idx]`, split on the first space" mechanism is superseded — see 2026-06-30-aka-structured-name-fields.)
 - Primary hits (nameVariant === 'primary') use the profile as-is — no change.
 - All other fields (city, state, age, etc.) remain from the primary profile since opt-out templates use those for matching too.
 
@@ -25,4 +25,7 @@ A broker listing shows "Hilary Fisher" — the opt-out email must say "my name i
 - Store separate profiles per name variant: rejected — over-engineered. The AKA is just a first/last override; all other fields stay the same.
 
 ## Open questions / follow-ups
-- None.
+- Updated 2026-06-30: the draft mechanism was revised by the structured-names work — the
+  AKA name now comes from the frozen `variantFirst`/`variantLast` on the WorkItem and
+  `also_known_as` is structured `AkaName[]`. The decision (use the AKA's name in the draft,
+  not the primary) is unchanged. See 2026-06-30-aka-structured-name-fields.
