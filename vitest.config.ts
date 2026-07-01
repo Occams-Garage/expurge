@@ -25,7 +25,12 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       // Scoped to the modules under test; widen as tiers land.
-      include: ['src/shared/**', 'src/background/coordinator.ts', 'src/content/classify.ts'],
+      include: [
+        'src/shared/**',
+        'src/background/coordinator.ts',
+        'src/content/classify.ts',
+        'src/options/aka-form.ts',
+      ],
       exclude: ['src/shared/types.ts', '**/*.test.ts'],
       reporter: ['text', 'html'],
       thresholds: {
