@@ -143,7 +143,7 @@ export type SidebarView =
   | { view: 'guidance';  item: ActiveItemInfo }
   | { view: 'verdict';   item: ActiveItemInfo }
   | { view: 'challenge'; item: ActiveItemInfo }
-  | { view: 'revisit';   waiting: number; progress: RunProgress }
+  | { view: 'revisit';   waiting: number; focusId: string | null; progress: RunProgress }
   | { view: 'done';      progress: RunProgress }
   | { view: 'saving';    item: ActiveItemInfo }
   | { view: 'recorded';  item: ActiveItemInfo };

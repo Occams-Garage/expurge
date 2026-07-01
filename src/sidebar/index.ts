@@ -14,7 +14,6 @@ import { progressOf } from '../background/coordinator';
 // All dataset-sourced text goes through textContent, never innerHTML.
 
 let windowId: number | undefined;
-let latestRun: RunState | null = null;
 // While a verdict is mid-flight we own the detail panel (saving → recorded) and suppress
 // incoming pushes, so the background's next-item push doesn't yank the animation away.
 let transient = false;
@@ -75,7 +74,7 @@ function renderView(view: SidebarView): void {
     case 'guidance':  renderGuidance(d, view.item); break;
     case 'verdict':   renderVerdict(d, view.item); break;
     case 'challenge': renderChallenge(d, view.item); break;
-    case 'revisit':   renderRevisit(d, view.waiting); break;
+    case 'revisit':   renderRevisit(d, view.waiting, view.focusId); break;
     case 'done':      renderDone(d, view.progress.done, view.progress.total, view.progress.hits); break;
     case 'saving':    renderSaving(d); break;
     case 'recorded':  renderRecorded(d); break;
@@ -148,14 +147,16 @@ function renderNoRun(d: HTMLElement): void {
   d.appendChild(make('p', 'empty-sub', "Start a scan from the expurge dashboard whenever you're ready — there's no rush."));
 }
 
-function renderRevisit(d: HTMLElement, waiting: number): void {
+// focusId comes from the view (deriveView), so the button works even when revisit is the
+// sidebar's very first render (reopen mid-revisit / after resume) — no dependency on the
+// async checklist fetch having landed yet.
+function renderRevisit(d: HTMLElement, waiting: number, focusId: string | null): void {
   d.appendChild(make('p', 'question', `${waiting} site${waiting !== 1 ? 's' : ''} waiting for you.`));
   d.appendChild(make('p', 'empty-sub', "These were set aside while they loaded. Pick them back up whenever you're ready."));
-  const firstDeferred = latestRun?.items.find(i => i.status === 'deferred')?.id;
   const b = button('Revisit set-aside sites', 'btn-primary wide', () => {
-    if (firstDeferred) send({ type: 'FOCUS_ITEM', itemId: firstDeferred, windowId });
+    if (focusId) send({ type: 'FOCUS_ITEM', itemId: focusId, windowId });
   });
-  if (!firstDeferred) b.disabled = true;
+  if (!focusId) b.disabled = true;
   d.appendChild(b);
 }
 
@@ -216,9 +217,9 @@ async function castVerdict(itemId: string, verdict: Verdict): Promise<void> {
 
 async function refreshChecklist(): Promise<void> {
   const res = await browser.runtime.sendMessage({ type: 'GET_RUN_STATE' }) as { run?: RunState };
-  latestRun = res.run ?? null;
-  renderChecklist(latestRun);
-  renderProgress(latestRun);
+  const run = res.run ?? null;
+  renderChecklist(run);
+  renderProgress(run);
 }
 
 function renderProgress(run: RunState | null): void {

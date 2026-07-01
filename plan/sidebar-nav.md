@@ -87,7 +87,7 @@ No new `permissions` — `sidebarAction` is available whenever `sidebar_action` 
 - `challenge` — active tab showing a CAPTCHA/challenge: explanation + **Skip this site**
 - `saving` — action sent, awaiting ACK
 - `recorded` — ACK received (tab closes 800 ms later for terminal verdicts)
-- `revisit` — main pass empty, deferred items remain: "N sites waiting — revisit" (click focuses first deferred tab)
+- `revisit` — main pass empty, deferred items remain: "N sites waiting — revisit". Carries `focusId` (first `deferred`, else first `pending` — the blocked-behind-deferred case, opened via `FOCUS_ITEM`→`ensureItemTab`; `null` only if neither remains). The button `FOCUS_ITEM`s `focusId`, so it works on the sidebar's very first render without re-fetching run state
 - `done` — run finished (no `pending`/`open`/`deferred` remain): terminal summary from `progressOf` (done / total / hits). Distinct from `no-run` (never started / no run in this window)
 
 The pure `deriveView` (Slice 3) returns only the six **resting** views — `no-run` / `guidance` / `verdict` / `challenge` / `revisit` / `done`. `saving` and `recorded` are **transient** interaction states, not derivable from run state; the sidebar UI layer (Slice 6) sets them imperatively around a verdict send. They stay in the `SidebarView` union for completeness.
