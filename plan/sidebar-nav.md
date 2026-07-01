@@ -176,7 +176,7 @@ Follow the established convention (pure logic in a module + Vitest, CI-gated):
 
 ## Open questions / risks
 
-- **`sidebarAction.open()` user gesture** (mirrors Q-009). Designed around by opening from the Start click — works whether or not Firefox requires the gesture. Still worth confirming against live Firefox 140 docs.
+- **`sidebarAction.open()` user gesture** — **RESOLVED (Q-015)**. MDN confirms it may only be called from inside a user-action handler and **opens in the active window**. Resolved by design (as Q-009): call it synchronously *first* in the Start-run click handler, before the async `START_RUN`, and capture/pin the run to that active window. Remaining: a build-time smoke test that the sync-first ordering holds (call before any `await`; a call after an `await` should fail).
 - **`load-error` view has no trigger.** `webNavigation.onErrorOccurred` is not wired (manifest `_notes` defers it to M9). We can ship a `load-error` view, but its trigger is a separate task; until then it's unreachable — so it's omitted from the seven views above and added when the trigger lands.
 - **Resume after event-page spindown.** `windowId` lives in session state (survives spindown). If the window still exists, reuse it; if gone, the next batch opens a fresh window and the user re-opens the sidebar. Deferred items keep `deferred` but lose their tab link (tabId never persisted) → revisiting re-opens the URL fresh (worst case: slow page reloads). Same tradeoff as the existing `open → pending` revert.
 - **Closing the run window** kills its broker tabs → `tabs.onRemoved` → those become `skipped/tab_closed`; the run state survives and is resumable. Destructive to in-flight tabs, not to the run (unchanged from today).
