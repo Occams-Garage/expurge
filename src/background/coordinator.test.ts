@@ -3,10 +3,16 @@ import {
   buildItems,
   withVerdict,
   applySkip,
+  applyDefer,
+  promoteToOpen,
   applyStop,
   applyMarkSent,
+  isComplete,
+  progressOf,
   selectBatch,
+  nextFocusTarget,
   BATCH_SIZE,
+  MAX_OPEN_TABS,
 } from './coordinator';
 import { BROKERS } from '../shared/brokers';
 import { makeProfile as profile, makeBroker as broker, makeItem as item, makeRun as run } from '../test-support/fixtures';
@@ -108,18 +114,134 @@ describe('applySkip', () => {
   });
 });
 
+describe('applyDefer', () => {
+  it('moves an open item to deferred without giving it a verdict', () => {
+    const r = applyDefer(run([item({ status: 'open' })]), 'b:primary');
+    expect(r.items[0].status).toBe('deferred');
+    expect(r.items[0].verdict).toBeUndefined();
+  });
+
+  it('only defers from open — a pending item is left untouched', () => {
+    const pending = item({ status: 'pending' });
+    const r = applyDefer(run([pending]), 'b:primary');
+    expect(r.items[0]).toEqual(pending);
+  });
+
+  it('never overrides an already-verdicted item (no-wedge)', () => {
+    const verdicted = item({ status: 'verdicted', verdict: 'hit' });
+    const r = applyDefer(run([verdicted]), 'b:primary');
+    expect(r.items[0]).toEqual(verdicted);
+  });
+
+  it('re-deferring an already-deferred item is a no-op', () => {
+    const deferred = item({ status: 'deferred' });
+    const r = applyDefer(run([deferred]), 'b:primary');
+    expect(r.items[0]).toEqual(deferred);
+  });
+
+  it('leaves other items untouched', () => {
+    const two = run([item({ id: 'b:primary', status: 'open' }), item({ id: 'b:aka_0', status: 'open' })]);
+    const r = applyDefer(two, 'b:primary');
+    expect(r.items[1]).toEqual(two.items[1]);
+  });
+});
+
+describe('promoteToOpen', () => {
+  it('moves a deferred item to open (the inverse of applyDefer)', () => {
+    const r = promoteToOpen(run([item({ status: 'deferred' })]), 'b:primary');
+    expect(r.items[0].status).toBe('open');
+  });
+
+  it('no-op on an open item', () => {
+    const open = item({ status: 'open' });
+    expect(promoteToOpen(run([open]), 'b:primary').items[0]).toEqual(open);
+  });
+
+  it('no-op on a pending item (must go through ensureItemTab to get a tab)', () => {
+    const pending = item({ status: 'pending' });
+    expect(promoteToOpen(run([pending]), 'b:primary').items[0]).toEqual(pending);
+  });
+
+  it('never revives an already-verdicted item', () => {
+    const verdicted = item({ status: 'verdicted', verdict: 'hit' });
+    expect(promoteToOpen(run([verdicted]), 'b:primary').items[0]).toEqual(verdicted);
+  });
+
+  it('leaves other items untouched', () => {
+    const two = run([item({ id: 'b:primary', status: 'deferred' }), item({ id: 'b:aka_0', status: 'deferred' })]);
+    const r = promoteToOpen(two, 'b:primary');
+    expect(r.items[1]).toEqual(two.items[1]);
+  });
+});
+
 describe('applyStop', () => {
-  it('skips pending and open items but leaves verdicted ones alone', () => {
+  it('skips pending, open, and deferred items but leaves verdicted ones alone', () => {
     const r = applyStop(
       run([
         item({ id: 'a', status: 'pending' }),
         item({ id: 'b', status: 'open' }),
+        item({ id: 'd', status: 'deferred' }),
         item({ id: 'c', status: 'verdicted', verdict: 'hit' }),
       ]),
     );
     expect(r.items[0]).toMatchObject({ status: 'verdicted', verdict: 'skipped', skipReason: 'run_stopped' });
     expect(r.items[1]).toMatchObject({ status: 'verdicted', verdict: 'skipped', skipReason: 'run_stopped' });
-    expect(r.items[2]).toMatchObject({ verdict: 'hit' });
+    expect(r.items[2]).toMatchObject({ status: 'verdicted', verdict: 'skipped', skipReason: 'run_stopped' });
+    expect(r.items[3]).toMatchObject({ verdict: 'hit' });
+  });
+});
+
+describe('isComplete', () => {
+  it('is false while any pending, open, or deferred item remains', () => {
+    expect(isComplete(run([item({ status: 'pending' })]))).toBe(false);
+    expect(isComplete(run([item({ status: 'open' })]))).toBe(false);
+    expect(isComplete(run([item({ status: 'deferred' })]))).toBe(false);
+  });
+
+  it('is true only when every item is verdicted', () => {
+    expect(
+      isComplete(run([
+        item({ id: 'a', status: 'verdicted', verdict: 'clear' }),
+        item({ id: 'b', status: 'verdicted', verdict: 'skipped', skipReason: 'missing:city' }),
+      ])),
+    ).toBe(true);
+  });
+
+  it('a lone deferred item keeps the run incomplete (deferred is non-terminal)', () => {
+    expect(
+      isComplete(run([
+        item({ id: 'a', status: 'verdicted', verdict: 'hit' }),
+        item({ id: 'b', status: 'deferred' }),
+      ])),
+    ).toBe(false);
+  });
+});
+
+describe('progressOf', () => {
+  it('excludes missing: skips from done and total, but counts them as neither', () => {
+    const p = progressOf(run([
+      item({ id: 'a', status: 'verdicted', verdict: 'clear' }),
+      item({ id: 'b', status: 'pending' }),
+      item({ id: 'm', status: 'verdicted', verdict: 'skipped', skipReason: 'missing:city' }),
+    ]));
+    expect(p).toEqual({ done: 1, total: 2, hits: 0 });
+  });
+
+  it('counts deferred toward total but not done', () => {
+    const p = progressOf(run([
+      item({ id: 'a', status: 'verdicted', verdict: 'hit' }),
+      item({ id: 'd', status: 'deferred' }),
+    ]));
+    expect(p).toEqual({ done: 1, total: 2, hits: 1 });
+  });
+
+  it('counts hits across all items', () => {
+    const p = progressOf(run([
+      item({ id: 'a', status: 'verdicted', verdict: 'hit' }),
+      item({ id: 'b', status: 'verdicted', verdict: 'hit' }),
+      item({ id: 'c', status: 'verdicted', verdict: 'clear' }),
+    ]));
+    expect(p.hits).toBe(2);
   });
 });
 
@@ -183,7 +305,86 @@ describe('selectBatch', () => {
     expect(updated.items[0].status).toBe('verdicted');
   });
 
-  it('BATCH_SIZE default is 5', () => {
+  it('deferred items free their slot: a deferred broker leaves the full batch window open', () => {
+    const items = [
+      item({ id: 'b1:a', brokerId: 'b1', status: 'deferred' }),
+      item({ id: 'b2:a', brokerId: 'b2', status: 'pending' }),
+      item({ id: 'b3:a', brokerId: 'b3', status: 'pending' }),
+    ];
+    // deferred b1 holds a tab but no slot → a batch of 2 still opens both pending brokers
+    expect(selectBatch(run(items), 2).toOpen.map(i => i.id)).toEqual(['b2:a', 'b3:a']);
+  });
+
+  it('claims a deferred item\'s broker: no second variant opens against it', () => {
+    const items = [
+      item({ id: 'b1:a', brokerId: 'b1', status: 'deferred' }),
+      item({ id: 'b1:b', brokerId: 'b1', status: 'pending' }),
+      item({ id: 'b2:a', brokerId: 'b2', status: 'pending' }),
+    ];
+    expect(selectBatch(run(items), 5).toOpen.map(i => i.id)).toEqual(['b2:a']);
+  });
+
+  it('pauses the batch window when open + deferred reaches the ceiling', () => {
+    const items = [
+      item({ id: 'b1:a', brokerId: 'b1', status: 'deferred' }),
+      item({ id: 'b2:a', brokerId: 'b2', status: 'deferred' }),
+      item({ id: 'b3:a', brokerId: 'b3', status: 'deferred' }),
+      item({ id: 'b4:a', brokerId: 'b4', status: 'pending' }),
+    ];
+    // 3 deferred == ceiling of 3 → open nothing despite an idle batch window
+    expect(selectBatch(run(items), 5, 3).toOpen).toHaveLength(0);
+  });
+
+  it('opens only up to the headroom left below the ceiling, counting open + deferred', () => {
+    const items = [
+      item({ id: 'b1:a', brokerId: 'b1', status: 'open' }),
+      item({ id: 'b2:a', brokerId: 'b2', status: 'open' }),
+      item({ id: 'b3:a', brokerId: 'b3', status: 'deferred' }),
+      item({ id: 'b4:a', brokerId: 'b4', status: 'deferred' }),
+      item({ id: 'b5:a', brokerId: 'b5', status: 'pending' }),
+      item({ id: 'b6:a', brokerId: 'b6', status: 'pending' }),
+    ];
+    // heldTabs = 2 open + 2 deferred = 4; ceiling 5 → 1 slot of headroom, batch window has 3.
+    expect(selectBatch(run(items), 5, 5).toOpen.map(i => i.id)).toEqual(['b5:a']);
+  });
+
+  it('applies the default MAX_OPEN_TABS ceiling of 15 when none is passed', () => {
+    const deferred = Array.from({ length: 15 }, (_, i) =>
+      item({ id: `d${i}`, brokerId: `bd${i}`, status: 'deferred' }));
+    const items = [...deferred, item({ id: 'p', brokerId: 'bp', status: 'pending' })];
+    expect(selectBatch(run(items), 5).toOpen).toHaveLength(0);
+  });
+
+  it('BATCH_SIZE default is 5, MAX_OPEN_TABS default is 15', () => {
     expect(BATCH_SIZE).toBe(5);
+    expect(MAX_OPEN_TABS).toBe(15);
+  });
+});
+
+describe('nextFocusTarget', () => {
+  it('returns the first open item id', () => {
+    const r = run([
+      item({ id: 'a', status: 'verdicted', verdict: 'hit' }),
+      item({ id: 'b', status: 'open' }),
+      item({ id: 'c', status: 'open' }),
+    ]);
+    expect(nextFocusTarget(r)).toBe('b');
+  });
+
+  it('ignores pending — only an open tab is focus-ready (openNextBatch runs first)', () => {
+    const r = run([item({ id: 'p', status: 'pending' }), item({ id: 'o', status: 'open' })]);
+    expect(nextFocusTarget(r)).toBe('o');
+  });
+
+  it('null when only deferred + blocked-pending remain → caller shows revisit (finding #2)', () => {
+    const r = run([
+      item({ id: 'b:primary', status: 'deferred' }),
+      item({ id: 'b:aka_0', nameVariant: 'aka_0', status: 'pending' }),
+    ]);
+    expect(nextFocusTarget(r)).toBeNull();
+  });
+
+  it('null when nothing non-terminal remains', () => {
+    expect(nextFocusTarget(run([item({ status: 'verdicted', verdict: 'clear' })]))).toBeNull();
   });
 });
