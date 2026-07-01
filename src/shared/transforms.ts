@@ -31,14 +31,17 @@ export function normalizeAkas(raw: unknown): AkaName[] {
   const out: AkaName[] = [];
   for (const entry of raw) {
     if (typeof entry === 'string') {
-      // Legacy "First Last" — split on the first space (preserves prior semantics).
-      const t = entry.trim();
-      const sp = t.indexOf(' ');
-      if (sp < 0) continue;   // single-token legacy AKA — not a searchable first+last name
-      const first = t.slice(0, sp);
-      const last = t.slice(sp + 1).trim();
-      if (!first || !last) continue;
-      out.push({ first, last });
+      // Legacy free-text name → structured fields: first token is first, last token is
+      // last, anything between is middle — so a migrated "Jane Marie Smith" matches a
+      // freshly-entered {first:Jane, middle:Marie, last:Smith} instead of folding the
+      // middle into last. A name needs both a first and a last, so single-token strings
+      // are dropped.
+      const parts = entry.trim().split(/\s+/).filter(Boolean);
+      if (parts.length < 2) continue;
+      const first = parts[0];
+      const last = parts[parts.length - 1];
+      const middle = parts.slice(1, -1).join(' ');
+      out.push({ first, last, ...(middle ? { middle } : {}) });
     } else if (entry && typeof entry === 'object') {
       // Field values come from unknown stored/imported data — coerce non-strings to
       // '' instead of calling .trim() on them (which would throw on e.g. a number).
