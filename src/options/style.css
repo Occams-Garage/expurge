@@ -251,7 +251,8 @@ h2 {
 .field:last-child { margin-bottom: 0; }
 .field-narrow { max-width: 200px; }
 
-label {
+label,
+.field-label {
   display: block;
   font-size: var(--fs-small);
   font-weight: var(--fw-medium);
@@ -305,6 +306,45 @@ textarea {
 
 .error-msg { font-size: var(--fs-small); color: var(--accent); }
 .success-msg { font-size: var(--fs-small); color: var(--primary); }
+
+/* ── "Other names" rows ───────────────────────────────────── */
+
+/* Header + each input row share one grid so the columns line up. The trailing
+   column reserves space for the per-row remove button (empty in the header). */
+.aka-cols,
+.aka-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr var(--s-8);
+  gap: var(--s-2);
+}
+
+/* Let the inputs shrink within their grid tracks instead of forcing overflow. */
+.aka-row input { min-width: 0; }
+
+.aka-cols {
+  margin-bottom: var(--s-1);
+  font-family: var(--font-mono);
+  font-size: var(--fs-mono);
+  letter-spacing: var(--tracking-mono);
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.aka-row {
+  margin-bottom: var(--s-2);
+  align-items: center;
+}
+
+.aka-remove {
+  min-width: var(--s-8);   /* 48px — meets the 44px touch-target minimum */
+  min-height: var(--s-8);
+  padding: var(--s-1);
+  font-size: var(--fs-body);
+  line-height: 1;
+  color: var(--text-faint);
+}
+
+.btn-add-aka { margin-top: var(--s-1); }
 
 /* ── run section ──────────────────────────────────────────── */
 
