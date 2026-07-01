@@ -436,28 +436,6 @@ browser.runtime.onMessage.addListener(
       return { ok: true };
     }
 
-    if (m.type === 'GET_ITEM') {
-      const tabId = sender.tab?.id;
-      if (tabId === undefined) return null;
-      const itemId = await itemIdForTab(tabId);
-      if (!itemId) return null;
-      const run = await loadRun();
-      if (!run) return null;
-      const item = run.items.find(i => i.id === itemId);
-      if (!item) return null;
-      const broker = getBroker(item.brokerId);
-      const done = run.items.filter(i => i.status === 'verdicted').length;
-      const hits = run.items.filter(i => i.verdict === 'hit').length;
-      return {
-        type: 'ITEM_INFO',
-        itemId: item.id,
-        brokerId: item.brokerId,
-        exposes: broker?.search.exposes ?? [],
-        renderedUrl: item.renderedUrl,
-        progress: { done, total: run.items.length, hits },
-      };
-    }
-
     if (m.type === 'VERDICT') {
       // Sent by the sidebar now — sender.tab is the sidebar, so background resolves the broker
       // tab from the item id. listingUrl is set only for the paste-URL fallback.
@@ -497,47 +475,6 @@ browser.runtime.onMessage.addListener(
 
     if (m.type === 'STOP_RUN') {
       await handleStopRun();
-      return { ok: true };
-    }
-
-    if (m.type === 'PING') {
-      return { type: 'PONG', hasOverlay: false };
-    }
-
-    if (m.type === 'REINJECT_OVERLAY') {
-      const existingTabId = await findActiveBrokerTab();
-      if (existingTabId !== null) {
-        try {
-          await browser.tabs.update(existingTabId, { active: true });
-          await reinjectIfMissing(existingTabId);
-          return { ok: true };
-        } catch {
-          await browser.storage.session.remove(`expurge_tab_${existingTabId}`);
-          // Fall through to open-next-item logic.
-        }
-      }
-
-      // No live broker tab (or tab closed between find and update) — open the next item.
-      const run = await loadRun();
-      if (!run) return { ok: false };
-      const item =
-        run.items.find(i => i.status === 'pending') ??
-        run.items.find(i => i.status === 'open');
-      if (!item) return { ok: false };
-
-      const tab = await browser.tabs.create({ url: item.renderedUrl, active: true });
-      if (tab.id !== undefined) {
-        await browser.storage.session.set({ [`expurge_tab_${tab.id}`]: item.id });
-        if (item.status === 'pending') {
-          const updated: RunState = {
-            ...run,
-            items: run.items.map(i =>
-              i.id === item.id ? { ...i, status: 'open' as WorkItemStatus } : i
-            ),
-          };
-          await saveRun(updated);
-        }
-      }
       return { ok: true };
     }
 
@@ -628,71 +565,6 @@ browser.tabs.onActivated.addListener(async ({ windowId }) => {
   await pushActiveView(run);
 });
 
-
-// ── overlay re-injection ─────────────────────────────────────────────────────
-
-async function findActiveBrokerTab(): Promise<number | null> {
-  const [all, run] = await Promise.all([
-    browser.storage.session.get(null) as Promise<Record<string, unknown>>,
-    loadRun(),
-  ]);
-  // A tab temporarily at a Cloudflare (or other challenge-provider) redirect URL will have a
-  // hostname that doesn't match the broker. We don't prune it — it may redirect back shortly.
-  // Keep it as a fallback so "Restore Overlay" focuses the existing tab rather than opening a
-  // fresh one that would trigger a new Cloudflare session.
-  let fallbackTabId: number | null = null;
-  for (const key of Object.keys(all)) {
-    if (!key.startsWith('expurge_tab_')) continue;
-    const tabId = parseInt(key.slice('expurge_tab_'.length), 10);
-    if (isNaN(tabId)) continue;
-    try {
-      const tab = await browser.tabs.get(tabId);
-      if (run && tab.url) {
-        const itemId = all[key] as string;
-        const item = run.items.find(i => i.id === itemId);
-        if (item) {
-          try {
-            const brokerHost = new URL(item.renderedUrl).hostname;
-            const tabHost    = new URL(tab.url).hostname;
-            if (tabHost !== brokerHost && !tabHost.endsWith('.' + brokerHost)) {
-              if (fallbackTabId === null) fallbackTabId = tabId; // mid-redirect, don't prune
-              continue;
-            }
-          } catch {
-            await browser.storage.session.remove(key); // URL parse failed
-            continue;
-          }
-        }
-      }
-      return tabId;
-    } catch {
-      await browser.storage.session.remove(key); // stale — tab was closed
-    }
-  }
-  return fallbackTabId;
-}
-
-async function reinjectIfMissing(tabId: number): Promise<void> {
-  const TIMEOUT_MS = 2_000;
-  try {
-    const pong = await Promise.race([
-      browser.tabs.sendMessage(tabId, { type: 'PING' }),
-      new Promise<never>((_, rej) => setTimeout(() => rej(new Error('timeout')), TIMEOUT_MS)),
-    ]) as { type?: string; hasOverlay?: boolean } | null;
-
-    if (pong?.hasOverlay) return; // overlay present — nothing to do
-    // Content script alive but overlay missing — fall through to inject
-  } catch {
-    // PING timed out or content script not running — inject
-  }
-
-  try {
-    await browser.scripting.executeScript({ target: { tabId }, files: ['dist/content.js'] });
-  } catch {
-    // Tab may be on a restricted URL or closed — ignore
-  }
-}
-
 // ── first install → open options page ────────────────────────────────────────
 
 browser.runtime.onInstalled.addListener(({ reason }) => {
@@ -716,10 +588,7 @@ browser.tabs.onUpdated.addListener(async (tabId, changeInfo) => {
   // challenges.cloudflare.com hop itself.
   if (onHost) await setChallengeFlag(tabId, false);
 
-  // Broker tab finished navigating (e.g. results → details) → recompute the active tab's
-  // page-type and push.
+  // Broker tab finished navigating (e.g. results → details, or a challenge redirect landing
+  // back on-host) → recompute the active tab's page-type and push.
   await pushActiveView(run);
-
-  // (removed in Slice 5d) legacy overlay reinject, on-host only.
-  if (onHost) await reinjectIfMissing(tabId);
 });
