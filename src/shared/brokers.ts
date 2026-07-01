@@ -23,6 +23,7 @@ export interface Broker {
     url: string;         // template with {field|transform} tokens
     requires: string[];  // raw profile fields needed; missing → skip
     exposes: string[];   // what the site shows (drives overlay guidance — never gates)
+    guidance?: string;   // generic, PII-free "how to find your listing" note; results-state only
   };
   optout: BrokerChannel[];  // ordered list; first verified+unexpired wins
 }

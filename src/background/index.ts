@@ -1,6 +1,8 @@
 import browser from 'webextension-polyfill';
-import type { Profile, RunState, WorkItemStatus, Verdict, SkipReason } from '../shared/types';
-import { getBroker } from '../shared/brokers';
+import type { Profile, RunState, WorkItemStatus, Verdict, SkipReason, SidebarView, SidebarUpdateMsg } from '../shared/types';
+import { BROKERS, getBroker } from '../shared/brokers';
+import { isOnHost, isResultsPage } from '../shared/url';
+import { deriveView, type SidebarFocus } from '../sidebar/state';
 import { evaluateGate } from '../shared/gate';
 import { buildDraft } from '../shared/templates';
 import {
@@ -8,9 +10,12 @@ import {
   buildItems,
   withVerdict,
   applySkip,
+  applyDefer,
+  promoteToOpen,
   applyStop,
   applyMarkSent,
   selectBatch,
+  nextFocusTarget,
 } from './coordinator';
 
 // ── serial write queue ────────────────────────────────────────────────────────
@@ -78,9 +83,9 @@ async function updateBadge(run: RunState): Promise<void> {
 // ── batch open ───────────────────────────────────────────────────────────────
 // Selection is pure (coordinator.selectBatch); this owns only the tab I/O.
 
-async function openNextBatch(run: RunState, focusFirst = false): Promise<void> {
+async function openNextBatch(run: RunState, focusFirst = false): Promise<RunState> {
   const { toOpen, run: updated } = selectBatch(run, BATCH_SIZE);
-  if (toOpen.length === 0) return;
+  if (toOpen.length === 0) return run;
 
   await saveRun(updated);
 
@@ -88,44 +93,110 @@ async function openNextBatch(run: RunState, focusFirst = false): Promise<void> {
   for (const item of toOpen) {
     const active = focusFirst && first;
     first = false;
-    const tab = await browser.tabs.create({ url: item.renderedUrl, active });
+    // Pin new broker tabs to the run's window so they share its sidebar (window-level surface).
+    const tab = await browser.tabs.create({ url: item.renderedUrl, active, windowId: run.windowId });
     if (tab.id !== undefined) {
       await browser.storage.session.set({ [`expurge_tab_${tab.id}`]: item.id });
     }
   }
+  return updated;
 }
 
 // ── handlers ─────────────────────────────────────────────────────────────────
 
-async function handleStartRun(profile: Profile): Promise<void> {
+async function handleStartRun(profile: Profile, windowId?: number): Promise<void> {
   await saveProfile(profile);
   return serialWrite(async () => {
+    // Pin the run to the Start-click's window. §7 wires popup/options to pass windowId
+    // explicitly (captured synchronously alongside the sidebar open); until then, fall back
+    // to the sender's window or the last-focused one.
+    const resolvedWindowId = windowId ?? (await browser.windows.getLastFocused()).id;
     const runId = crypto.randomUUID();
     const items = buildItems(profile);
-    const run: RunState = { runId, createdAt: new Date().toISOString(), items };
+    const run: RunState = { runId, createdAt: new Date().toISOString(), items, windowId: resolvedWindowId };
     // Persist before opening tabs so content scripts can find their items on load.
     await saveRun(run);
     await updateBadge(run);
-    await openNextBatch(run, true);
+    const afterBatch = await openNextBatch(run, true);
+    // Init-race insurance (Slice-5 review): a sidebar that opened on the Start click may have
+    // sent SIDEBAR_GET_STATE before the run was saved (→ got no-run). Push the real view now
+    // that the first batch is open so it corrects itself without waiting for a focus change.
+    await pushActiveView(afterBatch);
   });
 }
 
-// Verdict from a live broker tab: record it, drop the tab's tracking key, and
-// advance the run.
-async function handleVerdict(itemId: string, verdict: Verdict, listingUrl?: string, tabId?: number): Promise<void> {
+// Verdict from the sidebar (no longer from the broker tab): resolve the item's broker tab,
+// capture its listingUrl if on a details page, record, drop tracking, advance focus, then
+// close the tab. The tab has no UI to linger for; the sidebar's 800 ms `recorded` animation
+// is a pure UI transient (Slice 6) and does not gate this close.
+async function handleVerdict(itemId: string, verdict: Verdict, explicitListingUrl?: string): Promise<void> {
   return serialWrite(async () => {
     const run = await loadRun();
     if (!run) return;
 
+    // No-wedge: an already-recorded verdict wins over a later duplicate — a retry of a
+    // landed-but-ack-lost verdict, or a fast second click (Yes then No) clobbering a recorded
+    // hit. The message listener still returns {type:'ACK'}, so the retry is idempotent (it
+    // re-ACKs without re-recording, re-advancing, or re-closing the tab). The guard lives here,
+    // NOT in withVerdict — handleReverdict deliberately re-verdicts already-verdicted items.
+    const target = run.items.find(i => i.id === itemId);
+    if (!target || target.status === 'verdicted') return;
+
+    const brokerTabId = await tabIdForItem(itemId);
+    const listingUrl = await captureListingUrl(run, itemId, brokerTabId, explicitListingUrl);
+
     const updated = withVerdict(run, itemId, verdict, listingUrl);
     await saveRun(updated);
+    await updateBadge(updated);
 
-    if (tabId !== undefined) {
-      await browser.storage.session.remove(`expurge_tab_${tabId}`);
+    if (brokerTabId !== null) {
+      await browser.storage.session.remove(`expurge_tab_${brokerTabId}`);
     }
 
-    await updateBadge(updated);
-    await openNextBatch(updated);
+    await advance(updated);
+
+    // Close AFTER focus moved, so the browser doesn't auto-activate a random tab in the gap.
+    // The key is already gone → onRemoved won't re-skip it.
+    if (brokerTabId !== null) {
+      await browser.tabs.remove(brokerTabId).catch(() => {});
+    }
+  });
+}
+
+// Defer from the sidebar: set the active item aside (its tab stays open, untracked-for-focus
+// but still tracked), then fill the freed slot and advance focus.
+async function handleDefer(itemId: string): Promise<void> {
+  return serialWrite(async () => {
+    const run = await loadRun();
+    if (!run) return;
+    const updated = applyDefer(run, itemId);
+    await saveRun(updated);
+    await advance(updated);
+  });
+}
+
+// Jump to an item on request from the sidebar — a checklist row click, or the revisit button
+// (which targets the first deferred item). The sidebar names the item; background activates
+// its tab. This is the manual-override path (decision 5): focus any item the user clicks.
+async function handleFocusItem(itemId: string, windowId: number): Promise<void> {
+  return serialWrite(async () => {
+    const run = await loadRun();
+    if (!run || run.windowId !== windowId) return;
+    const target = run.items.find(i => i.id === itemId);
+    // Already terminal → nothing to focus (defensive; the sidebar won't make verdicted rows
+    // clickable).
+    if (!target || target.status === 'verdicted') return;
+
+    // Reopen a lost tab from renderedUrl (resume / finding #3), flipping a tabless item to
+    // `open`; then promote a still-alive `deferred` item to `open` so the normal verdict/defer
+    // flow applies (without this, a re-defer during revisit would no-op on a deferred item).
+    const { run: run2, tabId } = await ensureItemTab(run, itemId);
+    if (tabId === null) return;
+    const promoted = promoteToOpen(run2, itemId);
+    await saveRun(promoted);
+
+    await browser.tabs.update(tabId, { active: true }).catch(() => {});
+    await pushView(windowId, deriveView(promoted, await focusForTab(tabId, promoted), BROKERS));
   });
 }
 
@@ -160,7 +231,7 @@ async function handleSkip(itemId: string, skipReason: SkipReason, tabId?: number
       await browser.storage.session.remove(`expurge_tab_${tabId}`);
     }
 
-    await openNextBatch(updated);
+    await advance(updated);
   });
 }
 
@@ -179,6 +250,13 @@ async function handleStopRun(): Promise<void> {
     if (tabKeys.length > 0) {
       await browser.storage.session.remove(tabKeys);
     }
+
+    // Stop can come from the popup/options, not the sidebar — so push the resting view or the
+    // sidebar keeps showing live verdict/guidance controls for a run that's over. A stopped run
+    // isComplete, so deriveView yields `done` (deriveView, not a hardcoded view — one source).
+    if (updated.windowId !== undefined) {
+      await pushView(updated.windowId, deriveView(updated, null, BROKERS));
+    }
   });
 }
 
@@ -188,6 +266,178 @@ async function itemIdForTab(tabId: number): Promise<string | null> {
   return (r[key] as string) ?? null;
 }
 
+// ── per-tab challenge flag ─────────────────────────────────────────────────────
+// Set by CHALLENGE_DETECTED, cleared by CHALLENGE_RESOLVED / tab close / on-host nav.
+// Stored in session storage (keyed by tabId) so it survives event-page spindown mid-
+// challenge — an in-memory Map would lose it. Feeds SidebarFocus.challenge → deriveView.
+
+const challengeKey = (tabId: number) => `expurge_challenge_${tabId}`;
+
+async function setChallengeFlag(tabId: number, on: boolean): Promise<void> {
+  if (on) await browser.storage.session.set({ [challengeKey(tabId)]: true });
+  else    await browser.storage.session.remove(challengeKey(tabId));
+}
+
+async function isChallenged(tabId: number): Promise<boolean> {
+  const key = challengeKey(tabId);
+  const r = await browser.storage.session.get(key);
+  return r[key] === true;
+}
+
+// ── focus resolution (SidebarFocus builders) ───────────────────────────────────
+// deriveView (sidebar/state.ts) is the single source of view truth; the background only
+// BUILDS its inputs. A SidebarFocus pairs the focused broker tab's work item with its URL
+// (results-vs-details) and challenge flag; null focus → deriveView yields revisit/done/no-run.
+
+async function focusForTab(tabId: number, run: RunState): Promise<SidebarFocus | null> {
+  const itemId = await itemIdForTab(tabId);
+  if (!itemId) return null;   // not a tracked broker tab
+  const item = run.items.find(i => i.id === itemId) ?? null;
+  if (!item) return null;
+  const tab = await browser.tabs.get(tabId).catch(() => null);
+  return { item, tabUrl: tab?.url ?? null, challenge: await isChallenged(tabId) };
+}
+
+// The window's broker tab to reflect: prefer the active tab if it's tracked, else any tracked
+// broker tab in the window (prefer on-host; keep a mid-redirect off-host tab as a fallback so
+// the challenges.cloudflare.com hop doesn't make us open a duplicate). Prunes stale tab keys.
+// Retains the old findActiveBrokerTab scan, scoped to one window and active-preferring.
+async function findWindowBrokerTab(windowId: number, run: RunState): Promise<number | null> {
+  const [active] = await browser.tabs.query({ windowId, active: true });
+  if (active?.id !== undefined && await itemIdForTab(active.id)) return active.id;
+
+  const all = await browser.storage.session.get(null) as Record<string, unknown>;
+  let fallbackTabId: number | null = null;
+  for (const key of Object.keys(all)) {
+    if (!key.startsWith('expurge_tab_')) continue;
+    const tabId = parseInt(key.slice('expurge_tab_'.length), 10);
+    if (isNaN(tabId)) continue;
+    let tab: browser.Tabs.Tab;
+    try { tab = await browser.tabs.get(tabId); }
+    catch { await browser.storage.session.remove(key); continue; } // stale — tab closed
+    if (tab.windowId !== windowId) continue;
+    const item = run.items.find(i => i.id === (all[key] as string));
+    if (item && tab.url && !isOnHost(tab.url, item.renderedUrl)) {
+      if (fallbackTabId === null) fallbackTabId = tabId; // mid-redirect, don't prune
+      continue;
+    }
+    return tabId;
+  }
+  return fallbackTabId;
+}
+
+// PULL focus (SIDEBAR_GET_STATE): the window's broker tab, active-preferred with fallback.
+async function buildFocus(windowId: number, run: RunState): Promise<SidebarFocus | null> {
+  const tabId = await findWindowBrokerTab(windowId, run);
+  return tabId === null ? null : focusForTab(tabId, run);
+}
+
+// PUSH focus: the window's ACTIVE tab only. Returns null when the active tab isn't a broker
+// tab — the sticky-view contract: a glance at another tab must not flip the sidebar.
+async function activeBrokerFocus(windowId: number, run: RunState): Promise<SidebarFocus | null> {
+  const [active] = await browser.tabs.query({ windowId, active: true });
+  if (active?.id === undefined) return null;
+  return focusForTab(active.id, run);
+}
+
+// ── sidebar push ───────────────────────────────────────────────────────────────
+
+async function pushView(windowId: number, view: SidebarView): Promise<void> {
+  const msg: SidebarUpdateMsg = { type: 'SIDEBAR_UPDATE', windowId, view };
+  // No sidebar listening (not yet built, or window has none) is fine — swallow the reject.
+  await browser.runtime.sendMessage(msg).catch(() => {});
+}
+
+// Push the view for the run window's ACTIVE broker tab. Honors the sticky-view contract:
+// if the active tab isn't a broker tab, leave the sidebar showing its last broker item.
+async function pushActiveView(run: RunState): Promise<void> {
+  if (run.windowId === undefined) return;
+  const focus = await activeBrokerFocus(run.windowId, run);
+  if (!focus) return;
+  await pushView(run.windowId, deriveView(run, focus, BROKERS));
+}
+
+// ── focus driving ──────────────────────────────────────────────────────────────
+// After any action, move focus to the next actionable item and push the resulting view.
+
+// The live tab tracking an item, or null (reverse of the expurge_tab_<id> → itemId map).
+async function tabIdForItem(itemId: string): Promise<number | null> {
+  const all = await browser.storage.session.get(null) as Record<string, unknown>;
+  for (const key of Object.keys(all)) {
+    if (key.startsWith('expurge_tab_') && all[key] === itemId) {
+      const tabId = parseInt(key.slice('expurge_tab_'.length), 10);
+      if (!isNaN(tabId)) return tabId;
+    }
+  }
+  return null;
+}
+
+// Ensure an item has a live tab; open a fresh one from its renderedUrl if not. Covers a
+// resumed `deferred`/`open` item whose tab was lost (finding #3) and a pending item being
+// promoted. Returns the (possibly updated) run and the tabId.
+async function ensureItemTab(run: RunState, itemId: string): Promise<{ run: RunState; tabId: number | null }> {
+  const existing = await tabIdForItem(itemId);
+  if (existing !== null) return { run, tabId: existing };
+
+  const item = run.items.find(i => i.id === itemId);
+  if (!item) return { run, tabId: null };
+
+  const tab = await browser.tabs.create({ url: item.renderedUrl, active: true, windowId: run.windowId });
+  if (tab.id === undefined) return { run, tabId: null };
+  await browser.storage.session.set({ [`expurge_tab_${tab.id}`]: item.id });
+  // It now has a live tab → it's open.
+  const updated: RunState = {
+    ...run,
+    items: run.items.map(i => (i.id === itemId ? { ...i, status: 'open' as WorkItemStatus } : i)),
+  };
+  await saveRun(updated);
+  return { run: updated, tabId: tab.id };
+}
+
+// Move focus to the next actionable item (nextFocusTarget) and push its view; if none →
+// push the focus=null view (revisit while deferred/blocked-pending remain, else done).
+async function driveFocus(run: RunState): Promise<void> {
+  const windowId = run.windowId;
+  if (windowId === undefined) return;
+
+  const targetId = nextFocusTarget(run);
+  if (targetId === null) {
+    await pushView(windowId, deriveView(run, null, BROKERS));
+    return;
+  }
+
+  const { run: run2, tabId } = await ensureItemTab(run, targetId);
+  if (tabId !== null) await browser.tabs.update(tabId, { active: true }).catch(() => {});
+  const focus = tabId !== null ? await focusForTab(tabId, run2) : null;
+  await pushView(windowId, deriveView(run2, focus, BROKERS));
+}
+
+// The standard post-action advance: fill the freed batch slot, then drive focus.
+async function advance(run: RunState): Promise<void> {
+  const afterBatch = await openNextBatch(run);
+  await driveFocus(afterBatch);
+}
+
+// listingUrl for a verdict: an explicit one from the sidebar (paste-URL fallback) wins; else,
+// for a details-page verdict, capture the broker tab's own current URL (the sidebar can't
+// self-identify the broker tab). Results-page verdicts (e.g. "not found" → clear) carry none.
+async function captureListingUrl(
+  run: RunState,
+  itemId: string,
+  brokerTabId: number | null,
+  explicit?: string,
+): Promise<string | undefined> {
+  if (explicit !== undefined) return explicit;
+  if (brokerTabId === null) return undefined;
+  const item = run.items.find(i => i.id === itemId);
+  const tab = await browser.tabs.get(brokerTabId).catch(() => null);
+  if (!item || !tab?.url) return undefined;
+  try {
+    if (!isResultsPage(new URL(tab.url).pathname, item.renderedUrl)) return tab.url;
+  } catch { /* malformed — no listingUrl */ }
+  return undefined;
+}
+
 // ── message listener ─────────────────────────────────────────────────────────
 
 browser.runtime.onMessage.addListener(
@@ -195,7 +445,10 @@ browser.runtime.onMessage.addListener(
     const m = msg as Record<string, unknown>;
 
     if (m.type === 'START_RUN') {
-      await handleStartRun(m.profile as Profile);
+      // Prefer the window the sidebar was opened in (passed explicitly by popup/options in §7),
+      // else the message sender's window.
+      const windowId = (m.windowId as number | undefined) ?? sender.tab?.windowId;
+      await handleStartRun(m.profile as Profile, windowId);
       return { ok: true };
     }
 
@@ -204,37 +457,63 @@ browser.runtime.onMessage.addListener(
       return { run };
     }
 
-    if (m.type === 'GET_ITEM') {
-      const tabId = sender.tab?.id;
-      if (tabId === undefined) return null;
-      const itemId = await itemIdForTab(tabId);
-      if (!itemId) return null;
+    // PULL: the sidebar asks for its window's current view on load.
+    if (m.type === 'SIDEBAR_GET_STATE') {
+      const windowId = m.windowId as number;
       const run = await loadRun();
-      if (!run) return null;
-      const item = run.items.find(i => i.id === itemId);
-      if (!item) return null;
-      const broker = getBroker(item.brokerId);
-      const done = run.items.filter(i => i.status === 'verdicted').length;
-      const hits = run.items.filter(i => i.verdict === 'hit').length;
-      return {
-        type: 'ITEM_INFO',
-        itemId: item.id,
-        brokerId: item.brokerId,
-        exposes: broker?.search.exposes ?? [],
-        renderedUrl: item.renderedUrl,
-        progress: { done, total: run.items.length, hits },
-      };
+      // A sidebar in a window without the run (idle window, or run pinned elsewhere) → no-run.
+      if (!run || run.windowId !== windowId) {
+        return { type: 'SIDEBAR_UPDATE', windowId, view: { view: 'no-run' } } satisfies SidebarUpdateMsg;
+      }
+      const focus = await buildFocus(windowId, run);
+      return { type: 'SIDEBAR_UPDATE', windowId, view: deriveView(run, focus, BROKERS) } satisfies SidebarUpdateMsg;
+    }
+
+    // A broker tab's content script reports a bot-challenge appearing / clearing (in-page).
+    // Set/clear the per-tab flag and refresh the sidebar if that tab is the active one.
+    if (m.type === 'CHALLENGE_DETECTED' || m.type === 'CHALLENGE_RESOLVED') {
+      const tabId = sender.tab?.id;
+      if (tabId !== undefined) {
+        await setChallengeFlag(tabId, m.type === 'CHALLENGE_DETECTED');
+        const run = await loadRun();
+        if (run) await pushActiveView(run);
+      }
+      return { ok: true };
     }
 
     if (m.type === 'VERDICT') {
-      const tabId = sender.tab?.id;
+      // Sent by the sidebar now — sender.tab is the sidebar, so background resolves the broker
+      // tab from the item id. listingUrl is set only for the paste-URL fallback.
       await handleVerdict(
         m.itemId as string,
         m.verdict as Verdict,
         m.listingUrl as string | undefined,
-        tabId,
       );
       return { type: 'ACK', itemId: m.itemId };
+    }
+
+    if (m.type === 'DEFER') {
+      await handleDefer(m.itemId as string);
+      return { ok: true };
+    }
+
+    if (m.type === 'FOCUS_ITEM') {
+      await handleFocusItem(m.itemId as string, m.windowId as number);
+      return { ok: true };
+    }
+
+    if (m.type === 'NAVIGATE_BROKER_TAB') {
+      // Paste-URL fallback: point the PASTED ITEM's own broker tab at the listing (via
+      // tabIdForItem, not the active-preferred findWindowBrokerTab — the active tab may have
+      // changed since the guidance view rendered, so the paste can't land in the wrong tab).
+      // The ensuing onUpdated recomputes page-type (results → details) and pushes verdict.
+      const windowId = m.windowId as number;
+      const run = await loadRun();
+      if (run && run.windowId === windowId) {
+        const tabId = await tabIdForItem(m.itemId as string);
+        if (tabId !== null) await browser.tabs.update(tabId, { url: m.url as string }).catch(() => {});
+      }
+      return { ok: true };
     }
 
     if (m.type === 'REVERDICT') {
@@ -248,47 +527,6 @@ browser.runtime.onMessage.addListener(
 
     if (m.type === 'STOP_RUN') {
       await handleStopRun();
-      return { ok: true };
-    }
-
-    if (m.type === 'PING') {
-      return { type: 'PONG', hasOverlay: false };
-    }
-
-    if (m.type === 'REINJECT_OVERLAY') {
-      const existingTabId = await findActiveBrokerTab();
-      if (existingTabId !== null) {
-        try {
-          await browser.tabs.update(existingTabId, { active: true });
-          await reinjectIfMissing(existingTabId);
-          return { ok: true };
-        } catch {
-          await browser.storage.session.remove(`expurge_tab_${existingTabId}`);
-          // Fall through to open-next-item logic.
-        }
-      }
-
-      // No live broker tab (or tab closed between find and update) — open the next item.
-      const run = await loadRun();
-      if (!run) return { ok: false };
-      const item =
-        run.items.find(i => i.status === 'pending') ??
-        run.items.find(i => i.status === 'open');
-      if (!item) return { ok: false };
-
-      const tab = await browser.tabs.create({ url: item.renderedUrl, active: true });
-      if (tab.id !== undefined) {
-        await browser.storage.session.set({ [`expurge_tab_${tab.id}`]: item.id });
-        if (item.status === 'pending') {
-          const updated: RunState = {
-            ...run,
-            items: run.items.map(i =>
-              i.id === item.id ? { ...i, status: 'open' as WorkItemStatus } : i
-            ),
-          };
-          await saveRun(updated);
-        }
-      }
       return { ok: true };
     }
 
@@ -338,18 +576,26 @@ browser.runtime.onMessage.addListener(
     }
 
     if (m.type === 'CLOSE_TAB') {
-      const tabId = sender.tab?.id;
-      if (tabId !== undefined) {
-        await browser.tabs.remove(tabId).catch(() => {});
+      // Vestigial: background now closes verdicted tabs itself (handleVerdict). Kept for
+      // completeness — if the sidebar ever asks, close the window's current broker tab.
+      const windowId = m.windowId as number | undefined;
+      const run = await loadRun();
+      if (windowId !== undefined && run) {
+        const tabId = await findWindowBrokerTab(windowId, run);
+        if (tabId !== null) await browser.tabs.remove(tabId).catch(() => {});
       }
       return { ok: true };
     }
 
     if (m.type === 'DELETE_ALL') {
+      // Capture the run's window before wiping session storage so we can send the sidebar back
+      // to no-run (delete-all can come from the options page, not the sidebar).
+      const wid = (await loadRun())?.windowId;
       await serialWrite(async () => {
         await browser.storage.session.clear();
       });
       await browser.storage.local.clear();
+      if (wid !== undefined) await pushView(wid, { view: 'no-run' });
       return { ok: true };
     }
 
@@ -360,75 +606,20 @@ browser.runtime.onMessage.addListener(
 // ── tab closed → skipped/tab_closed ─────────────────────────────────────────
 
 browser.tabs.onRemoved.addListener(async (tabId: number) => {
+  await setChallengeFlag(tabId, false); // drop any challenge flag for the now-gone tab
   const itemId = await itemIdForTab(tabId);
   if (!itemId) return;
   await handleSkip(itemId, 'tab_closed', tabId);
 });
 
-
-// ── overlay re-injection ─────────────────────────────────────────────────────
-
-async function findActiveBrokerTab(): Promise<number | null> {
-  const [all, run] = await Promise.all([
-    browser.storage.session.get(null) as Promise<Record<string, unknown>>,
-    loadRun(),
-  ]);
-  // A tab temporarily at a Cloudflare (or other challenge-provider) redirect URL will have a
-  // hostname that doesn't match the broker. We don't prune it — it may redirect back shortly.
-  // Keep it as a fallback so "Restore Overlay" focuses the existing tab rather than opening a
-  // fresh one that would trigger a new Cloudflare session.
-  let fallbackTabId: number | null = null;
-  for (const key of Object.keys(all)) {
-    if (!key.startsWith('expurge_tab_')) continue;
-    const tabId = parseInt(key.slice('expurge_tab_'.length), 10);
-    if (isNaN(tabId)) continue;
-    try {
-      const tab = await browser.tabs.get(tabId);
-      if (run && tab.url) {
-        const itemId = all[key] as string;
-        const item = run.items.find(i => i.id === itemId);
-        if (item) {
-          try {
-            const brokerHost = new URL(item.renderedUrl).hostname;
-            const tabHost    = new URL(tab.url).hostname;
-            if (tabHost !== brokerHost && !tabHost.endsWith('.' + brokerHost)) {
-              if (fallbackTabId === null) fallbackTabId = tabId; // mid-redirect, don't prune
-              continue;
-            }
-          } catch {
-            await browser.storage.session.remove(key); // URL parse failed
-            continue;
-          }
-        }
-      }
-      return tabId;
-    } catch {
-      await browser.storage.session.remove(key); // stale — tab was closed
-    }
-  }
-  return fallbackTabId;
-}
-
-async function reinjectIfMissing(tabId: number): Promise<void> {
-  const TIMEOUT_MS = 2_000;
-  try {
-    const pong = await Promise.race([
-      browser.tabs.sendMessage(tabId, { type: 'PING' }),
-      new Promise<never>((_, rej) => setTimeout(() => rej(new Error('timeout')), TIMEOUT_MS)),
-    ]) as { type?: string; hasOverlay?: boolean } | null;
-
-    if (pong?.hasOverlay) return; // overlay present — nothing to do
-    // Content script alive but overlay missing — fall through to inject
-  } catch {
-    // PING timed out or content script not running — inject
-  }
-
-  try {
-    await browser.scripting.executeScript({ target: { tabId }, files: ['dist/content.js'] });
-  } catch {
-    // Tab may be on a restricted URL or closed — ignore
-  }
-}
+// Focus moved within the run's window → refresh the sidebar for the newly-active tab.
+// Sticky-view contract: pushActiveView is a no-op when that tab isn't a broker tab, so a
+// glance at another tab leaves the sidebar on its last broker item.
+browser.tabs.onActivated.addListener(async ({ windowId }) => {
+  const run = await loadRun();
+  if (!run || run.windowId !== windowId) return;
+  await pushActiveView(run);
+});
 
 // ── first install → open options page ────────────────────────────────────────
 
@@ -439,20 +630,15 @@ browser.runtime.onInstalled.addListener(({ reason }) => {
 browser.tabs.onUpdated.addListener(async (tabId, changeInfo) => {
   if (changeInfo.status !== 'complete') return;
   const itemId = await itemIdForTab(tabId);
-  if (!itemId) return;
+  if (!itemId) return; // not a tracked broker tab
 
-  // Skip reinject for off-host pages (e.g. challenges.cloudflare.com during redirects).
-  // On-host CDN paths (broker.com/cdn-cgi/...) still reach executeScript which ignores them.
   const run = await loadRun();
-  const item = run?.items.find(i => i.id === itemId);
-  if (item?.renderedUrl) {
-    try {
-      const tab = await browser.tabs.get(tabId);
-      const brokerHost = new URL(item.renderedUrl).hostname;
-      const tabHost    = new URL(tab.url ?? '').hostname;
-      if (tabHost !== brokerHost && !tabHost.endsWith('.' + brokerHost)) return;
-    } catch { /* malformed URL — fall through to reinject */ }
-  }
+  if (!run) return;
 
-  await reinjectIfMissing(tabId);
+  // Broker tab finished navigating (e.g. results → details, or a challenge redirect landing
+  // back on the real page) → recompute the active tab's page-type and push. The challenge flag
+  // is the content script's job now: it reports RESOLVED on the clean load, so background does
+  // NOT guess challenge state from navigation here (that misfired on on-host challenge pages,
+  // clearing the flag the content script had just set on the same load).
+  await pushActiveView(run);
 });
