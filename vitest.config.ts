@@ -22,9 +22,11 @@ export default defineConfig({
         'src/shared/types.ts', // type-only, no runtime
         'src/test-support/**', // shared test fixtures
         'src/background/index.ts', // entrypoint: message dispatch / storage I/O — integration-test TODO
-        'src/content/index.ts', // entrypoint: overlay DOM injection — integration-test TODO
+        'src/content/index.ts', // entrypoint: headless challenge reporter (DOM observer) — integration-test TODO
         'src/options/index.ts', // entrypoint: form/nav wiring — integration-test TODO
         'src/popup/index.ts', // entrypoint: thin popup render — integration-test TODO
+        'src/sidebar/index.ts', // entrypoint: sidebar render layer / message wiring — integration-test TODO
+                                //   (its pure parts live in state.ts + paste.ts, which ARE covered)
       ],
       // The html tree is dev-only; CI never uploads it (coverage/ is gitignored).
       reporter: process.env['CI'] ? ['text'] : ['text', 'html'],

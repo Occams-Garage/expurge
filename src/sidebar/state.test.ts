@@ -188,6 +188,10 @@ describe('deriveView — offsite (tab left the broker host)', () => {
     expect(deriveView(incomplete, focus({ tabUrl: 'https://evil.example/x' }), brokers).view).toBe('offsite');
   });
 
+  it('an unparseable tab URL → offsite (garbage host can\'t be confirmed on the broker)', () => {
+    expect(deriveView(incomplete, focus({ tabUrl: 'not a url' }), brokers).view).toBe('offsite');
+  });
+
   it('challenge still wins even when off-host (Cloudflare interstitial)', () => {
     expect(deriveView(incomplete, focus({ tabUrl: 'https://challenges.cloudflare.com/x', challenge: true }), brokers).view).toBe('challenge');
   });
