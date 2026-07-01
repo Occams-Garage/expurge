@@ -1,5 +1,10 @@
 name: ci
 
+# NOTE: this does NOT enforce the broker trust-bit rule (CLAUDE.md — "contributed records
+# always land trust: unverified; CI enforces this mechanically"). That contributed-record
+# gate is an unbuilt M9 item. brokers.test.ts checks trust *hygiene* (a verified channel
+# carries its provenance) but not author-gated trust changes — green CI does not vouch trust.
+
 on: [push, pull_request]
 
 jobs:

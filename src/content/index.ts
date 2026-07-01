@@ -369,7 +369,7 @@ function buildVerdictPanel(
 
 function buildGuidancePanel(
   exposes: string[],
-  brokerHostname: string,
+  hostname: string,
   progress: { done: number; total: number } | null,
   onVerdict: (verdict: Verdict, listingUrl: string) => void,
 ): HTMLElement {
@@ -394,7 +394,7 @@ function buildGuidancePanel(
         <input class="paste-input" id="paste-input" type="text"
                placeholder="Paste a link to your listing…" autocomplete="off">
         <div class="paste-warning" id="paste-warning">
-          This doesn't look like a ${brokerHostname} URL — double-check before confirming.
+          This doesn't look like a ${hostname} URL — double-check before confirming.
         </div>
         <div class="buttons" id="paste-btns" style="display:none">
           <button class="btn btn-hit"     id="btn-hit">Yes, this is me</button>
@@ -444,8 +444,8 @@ function buildGuidancePanel(
     try {
       const parsed = new URL(val);
       const matches =
-        parsed.hostname === brokerHostname ||
-        parsed.hostname.endsWith('.' + brokerHostname);
+        parsed.hostname === hostname ||
+        parsed.hostname.endsWith('.' + hostname);
       pasteWarn.classList.toggle('visible', !matches);
     } catch {
       pasteWarn.classList.add('visible');
@@ -615,7 +615,7 @@ function buildChallengePanel(info: ItemInfoMsg, onResolved: () => void): void {
 function showMainPanel(info: ItemInfoMsg): void {
   const { itemId, exposes, renderedUrl, progress } = info;
 
-  const onResults = isResultsPage(window.location.href, renderedUrl);
+  const onResults = isResultsPage(window.location.pathname, renderedUrl);
   const hostname = brokerHostname(renderedUrl);
 
   if (onResults) {

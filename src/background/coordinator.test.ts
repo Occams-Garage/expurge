@@ -8,55 +8,16 @@ import {
   selectBatch,
   BATCH_SIZE,
 } from './coordinator';
-import type { Profile, RunState, WorkItem } from '../shared/types';
-import type { Broker } from '../shared/brokers';
-
-const profile = (over: Partial<Profile> = {}): Profile => ({
-  first: 'Jane',
-  last: 'Doe',
-  city: 'Reno',
-  state: 'NV',
-  ...over,
-});
-
-const broker = (over: Partial<Broker> = {}): Broker => ({
-  id: 'b1',
-  name: 'B1',
-  tier: 1,
-  status: 'active',
-  search: {
-    url: 'https://b1.com/s?n={name|q}',
-    requires: ['first', 'last', 'city', 'state'],
-    exposes: [],
-  },
-  optout: [],
-  ...over,
-});
-
-const item = (over: Partial<WorkItem> = {}): WorkItem => ({
-  id: 'b1:primary',
-  brokerId: 'b1',
-  nameVariant: 'primary',
-  variantFirst: 'Jane',
-  variantLast: 'Doe',
-  renderedUrl: 'https://b1.com/x',
-  status: 'pending',
-  ...over,
-});
-
-const run = (items: WorkItem[]): RunState => ({
-  runId: 'r',
-  createdAt: '2026-01-01T00:00:00Z',
-  items,
-});
+import { BROKERS } from '../shared/brokers';
+import { makeProfile as profile, makeBroker as broker, makeItem as item, makeRun as run } from '../test-support/fixtures';
 
 describe('buildItems', () => {
   it('primary variant → one pending item per active broker with a rendered URL', () => {
     const items = buildItems(profile(), [broker()]);
     expect(items).toHaveLength(1);
     expect(items[0]).toMatchObject({
-      id: 'b1:primary',
-      brokerId: 'b1',
+      id: 'b:primary',
+      brokerId: 'b',
       nameVariant: 'primary',
       variantFirst: 'Jane',
       variantLast: 'Doe',
@@ -85,7 +46,7 @@ describe('buildItems', () => {
   });
 
   it('treats an empty required array field as missing, a filled one as present', () => {
-    const b = broker({ search: { url: 'https://b1.com/s', requires: ['emails'], exposes: [] } });
+    const b = broker({ search: { url: 'https://b.com/s', requires: ['emails'], exposes: [] } });
     expect(buildItems(profile({ emails: [] }), [b])[0].skipReason).toBe('missing:emails');
     expect(buildItems(profile({ emails: ['a@b.com'] }), [b])[0].status).toBe('pending');
   });
@@ -99,22 +60,22 @@ describe('buildItems', () => {
   });
 
   it('defaults to the shipped BROKERS when none injected', () => {
-    const items = buildItems(profile());
-    expect(items.length).toBeGreaterThan(0);
-    expect(items.every((i) => i.brokerId === 'truepeoplesearch')).toBe(true);
+    // Assert the default-param wiring, not the shipped dataset's cardinality/ids — this
+    // stays green when brokers are added.
+    expect(buildItems(profile())).toEqual(buildItems(profile(), BROKERS));
   });
 });
 
 describe('withVerdict', () => {
   it('hit sets verdict + matchedAs from the item nameVariant', () => {
-    const r = withVerdict(run([item({ nameVariant: 'aka_0' })]), 'b1:primary', 'hit');
+    const r = withVerdict(run([item({ nameVariant: 'aka_0' })]), 'b:primary', 'hit');
     expect(r.items[0]).toMatchObject({ status: 'verdicted', verdict: 'hit', matchedAs: 'aka_0' });
   });
 
   it('a non-hit re-verdict drops any prior matchedAs', () => {
     const r = withVerdict(
       run([item({ verdict: 'hit', matchedAs: 'primary', status: 'verdicted' })]),
-      'b1:primary',
+      'b:primary',
       'clear',
     );
     expect(r.items[0].verdict).toBe('clear');
@@ -122,27 +83,27 @@ describe('withVerdict', () => {
   });
 
   it('sets listingUrl only when provided and leaves other items untouched', () => {
-    const two = run([item({ id: 'b1:primary' }), item({ id: 'b1:aka_0', nameVariant: 'aka_0' })]);
-    const r = withVerdict(two, 'b1:primary', 'hit', 'https://p/1');
+    const two = run([item({ id: 'b:primary' }), item({ id: 'b:aka_0', nameVariant: 'aka_0' })]);
+    const r = withVerdict(two, 'b:primary', 'hit', 'https://p/1');
     expect(r.items[0].listingUrl).toBe('https://p/1');
     expect(r.items[1]).toEqual(two.items[1]);
   });
 
   it('preserves an existing listingUrl when none supplied', () => {
-    const r = withVerdict(run([item({ listingUrl: 'https://keep' })]), 'b1:primary', 'unknown');
+    const r = withVerdict(run([item({ listingUrl: 'https://keep' })]), 'b:primary', 'unknown');
     expect(r.items[0].listingUrl).toBe('https://keep');
   });
 });
 
 describe('applySkip', () => {
   it('marks a pending item skipped with the reason', () => {
-    const r = applySkip(run([item()]), 'b1:primary', 'challenge');
+    const r = applySkip(run([item()]), 'b:primary', 'challenge');
     expect(r.items[0]).toMatchObject({ status: 'verdicted', verdict: 'skipped', skipReason: 'challenge' });
   });
 
   it('never overwrites an already-verdicted item (no-wedge)', () => {
     const verdicted = item({ status: 'verdicted', verdict: 'hit' });
-    const r = applySkip(run([verdicted]), 'b1:primary', 'tab_closed');
+    const r = applySkip(run([verdicted]), 'b:primary', 'tab_closed');
     expect(r.items[0]).toEqual(verdicted);
   });
 });
@@ -164,21 +125,21 @@ describe('applyStop', () => {
 
 describe('applyMarkSent', () => {
   it('stamps a hit item once', () => {
-    const r = applyMarkSent(run([item({ status: 'verdicted', verdict: 'hit' })]), 'b1:primary', '2026-06-30T00:00:00Z');
+    const r = applyMarkSent(run([item({ status: 'verdicted', verdict: 'hit' })]), 'b:primary', '2026-06-30T00:00:00Z');
     expect(r.items[0].optedOutAt).toBe('2026-06-30T00:00:00Z');
   });
 
   it('does not re-stamp an already-sent item', () => {
     const r = applyMarkSent(
       run([item({ verdict: 'hit', optedOutAt: '2026-01-01T00:00:00Z' })]),
-      'b1:primary',
+      'b:primary',
       '2026-06-30T00:00:00Z',
     );
     expect(r.items[0].optedOutAt).toBe('2026-01-01T00:00:00Z');
   });
 
   it('ignores non-hit items', () => {
-    const r = applyMarkSent(run([item({ verdict: 'clear' })]), 'b1:primary', '2026-06-30T00:00:00Z');
+    const r = applyMarkSent(run([item({ verdict: 'clear' })]), 'b:primary', '2026-06-30T00:00:00Z');
     expect(r.items[0].optedOutAt).toBeUndefined();
   });
 });

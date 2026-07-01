@@ -68,6 +68,7 @@ describe('normalizeAkas — properties', () => {
     fc.assert(
       fc.property(fc.anything(), (x) => {
         normalizeAkas(x);
+        return true;
       }),
     );
   });
@@ -80,16 +81,20 @@ describe('normalizeAkas — properties', () => {
         { requiredKeys: [] },
       ),
     );
+    // Return a boolean so fast-check can shrink to a minimal counterexample (an expect()
+    // that throws inside the property defeats shrinking). The example tests above exercise
+    // the valid path with concrete assertions; this proves NO arbitrary input violates it.
     fc.assert(
-      fc.property(fc.array(entry), (arr) => {
-        for (const a of normalizeAkas(arr)) {
-          expect(a.first.length).toBeGreaterThan(0);
-          expect(a.last.length).toBeGreaterThan(0);
-          expect(a.first).toBe(a.first.trim());
-          expect(a.last).toBe(a.last.trim());
-          if (a.middle !== undefined) expect(a.middle.length).toBeGreaterThan(0);
-        }
-      }),
+      fc.property(fc.array(entry), (arr) =>
+        normalizeAkas(arr).every(
+          (a) =>
+            a.first.length > 0 &&
+            a.first === a.first.trim() &&
+            a.last.length > 0 &&
+            a.last === a.last.trim() &&
+            (a.middle === undefined || a.middle.length > 0),
+        ),
+      ),
     );
   });
 });

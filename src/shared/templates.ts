@@ -161,12 +161,18 @@ export function buildDraft(
 // ── Email send surface helpers ────────────────────────────────────────────────
 
 export function mailtoUrl(draft: EmailDraft): string {
-  const params = new URLSearchParams({ subject: draft.subject, body: draft.body });
-  return `mailto:${encodeURIComponent(draft.to)}?${params.toString()}`;
+  // RFC 6068: a mailto: query is percent-encoded — spaces MUST be %20, not '+'.
+  // URLSearchParams emits application/x-www-form-urlencoded ('+' for space), which
+  // strict clients render as a literal '+'. Encode each field with encodeURIComponent.
+  const enc = encodeURIComponent;
+  return `mailto:${enc(draft.to)}?subject=${enc(draft.subject)}&body=${enc(draft.body)}`;
 }
 
 // RFC 5322 minimal format for .eml download.
 export function toEml(draft: EmailDraft): string {
+  // Normalize the body to CRLF — a bare-LF body under CRLF headers is rejected/mangled
+  // by strict SMTP/.eml parsers.
+  const body = draft.body.replace(/\r?\n/g, '\r\n');
   return [
     `To: ${draft.to}`,
     `Subject: ${draft.subject}`,
@@ -174,7 +180,7 @@ export function toEml(draft: EmailDraft): string {
     `Content-Type: text/plain; charset=utf-8`,
     `Content-Transfer-Encoding: 8bit`,
     ``,
-    draft.body,
+    body,
   ].join('\r\n');
 }
 
