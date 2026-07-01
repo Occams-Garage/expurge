@@ -3,20 +3,27 @@ import type { ChallengeDetectedMsg, ChallengeResolvedMsg } from '../shared/types
 import { detectChallenge } from './classify';
 
 // Headless challenge reporter. The sidebar owns all verdict UI (later slices), so this
-// content script has NO UI and never touches the page DOM. Its only job: tell the background
-// when a broker page is gated behind a bot-challenge, and when that challenge clears.
-// Background identifies the tab via sender.tab.id — this script runs in the broker tab.
+// content script has NO UI and never touches the page DOM. Its only job: report whether the
+// broker page is gated behind a bot-challenge. Background identifies the tab via sender.tab.id
+// — this script runs in the broker tab.
 
-// If a challenge is up on load, report it and watch for it clearing. A clean load reports
-// nothing (parity with the old overlay, which only challenge-detected on init).
+// Report the page's challenge state on EVERY load, either way — the content script is the
+// single per-load source of truth (background no longer guesses challenge state from
+// navigation). An on-host Cloudflare interstitial reports DETECTED and stays challenged;
+// the redirect to the real page is a fresh load that reports RESOLVED and clears the flag.
+// (Out of scope: a challenge APPEARING after a clean load without a navigation — e.g. a
+// mid-run rate-limit that swaps the page in place. The load-time report wouldn't catch it.)
 function reportChallenges(): void {
-  if (!detectChallenge()) return;
+  if (!detectChallenge()) {
+    browser.runtime.sendMessage({ type: 'CHALLENGE_RESOLVED' } satisfies ChallengeResolvedMsg).catch(() => {});
+    return;
+  }
 
   browser.runtime.sendMessage({ type: 'CHALLENGE_DETECTED' } satisfies ChallengeDetectedMsg).catch(() => {});
 
-  // Watch for the challenge clearing. The 250 ms debounce guards against CAPTCHA widgets
-  // (notably Turnstile) briefly detaching their container mid-transition, which would read
-  // as "resolved" for an instant. Lifted from the old buildChallengePanel observer.
+  // Also watch for an IN-PAGE clear (e.g. Turnstile solved inline, no navigation). The 250 ms
+  // debounce guards against CAPTCHA widgets briefly detaching their container mid-transition,
+  // which would read as "resolved" for an instant. Lifted from the old buildChallengePanel.
   let dismissTimer: ReturnType<typeof setTimeout> | null = null;
   const observer = new MutationObserver(() => {
     if (detectChallenge()) {
@@ -35,9 +42,9 @@ function reportChallenges(): void {
   observer.observe(document.documentElement, { childList: true, subtree: true });
 }
 
-// Idempotency guard: the manifest auto-injects on navigation and (until Slice 5) background
-// still re-executeScripts on a missing PING. Without this latch we'd stack MutationObservers
-// and emit duplicate CHALLENGE_DETECTED. Mirrors the old __expurgePingBound flag.
+// Idempotency guard: the manifest auto-injects the content script on every navigation. Without
+// this latch a re-injection would stack a second MutationObserver. Mirrors the old
+// __expurgePingBound flag.
 const w = window as Window & { __expurgeReporterBound?: boolean };
 if (!w.__expurgeReporterBound) {
   w.__expurgeReporterBound = true;

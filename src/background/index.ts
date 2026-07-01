@@ -578,17 +578,11 @@ browser.tabs.onUpdated.addListener(async (tabId, changeInfo) => {
 
   const run = await loadRun();
   if (!run) return;
-  const item = run.items.find(i => i.id === itemId);
-  const tab = await browser.tabs.get(tabId).catch(() => null);
-  const onHost = !!(item?.renderedUrl && tab?.url && isOnHost(tab.url, item.renderedUrl));
-
-  // Clear the challenge flag once the tab lands back on-host: Cloudflare interstitials resolve
-  // by REDIRECT (a navigation, not a DOM mutation), so the content script's CHALLENGE_RESOLVED
-  // never fires for them (Slice-4 review). The off-host guard keeps the flag during the
-  // challenges.cloudflare.com hop itself.
-  if (onHost) await setChallengeFlag(tabId, false);
 
   // Broker tab finished navigating (e.g. results → details, or a challenge redirect landing
-  // back on-host) → recompute the active tab's page-type and push.
+  // back on the real page) → recompute the active tab's page-type and push. The challenge flag
+  // is the content script's job now: it reports RESOLVED on the clean load, so background does
+  // NOT guess challenge state from navigation here (that misfired on on-host challenge pages,
+  // clearing the flag the content script had just set on the same load).
   await pushActiveView(run);
 });
