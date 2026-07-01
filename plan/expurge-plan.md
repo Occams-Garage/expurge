@@ -411,6 +411,15 @@ cross-referenced against the public DROP registry to size overlap for the notice
 
 ## 7. Run model and UX (on-page overlay)
 
+> **Superseded surface (2026-07-01):** the on-page overlay described below is being replaced
+> by a Firefox native **sidebar** — a persistent, run-wide checklist that drives navigation
+> (open-tab batching, deferred "come back later" state, focus-coupled active item, per-broker
+> `search.guidance`). See **`plan/sidebar-nav.md`** and wherefore `2026-07-01-sidebar-run-navigation`
+> (resolves Q-013). The *semantics* below still hold — four verdicts (hit/clear/unknown/skip),
+> results-vs-details classification, challenge handling, the no-data-injection invariant, the
+> no-wedge rule — but they now render in the sidebar, not an injected overlay. This section is
+> kept for that carried-over detail; the surface is authoritative in `sidebar-nav.md`.
+
 The v1 spine is **open-and-confirm with an on-page overlay**, all input in the browser, no
 terminal, no separate app. A "run" expands the profile across enabled brokers (and aka
 variants), opens search URLs as tabs in paced batches, lets the content script classify

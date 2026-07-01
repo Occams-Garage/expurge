@@ -12,5 +12,6 @@
 - Q-010 | open | 2026-06-28 | 2026-06-28-email-templates | CCPA template legal language and DROP-registry overlap verification | areas: opt-out-drafts
 - Q-011 | open | 2026-06-29 | 2026-06-29-per-component-licensing | Confirm ODbL vs alternatives for the dataset and verify actual license texts before committing LICENSE files | areas: broker-dataset
 - Q-012 | open | 2026-06-30 | 2026-06-30-results-broker-grouped | Should multiple AKA tabs for the same broker site open simultaneously, or one at a time? | areas: run-model
-- Q-013 | open | 2026-06-30 | 2026-06-30-overlay-tab-vs-overlay | Should the overlay UI be a tab/panel alongside the page instead of over top of it? | areas: matching-overlay
+- Q-013 | resolved | 2026-06-30 | 2026-06-30-overlay-tab-vs-overlay | Should the overlay UI be a tab/panel alongside the page instead of over top of it? | areas: matching-overlay
 - Q-014 | open | 2026-06-30 | 2026-06-30-vitest-test-runner | How to run true Firefox-runtime extension e2e (Playwright loads Chromium extensions only; web-ext/geckodriver not set up)? | areas: (none)
+- Q-015 | open | 2026-07-01 | 2026-07-01-sidebar-run-navigation | Does sidebarAction.open() require a user gesture, and does a synchronous call in the Start handler satisfy it? | areas: matching-overlay, run-model
