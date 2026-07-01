@@ -15,3 +15,4 @@
 - Q-013 | resolved | 2026-06-30 | 2026-06-30-overlay-tab-vs-overlay | Should the overlay UI be a tab/panel alongside the page instead of over top of it? | areas: matching-overlay
 - Q-014 | open | 2026-06-30 | 2026-06-30-vitest-test-runner | How to run true Firefox-runtime extension e2e (Playwright loads Chromium extensions only; web-ext/geckodriver not set up)? | areas: (none)
 - Q-015 | resolved | 2026-07-01 | 2026-07-01-sidebar-run-navigation | Does sidebarAction.open() require a user gesture, and does a synchronous call in the Start handler satisfy it? | areas: matching-overlay, run-model
+- Q-016 | open | 2026-07-01 | 2026-07-01-sidebar-nav-built | Model challenge state as content-script-owned structural state instead of side-channel per-tab session keys? | areas: matching-overlay, run-model
