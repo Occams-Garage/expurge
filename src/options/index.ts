@@ -26,6 +26,10 @@ function showSection(id: Section): void {
   document.querySelectorAll<HTMLElement>('.nav-btn').forEach(btn => {
     btn.classList.toggle('active', btn.dataset['section'] === id);
   });
+  // AKA rows are built lazily by init(); if the profile form is shown before that
+  // resolves (or after an out-of-band change), guarantee the ≥1-row floor. Additive
+  // only, so it never clobbers real rows or in-progress typing.
+  if (id === 'profile') ensureOneAkaRow();
 }
 
 // ── html escape ──────────────────────────────────────────────────────────────
@@ -850,16 +854,11 @@ function firstIncompleteAkaRow(): HTMLElement | null {
   return null;
 }
 
-// Read rows back into AkaName[], skipping empty and incomplete rows (the latter are
-// caught at save time) and omitting empty middle fields.
+// Read rows into AkaName[] via the single canonicalizer — normalizeAkas applies the
+// same trim + drop-if-missing-first/last rules (incomplete rows are blocked at save).
 function readAkaRows(): AkaName[] {
-  const out: AkaName[] = [];
-  for (const row of Array.from(document.querySelectorAll<HTMLElement>('#aka-rows .aka-row'))) {
-    const { first, middle, last } = readAkaRow(row);
-    if (!first || !last) continue;
-    out.push({ first, last, ...(middle ? { middle } : {}) });
-  }
-  return out;
+  const rows = Array.from(document.querySelectorAll<HTMLElement>('#aka-rows .aka-row')).map(readAkaRow);
+  return normalizeAkas(rows);
 }
 
 async function handleProfileSave(e: Event): Promise<void> {
