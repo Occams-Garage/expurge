@@ -202,3 +202,13 @@ export function selectBatch(
   };
   return { toOpen, run: updated };
 }
+
+// The item to move focus to after an action — the first `open` item (a loaded tab, ready to
+// judge now), or null. Callers run selectBatch/openNextBatch FIRST, so any *openable* pending
+// is already `open`; a leftover `pending` is blocked behind a deferred/open sibling broker
+// (one-per-broker) and must NOT be force-opened (finding #2) — null routes deriveView to the
+// revisit view instead. `deferred` is never an auto-focus target (revisit it deliberately).
+// Pure; the caller resolves the id to a live tab.
+export function nextFocusTarget(run: RunState): string | null {
+  return run.items.find(i => i.status === 'open')?.id ?? null;
+}

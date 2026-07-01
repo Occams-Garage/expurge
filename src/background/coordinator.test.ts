@@ -9,6 +9,7 @@ import {
   isComplete,
   progressOf,
   selectBatch,
+  nextFocusTarget,
   BATCH_SIZE,
   MAX_OPEN_TABS,
 } from './coordinator';
@@ -328,5 +329,33 @@ describe('selectBatch', () => {
   it('BATCH_SIZE default is 5, MAX_OPEN_TABS default is 15', () => {
     expect(BATCH_SIZE).toBe(5);
     expect(MAX_OPEN_TABS).toBe(15);
+  });
+});
+
+describe('nextFocusTarget', () => {
+  it('returns the first open item id', () => {
+    const r = run([
+      item({ id: 'a', status: 'verdicted', verdict: 'hit' }),
+      item({ id: 'b', status: 'open' }),
+      item({ id: 'c', status: 'open' }),
+    ]);
+    expect(nextFocusTarget(r)).toBe('b');
+  });
+
+  it('ignores pending — only an open tab is focus-ready (openNextBatch runs first)', () => {
+    const r = run([item({ id: 'p', status: 'pending' }), item({ id: 'o', status: 'open' })]);
+    expect(nextFocusTarget(r)).toBe('o');
+  });
+
+  it('null when only deferred + blocked-pending remain → caller shows revisit (finding #2)', () => {
+    const r = run([
+      item({ id: 'b:primary', status: 'deferred' }),
+      item({ id: 'b:aka_0', nameVariant: 'aka_0', status: 'pending' }),
+    ]);
+    expect(nextFocusTarget(r)).toBeNull();
+  });
+
+  it('null when nothing non-terminal remains', () => {
+    expect(nextFocusTarget(run([item({ status: 'verdicted', verdict: 'clear' })]))).toBeNull();
   });
 });

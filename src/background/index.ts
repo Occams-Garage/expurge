@@ -1,7 +1,7 @@
 import browser from 'webextension-polyfill';
 import type { Profile, RunState, WorkItemStatus, Verdict, SkipReason, SidebarView, SidebarUpdateMsg } from '../shared/types';
 import { BROKERS, getBroker } from '../shared/brokers';
-import { isOnHost } from '../shared/url';
+import { isOnHost, isResultsPage } from '../shared/url';
 import { deriveView, type SidebarFocus } from '../sidebar/state';
 import { evaluateGate } from '../shared/gate';
 import { buildDraft } from '../shared/templates';
@@ -10,9 +10,11 @@ import {
   buildItems,
   withVerdict,
   applySkip,
+  applyDefer,
   applyStop,
   applyMarkSent,
   selectBatch,
+  nextFocusTarget,
 } from './coordinator';
 
 // ── serial write queue ────────────────────────────────────────────────────────
@@ -80,9 +82,9 @@ async function updateBadge(run: RunState): Promise<void> {
 // ── batch open ───────────────────────────────────────────────────────────────
 // Selection is pure (coordinator.selectBatch); this owns only the tab I/O.
 
-async function openNextBatch(run: RunState, focusFirst = false): Promise<void> {
+async function openNextBatch(run: RunState, focusFirst = false): Promise<RunState> {
   const { toOpen, run: updated } = selectBatch(run, BATCH_SIZE);
-  if (toOpen.length === 0) return;
+  if (toOpen.length === 0) return run;
 
   await saveRun(updated);
 
@@ -96,6 +98,7 @@ async function openNextBatch(run: RunState, focusFirst = false): Promise<void> {
       await browser.storage.session.set({ [`expurge_tab_${tab.id}`]: item.id });
     }
   }
+  return updated;
 }
 
 // ── handlers ─────────────────────────────────────────────────────────────────
@@ -117,22 +120,45 @@ async function handleStartRun(profile: Profile, windowId?: number): Promise<void
   });
 }
 
-// Verdict from a live broker tab: record it, drop the tab's tracking key, and
-// advance the run.
-async function handleVerdict(itemId: string, verdict: Verdict, listingUrl?: string, tabId?: number): Promise<void> {
+// Verdict from the sidebar (no longer from the broker tab): resolve the item's broker tab,
+// capture its listingUrl if on a details page, record, drop tracking, advance focus, then
+// close the tab. The tab has no UI to linger for; the sidebar's 800 ms `recorded` animation
+// is a pure UI transient (Slice 6) and does not gate this close.
+async function handleVerdict(itemId: string, verdict: Verdict, explicitListingUrl?: string): Promise<void> {
   return serialWrite(async () => {
     const run = await loadRun();
     if (!run) return;
 
+    const brokerTabId = await tabIdForItem(itemId);
+    const listingUrl = await captureListingUrl(run, itemId, brokerTabId, explicitListingUrl);
+
     const updated = withVerdict(run, itemId, verdict, listingUrl);
     await saveRun(updated);
+    await updateBadge(updated);
 
-    if (tabId !== undefined) {
-      await browser.storage.session.remove(`expurge_tab_${tabId}`);
+    if (brokerTabId !== null) {
+      await browser.storage.session.remove(`expurge_tab_${brokerTabId}`);
     }
 
-    await updateBadge(updated);
-    await openNextBatch(updated);
+    await advance(updated);
+
+    // Close AFTER focus moved, so the browser doesn't auto-activate a random tab in the gap.
+    // The key is already gone → onRemoved won't re-skip it.
+    if (brokerTabId !== null) {
+      await browser.tabs.remove(brokerTabId).catch(() => {});
+    }
+  });
+}
+
+// Defer from the sidebar: set the active item aside (its tab stays open, untracked-for-focus
+// but still tracked), then fill the freed slot and advance focus.
+async function handleDefer(itemId: string): Promise<void> {
+  return serialWrite(async () => {
+    const run = await loadRun();
+    if (!run) return;
+    const updated = applyDefer(run, itemId);
+    await saveRun(updated);
+    await advance(updated);
   });
 }
 
@@ -167,7 +193,7 @@ async function handleSkip(itemId: string, skipReason: SkipReason, tabId?: number
       await browser.storage.session.remove(`expurge_tab_${tabId}`);
     }
 
-    await openNextBatch(updated);
+    await advance(updated);
   });
 }
 
@@ -286,6 +312,87 @@ async function pushActiveView(run: RunState): Promise<void> {
   await pushView(run.windowId, deriveView(run, focus, BROKERS));
 }
 
+// ── focus driving ──────────────────────────────────────────────────────────────
+// After any action, move focus to the next actionable item and push the resulting view.
+
+// The live tab tracking an item, or null (reverse of the expurge_tab_<id> → itemId map).
+async function tabIdForItem(itemId: string): Promise<number | null> {
+  const all = await browser.storage.session.get(null) as Record<string, unknown>;
+  for (const key of Object.keys(all)) {
+    if (key.startsWith('expurge_tab_') && all[key] === itemId) {
+      const tabId = parseInt(key.slice('expurge_tab_'.length), 10);
+      if (!isNaN(tabId)) return tabId;
+    }
+  }
+  return null;
+}
+
+// Ensure an item has a live tab; open a fresh one from its renderedUrl if not. Covers a
+// resumed `deferred`/`open` item whose tab was lost (finding #3) and a pending item being
+// promoted. Returns the (possibly updated) run and the tabId.
+async function ensureItemTab(run: RunState, itemId: string): Promise<{ run: RunState; tabId: number | null }> {
+  const existing = await tabIdForItem(itemId);
+  if (existing !== null) return { run, tabId: existing };
+
+  const item = run.items.find(i => i.id === itemId);
+  if (!item) return { run, tabId: null };
+
+  const tab = await browser.tabs.create({ url: item.renderedUrl, active: true, windowId: run.windowId });
+  if (tab.id === undefined) return { run, tabId: null };
+  await browser.storage.session.set({ [`expurge_tab_${tab.id}`]: item.id });
+  // It now has a live tab → it's open.
+  const updated: RunState = {
+    ...run,
+    items: run.items.map(i => (i.id === itemId ? { ...i, status: 'open' as WorkItemStatus } : i)),
+  };
+  await saveRun(updated);
+  return { run: updated, tabId: tab.id };
+}
+
+// Move focus to the next actionable item (nextFocusTarget) and push its view; if none →
+// push the focus=null view (revisit while deferred/blocked-pending remain, else done).
+async function driveFocus(run: RunState): Promise<void> {
+  const windowId = run.windowId;
+  if (windowId === undefined) return;
+
+  const targetId = nextFocusTarget(run);
+  if (targetId === null) {
+    await pushView(windowId, deriveView(run, null, BROKERS));
+    return;
+  }
+
+  const { run: run2, tabId } = await ensureItemTab(run, targetId);
+  if (tabId !== null) await browser.tabs.update(tabId, { active: true }).catch(() => {});
+  const focus = tabId !== null ? await focusForTab(tabId, run2) : null;
+  await pushView(windowId, deriveView(run2, focus, BROKERS));
+}
+
+// The standard post-action advance: fill the freed batch slot, then drive focus.
+async function advance(run: RunState): Promise<void> {
+  const afterBatch = await openNextBatch(run);
+  await driveFocus(afterBatch);
+}
+
+// listingUrl for a verdict: an explicit one from the sidebar (paste-URL fallback) wins; else,
+// for a details-page verdict, capture the broker tab's own current URL (the sidebar can't
+// self-identify the broker tab). Results-page verdicts (e.g. "not found" → clear) carry none.
+async function captureListingUrl(
+  run: RunState,
+  itemId: string,
+  brokerTabId: number | null,
+  explicit?: string,
+): Promise<string | undefined> {
+  if (explicit !== undefined) return explicit;
+  if (brokerTabId === null) return undefined;
+  const item = run.items.find(i => i.id === itemId);
+  const tab = await browser.tabs.get(brokerTabId).catch(() => null);
+  if (!item || !tab?.url) return undefined;
+  try {
+    if (!isResultsPage(new URL(tab.url).pathname, item.renderedUrl)) return tab.url;
+  } catch { /* malformed — no listingUrl */ }
+  return undefined;
+}
+
 // ── message listener ─────────────────────────────────────────────────────────
 
 browser.runtime.onMessage.addListener(
@@ -352,14 +459,31 @@ browser.runtime.onMessage.addListener(
     }
 
     if (m.type === 'VERDICT') {
-      const tabId = sender.tab?.id;
+      // Sent by the sidebar now — sender.tab is the sidebar, so background resolves the broker
+      // tab from the item id. listingUrl is set only for the paste-URL fallback.
       await handleVerdict(
         m.itemId as string,
         m.verdict as Verdict,
         m.listingUrl as string | undefined,
-        tabId,
       );
       return { type: 'ACK', itemId: m.itemId };
+    }
+
+    if (m.type === 'DEFER') {
+      await handleDefer(m.itemId as string);
+      return { ok: true };
+    }
+
+    if (m.type === 'NAVIGATE_BROKER_TAB') {
+      // Paste-URL fallback: point the window's broker tab at the pasted listing. The ensuing
+      // onUpdated recomputes page-type (results → details) and pushes the verdict view.
+      const windowId = m.windowId as number;
+      const run = await loadRun();
+      if (run && run.windowId === windowId) {
+        const tabId = await findWindowBrokerTab(windowId, run);
+        if (tabId !== null) await browser.tabs.update(tabId, { url: m.url as string }).catch(() => {});
+      }
+      return { ok: true };
     }
 
     if (m.type === 'REVERDICT') {
@@ -463,9 +587,13 @@ browser.runtime.onMessage.addListener(
     }
 
     if (m.type === 'CLOSE_TAB') {
-      const tabId = sender.tab?.id;
-      if (tabId !== undefined) {
-        await browser.tabs.remove(tabId).catch(() => {});
+      // Vestigial: background now closes verdicted tabs itself (handleVerdict). Kept for
+      // completeness — if the sidebar ever asks, close the window's current broker tab.
+      const windowId = m.windowId as number | undefined;
+      const run = await loadRun();
+      if (windowId !== undefined && run) {
+        const tabId = await findWindowBrokerTab(windowId, run);
+        if (tabId !== null) await browser.tabs.remove(tabId).catch(() => {});
       }
       return { ok: true };
     }
