@@ -23,8 +23,8 @@ export default defineConfig({
     ],
     coverage: {
       provider: 'v8',
-      // Scoped to the modules under test this phase; widen as tiers land.
-      include: ['src/shared/**'],
+      // Scoped to the modules under test; widen as tiers land.
+      include: ['src/shared/**', 'src/background/coordinator.ts'],
       exclude: ['src/shared/types.ts', '**/*.test.ts'],
       reporter: ['text', 'html'],
       thresholds: {
