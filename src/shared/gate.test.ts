@@ -1,27 +1,13 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { evaluateGate, channelExpiryState } from './gate';
-import type { Broker, BrokerChannel } from './brokers';
+import { makeBroker, makeChannel } from '../test-support/fixtures';
+import type { BrokerChannel } from './brokers';
 
 // last_checked is compared to the live clock, so build dates relative to now.
 const daysAgo = (n: number) => new Date(Date.now() - n * 86_400_000).toISOString().slice(0, 10);
-
-const channel = (over: Partial<BrokerChannel> = {}): BrokerChannel => ({
-  method: 'email',
-  target: 'privacy@example.com',
-  kind: 'dedicated_optout',
-  trust: 'verified',
-  last_checked: daysAgo(30),
-  ...over,
-});
-
-const broker = (optout: BrokerChannel[]): Broker => ({
-  id: 'b',
-  name: 'B',
-  tier: 1,
-  status: 'active',
-  search: { url: 'https://x.com/s', requires: ['first'], exposes: [] },
-  optout,
-});
+// A verified channel checked recently by default.
+const channel = (over: Partial<BrokerChannel> = {}) => makeChannel({ last_checked: daysAgo(30), ...over });
+const broker = (optout: BrokerChannel[]) => makeBroker({ optout });
 
 describe('evaluateGate', () => {
   it('any non-hit verdict → not_hit (no channel evaluated)', () => {
@@ -73,7 +59,7 @@ describe('evaluateGate', () => {
   });
 });
 
-describe('channelExpiryState', () => {
+describe('channelExpiryState (wide margins)', () => {
   it('fresh (<6 months) → not warn, not expired', () => {
     const s = channelExpiryState(channel({ last_checked: daysAgo(30) }));
     expect(s.warn).toBe(false);
@@ -81,22 +67,45 @@ describe('channelExpiryState', () => {
     expect(s.months).toBeLessThan(6);
   });
 
-  it('6–12 months → warn, not expired', () => {
-    const s = channelExpiryState(channel({ last_checked: daysAgo(220) }));
-    expect(s.warn).toBe(true);
-    expect(s.expired).toBe(false);
-  });
-
-  it('>12 months → warn and expired', () => {
-    const s = channelExpiryState(channel({ last_checked: daysAgo(400) }));
-    expect(s.warn).toBe(true);
-    expect(s.expired).toBe(true);
-  });
-
   it('missing last_checked → months Infinity, warn + expired', () => {
     const s = channelExpiryState(channel({ last_checked: undefined }));
     expect(s.months).toBe(Infinity);
     expect(s.warn).toBe(true);
     expect(s.expired).toBe(true);
+  });
+});
+
+// Exercise the exact `>= WARN_MONTHS` / `>= EXPIRE_MONTHS` edges deterministically — a
+// `>` vs `>=` off-by-one at the boundary (a channel expiring at exactly 12mo still passing
+// the draft gate) is invisible to the wide-margin cases above.
+describe('channelExpiryState — exact boundaries (fake clock)', () => {
+  const NOW = new Date('2026-07-01T00:00:00.000Z');
+  const MONTH_MS = 30.44 * 86_400_000; // matches gate.ts monthsSince divisor exactly
+  const atMonths = (m: number): string => new Date(NOW.getTime() - m * MONTH_MS).toISOString();
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('exactly 12 months → expired (>= boundary is inclusive)', () => {
+    expect(channelExpiryState(makeChannel({ last_checked: atMonths(12) })).expired).toBe(true);
+  });
+
+  it('just under 12 months → warn but not expired', () => {
+    const s = channelExpiryState(makeChannel({ last_checked: atMonths(11.99) }));
+    expect(s.expired).toBe(false);
+    expect(s.warn).toBe(true);
+  });
+
+  it('exactly 6 months → warn (>= boundary is inclusive)', () => {
+    expect(channelExpiryState(makeChannel({ last_checked: atMonths(6) })).warn).toBe(true);
+  });
+
+  it('just under 6 months → not warn', () => {
+    expect(channelExpiryState(makeChannel({ last_checked: atMonths(5.99) })).warn).toBe(false);
   });
 });

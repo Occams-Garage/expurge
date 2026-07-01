@@ -1,5 +1,5 @@
 import browser from 'webextension-polyfill';
-import type { AkaName, Profile, RunState, WorkItem } from '../shared/types';
+import type { Profile, RunState, WorkItem } from '../shared/types';
 import type { Draft, EmailDraft, FormDraft } from '../shared/templates';
 import { mailtoUrl, toEml, toCopyText } from '../shared/templates';
 import { normalizeAkas } from '../shared/transforms';

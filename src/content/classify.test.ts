@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { describe, it, expect, beforeEach } from 'vitest';
 import { detectChallenge, isResultsPage, brokerHostname } from './classify';
 
@@ -37,8 +38,8 @@ describe('detectChallenge', () => {
     expect(detectChallenge()).toBe(false);
   });
 
-  // iframes are built via createElement, not innerHTML — happy-dom's HTML parser throws
-  // when materializing an <iframe> even with page-loading disabled.
+  // Build iframes via createElement (not innerHTML) so the fixture is explicit about the
+  // one attribute the selector matches; jsdom materializes them inertly (no fetch/throw).
   const addEl = (tag: string, attr: string, value: string) => {
     const el = document.createElement(tag);
     el.setAttribute(attr, value);
@@ -55,23 +56,23 @@ describe('detectChallenge', () => {
     ['iframe', 'src', 'https://www.google.com/recaptcha/api2/bframe?k=1'],
     ['div', 'class', 'g-recaptcha'],
     ['iframe', 'src', 'https://geo.captcha-delivery.com/x'],
-  ])('embedded CAPTCHA widget → true (%s[%s])', (tag, attr, value) => {
+  ])('embedded CAPTCHA widget → true (%s %s=%s)', (tag, attr, value) => {
     addEl(tag, attr, value);
     expect(detectChallenge()).toBe(true);
   });
 });
 
 describe('isResultsPage', () => {
-  it('same pathname → true (results page)', () => {
-    expect(isResultsPage('https://b.com/results?q=1', 'https://b.com/results?name=x')).toBe(true);
+  it('matching pathname → true (results page)', () => {
+    expect(isResultsPage('/results', 'https://b.com/results?name=x')).toBe(true);
   });
 
   it('different pathname → false (details page)', () => {
-    expect(isResultsPage('https://b.com/person/123', 'https://b.com/results?name=x')).toBe(false);
+    expect(isResultsPage('/person/123', 'https://b.com/results?name=x')).toBe(false);
   });
 
   it('malformed rendered URL → false', () => {
-    expect(isResultsPage('https://b.com/results', 'not a url')).toBe(false);
+    expect(isResultsPage('/results', 'not a url')).toBe(false);
   });
 });
 

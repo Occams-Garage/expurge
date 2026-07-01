@@ -33,12 +33,13 @@ export function detectChallenge(): boolean {
   ].some((sel) => document.querySelector(sel) !== null);
 }
 
-// The rendered search URL points at a results listing. If the current page shares that
-// pathname we're on the results page (show guidance); otherwise it's a details page (show
-// verdict buttons). A malformed rendered URL is treated as not-results.
-export function isResultsPage(currentUrl: string, renderedUrl: string): boolean {
+// The rendered search URL points at a results listing. If the current page's pathname
+// matches, we're on the results page (show guidance); otherwise it's a details page (show
+// verdict buttons). Takes the pathname directly (callers pass window.location.pathname,
+// which never throws); only the rendered URL is parsed, and a malformed one → not-results.
+export function isResultsPage(currentPathname: string, renderedUrl: string): boolean {
   try {
-    return new URL(currentUrl).pathname === new URL(renderedUrl).pathname;
+    return currentPathname === new URL(renderedUrl).pathname;
   } catch {
     return false;
   }
