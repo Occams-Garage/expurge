@@ -4,6 +4,7 @@ import {
   withVerdict,
   applySkip,
   applyDefer,
+  promoteToOpen,
   applyStop,
   applyMarkSent,
   isComplete,
@@ -141,6 +142,34 @@ describe('applyDefer', () => {
   it('leaves other items untouched', () => {
     const two = run([item({ id: 'b:primary', status: 'open' }), item({ id: 'b:aka_0', status: 'open' })]);
     const r = applyDefer(two, 'b:primary');
+    expect(r.items[1]).toEqual(two.items[1]);
+  });
+});
+
+describe('promoteToOpen', () => {
+  it('moves a deferred item to open (the inverse of applyDefer)', () => {
+    const r = promoteToOpen(run([item({ status: 'deferred' })]), 'b:primary');
+    expect(r.items[0].status).toBe('open');
+  });
+
+  it('no-op on an open item', () => {
+    const open = item({ status: 'open' });
+    expect(promoteToOpen(run([open]), 'b:primary').items[0]).toEqual(open);
+  });
+
+  it('no-op on a pending item (must go through ensureItemTab to get a tab)', () => {
+    const pending = item({ status: 'pending' });
+    expect(promoteToOpen(run([pending]), 'b:primary').items[0]).toEqual(pending);
+  });
+
+  it('never revives an already-verdicted item', () => {
+    const verdicted = item({ status: 'verdicted', verdict: 'hit' });
+    expect(promoteToOpen(run([verdicted]), 'b:primary').items[0]).toEqual(verdicted);
+  });
+
+  it('leaves other items untouched', () => {
+    const two = run([item({ id: 'b:primary', status: 'deferred' }), item({ id: 'b:aka_0', status: 'deferred' })]);
+    const r = promoteToOpen(two, 'b:primary');
     expect(r.items[1]).toEqual(two.items[1]);
   });
 });

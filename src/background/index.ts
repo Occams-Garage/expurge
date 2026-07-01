@@ -11,6 +11,7 @@ import {
   withVerdict,
   applySkip,
   applyDefer,
+  promoteToOpen,
   applyStop,
   applyMarkSent,
   selectBatch,
@@ -116,7 +117,11 @@ async function handleStartRun(profile: Profile, windowId?: number): Promise<void
     // Persist before opening tabs so content scripts can find their items on load.
     await saveRun(run);
     await updateBadge(run);
-    await openNextBatch(run, true);
+    const afterBatch = await openNextBatch(run, true);
+    // Init-race insurance (Slice-5 review): a sidebar that opened on the Start click may have
+    // sent SIDEBAR_GET_STATE before the run was saved (→ got no-run). Push the real view now
+    // that the first batch is open so it corrects itself without waiting for a focus change.
+    await pushActiveView(afterBatch);
   });
 }
 
@@ -159,6 +164,31 @@ async function handleDefer(itemId: string): Promise<void> {
     const updated = applyDefer(run, itemId);
     await saveRun(updated);
     await advance(updated);
+  });
+}
+
+// Jump to an item on request from the sidebar — a checklist row click, or the revisit button
+// (which targets the first deferred item). The sidebar names the item; background activates
+// its tab. This is the manual-override path (decision 5): focus any item the user clicks.
+async function handleFocusItem(itemId: string, windowId: number): Promise<void> {
+  return serialWrite(async () => {
+    const run = await loadRun();
+    if (!run || run.windowId !== windowId) return;
+    const target = run.items.find(i => i.id === itemId);
+    // Already terminal → nothing to focus (defensive; the sidebar won't make verdicted rows
+    // clickable).
+    if (!target || target.status === 'verdicted') return;
+
+    // Reopen a lost tab from renderedUrl (resume / finding #3), flipping a tabless item to
+    // `open`; then promote a still-alive `deferred` item to `open` so the normal verdict/defer
+    // flow applies (without this, a re-defer during revisit would no-op on a deferred item).
+    const { run: run2, tabId } = await ensureItemTab(run, itemId);
+    if (tabId === null) return;
+    const promoted = promoteToOpen(run2, itemId);
+    await saveRun(promoted);
+
+    await browser.tabs.update(tabId, { active: true }).catch(() => {});
+    await pushView(windowId, deriveView(promoted, await focusForTab(tabId, promoted), BROKERS));
   });
 }
 
@@ -449,6 +479,11 @@ browser.runtime.onMessage.addListener(
 
     if (m.type === 'DEFER') {
       await handleDefer(m.itemId as string);
+      return { ok: true };
+    }
+
+    if (m.type === 'FOCUS_ITEM') {
+      await handleFocusItem(m.itemId as string, m.windowId as number);
       return { ok: true };
     }
 
