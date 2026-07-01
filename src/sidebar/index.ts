@@ -264,17 +264,22 @@ async function castVerdict(itemId: string, verdict: Verdict): Promise<void> {
   renderSaving(d);
 
   const ok = await sendVerdictAck(itemId, verdict);
-  transient = false;
 
   if (!ok) {
+    transient = false;                   // failure: restore the controls so the user can retry
     await pullState().catch(() => {});   // reflect reality (verdict may not have landed)
     renderVerdictError();
     return;
   }
 
+  // Keep the latch closed THROUGH the recorded animation: handleVerdict pushes the next item's
+  // SIDEBAR_UPDATE before returning the ACK, so an unguarded window here would let that push
+  // clobber the "✓ recorded" confirmation. pullState below re-derives the true latest state
+  // (next item, or a Stop/Delete that arrived during the suppressed window), so nothing is lost.
   d.replaceChildren();
   renderRecorded(d);
   await delay(800);
+  transient = false;
   await pullState().catch(() => {});     // guarded so a rejected re-pull can't dead-end the panel
 }
 
