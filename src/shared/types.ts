@@ -108,14 +108,11 @@ export interface ItemInfoMsg {
 }
 export interface AckMsg  { type: 'ACK';  itemId: string }
 
-// REINJECT_OVERLAY is dead in the background (the overlay is gone), but the popup/options
-// "Restore overlay" buttons still send it until §7 deletes them, so the type stays until then.
-export interface ReinjMsg  { type: 'REINJECT_OVERLAY'; tabId?: number }
 export interface StopRunMsg { type: 'STOP_RUN' }
 
 export type ToBackground =
   | StartRunMsg | GetRunStateMsg | GetDraftMsg | VerdictMsg | ReverdictMsg
-  | ReinjMsg | StopRunMsg | SaveProfileMsg | GetProfileMsg | MarkSentMsg | DeleteAllMsg | CloseTabMsg
+  | StopRunMsg | SaveProfileMsg | GetProfileMsg | MarkSentMsg | DeleteAllMsg | CloseTabMsg
   | SidebarGetStateMsg | DeferMsg | FocusItemMsg | NavigateBrokerTabMsg | ChallengeDetectedMsg | ChallengeResolvedMsg;
 
 // ── sidebar view model ──────────────────────────────────────────────────────

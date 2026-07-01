@@ -4,6 +4,7 @@ import type { Draft, EmailDraft, FormDraft } from '../shared/templates';
 import { mailtoUrl, toEml, toCopyText } from '../shared/templates';
 import { normalizeAkas } from '../shared/transforms';
 import { BROKERS, getBroker } from '../shared/brokers';
+import { progressOf, isComplete } from '../background/coordinator';
 import {
   buildAkaRow,
   addAkaRow,
@@ -69,7 +70,7 @@ function safeHttpUrl(url: string | undefined): string {
 function runDisplayState(profile: Profile | null, run: RunState | null): RunDisplayState {
   if (!profile) return 'welcome';
   if (!run) return 'ready';
-  if (run.items.every(i => i.status === 'verdicted')) return 'done';
+  if (isComplete(run)) return 'done';
   return 'active';
 }
 
@@ -124,12 +125,7 @@ function showRunDisplayState(state: RunDisplayState, run?: RunState | null): voi
 }
 
 function renderRunActive(run: RunState): void {
-  const checkable = run.items.filter(
-    i => !(typeof i.skipReason === 'string' && i.skipReason.startsWith('missing:'))
-  );
-  const done  = checkable.filter(i => i.status === 'verdicted').length;
-  const total = checkable.length;
-  const hits  = run.items.filter(i => i.verdict === 'hit').length;
+  const { done, total, hits } = progressOf(run);
 
   document.getElementById('run-active-desc')!.textContent =
     `${done} / ${total} checked${hits > 0 ? ` · ${hits} found` : ''}`;
@@ -896,6 +892,23 @@ async function handleStartRun(): Promise<void> {
   const errEl = document.getElementById('start-error')!;
   errEl.classList.add('hidden');
   const btn = document.getElementById('btn-start') as HTMLButtonElement;
+
+  // Guard synchronously so we don't open a sidebar (or prompt for permission) with no profile.
+  if (!currentProfile) {
+    errEl.textContent = 'Profile required — fill in your profile before starting a scan.';
+    errEl.classList.remove('hidden');
+    return;
+  }
+
+  // Open the sidebar SYNCHRONOUSLY, inside this click's user gesture, BEFORE any await —
+  // sidebarAction.open() requires a gesture and opens in the active window (Q-015). Background
+  // never opens it (an async call from there fails silently). The run is then pinned to this
+  // window via the windowId captured below.
+  // NOTE (Q-015 empirical, verify in Firefox 140+): this gesture now drives BOTH
+  // sidebarAction.open() and, just below, permissions.request(). If Firefox rejects the second,
+  // the open() is already done — reorder only if needed and record the finding.
+  browser.sidebarAction.open().catch(() => {});
+
   btn.disabled = true;
   btn.textContent = 'Requesting access…';
 
@@ -920,16 +933,10 @@ async function handleStartRun(): Promise<void> {
       return;
     }
 
-    if (!currentProfile) {
-      errEl.textContent = 'Profile required — fill in your profile before starting a scan.';
-      errEl.classList.remove('hidden');
-      btn.disabled = false;
-      btn.textContent = 'Start scan';
-      return;
-    }
-
     btn.textContent = 'Starting…';
-    await browser.runtime.sendMessage({ type: 'START_RUN', profile: currentProfile });
+    // Pin the run to this window so batch tabs open alongside the sidebar we just opened.
+    const windowId = (await browser.windows.getCurrent()).id;
+    await browser.runtime.sendMessage({ type: 'START_RUN', profile: currentProfile, windowId });
     const res = await browser.runtime.sendMessage({ type: 'GET_RUN_STATE' }) as { run?: RunState };
     currentRun = res.run ?? null;
     showRunDisplayState(runDisplayState(currentProfile, currentRun), currentRun);
@@ -985,22 +992,6 @@ document.querySelectorAll<HTMLElement>('[data-nav]').forEach(btn => {
 });
 
 document.getElementById('btn-start')!.addEventListener('click', () => { handleStartRun().catch(console.error); });
-
-document.getElementById('btn-restore-overlay')!.addEventListener('click', async () => {
-  const btn = document.getElementById('btn-restore-overlay') as HTMLButtonElement;
-  btn.disabled = true;
-  try {
-    const res = await browser.runtime.sendMessage({ type: 'REINJECT_OVERLAY' }) as { ok?: boolean };
-    if (!res?.ok) {
-      btn.textContent = 'Nothing left to check';
-      setTimeout(() => { btn.textContent = 'Restore overlay'; btn.disabled = false; }, 2000);
-    } else {
-      btn.disabled = false;
-    }
-  } catch {
-    btn.disabled = false;
-  }
-});
 
 document.getElementById('btn-stop')!.addEventListener('click', async () => {
   await browser.runtime.sendMessage({ type: 'STOP_RUN' });
