@@ -242,6 +242,13 @@ async function handleStopRun(): Promise<void> {
     if (tabKeys.length > 0) {
       await browser.storage.session.remove(tabKeys);
     }
+
+    // Stop can come from the popup/options, not the sidebar — so push the resting view or the
+    // sidebar keeps showing live verdict/guidance controls for a run that's over. A stopped run
+    // isComplete, so deriveView yields `done` (deriveView, not a hardcoded view — one source).
+    if (updated.windowId !== undefined) {
+      await pushView(updated.windowId, deriveView(updated, null, BROKERS));
+    }
   });
 }
 
@@ -571,10 +578,14 @@ browser.runtime.onMessage.addListener(
     }
 
     if (m.type === 'DELETE_ALL') {
+      // Capture the run's window before wiping session storage so we can send the sidebar back
+      // to no-run (delete-all can come from the options page, not the sidebar).
+      const wid = (await loadRun())?.windowId;
       await serialWrite(async () => {
         await browser.storage.session.clear();
       });
       await browser.storage.local.clear();
+      if (wid !== undefined) await pushView(wid, { view: 'no-run' });
       return { ok: true };
     }
 
