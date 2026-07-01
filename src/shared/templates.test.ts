@@ -1,32 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import { buildDraft, mailtoUrl, toEml, toCopyText, type EmailDraft } from './templates';
-import type { Profile } from './types';
-import type { Broker, BrokerChannel } from './brokers';
+import { makeBroker, makeChannel, makeProfile } from '../test-support/fixtures';
+import type { BrokerChannel } from './brokers';
 
-const broker: Broker = {
-  id: 'b',
-  name: 'TruePeopleSearch',
-  tier: 1,
-  status: 'active',
-  search: { url: 'https://www.truepeoplesearch.com/results?x=1', requires: [], exposes: [] },
-  optout: [],
-};
-
-const emailChannel = (over: Partial<BrokerChannel> = {}): BrokerChannel => ({
-  method: 'email',
-  target: 'privacy@tps.com',
-  kind: 'dedicated_optout',
-  trust: 'verified',
-  ...over,
-});
-
-const p = (over: Partial<Profile> = {}): Profile => ({
-  first: 'Jane',
-  last: 'Doe',
-  city: 'Reno',
-  state: 'NV',
-  ...over,
-});
+const broker = makeBroker({ name: 'TruePeopleSearch' });
+const emailChannel = (over: Partial<BrokerChannel> = {}) => makeChannel({ target: 'privacy@tps.com', ...over });
+const p = makeProfile;
 
 describe('buildDraft', () => {
   it('form_required channel → form card with the user first/last prefilled', () => {
@@ -85,24 +64,27 @@ describe('send-surface serializers', () => {
     body: 'Line 1\nLine 2',
   };
 
-  it('mailtoUrl percent-encodes recipient and query-encodes subject/body', () => {
+  it('mailtoUrl percent-encodes per RFC 6068 — spaces as %20, never +', () => {
     const url = mailtoUrl(draft);
     expect(url.startsWith('mailto:a%40b.com?')).toBe(true);
-    expect(url).toContain('subject=Hi+there');
-    expect(url).toContain('body=Line+1%0ALine+2');
+    expect(url).toContain('subject=Hi%20there');
+    expect(url).toContain('body=Line%201%0ALine%202');
+    expect(url).not.toContain('+'); // a literal '+' would render as '+' in strict clients
   });
 
-  it('toEml uses CRLF headers with a blank-line body separator', () => {
-    const lines = toEml(draft).split('\r\n');
+  it('toEml normalizes the body to CRLF (no bare LF under CRLF headers)', () => {
+    const eml = toEml(draft);
+    const lines = eml.split('\r\n');
     expect(lines[0]).toBe('To: a@b.com');
     expect(lines[1]).toBe('Subject: Hi there');
     expect(lines).toContain('MIME-Version: 1.0');
     const blank = lines.indexOf('');
     expect(blank).toBeGreaterThan(0);
-    expect(lines.slice(blank + 1).join('\r\n')).toBe('Line 1\nLine 2');
+    expect(lines.slice(blank + 1)).toEqual(['Line 1', 'Line 2']); // body split by CRLF
+    expect(eml).not.toMatch(/[^\r]\n/); // every LF is preceded by CR
   });
 
-  it('toCopyText is To / Subject / blank line / body', () => {
+  it('toCopyText is To / Subject / blank line / body (plain text keeps LF)', () => {
     expect(toCopyText(draft)).toBe('To: a@b.com\nSubject: Hi there\n\nLine 1\nLine 2');
   });
 });
