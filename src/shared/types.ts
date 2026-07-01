@@ -30,6 +30,9 @@ export interface RunState {
   runId: string;           // UUID
   createdAt: string;       // ISO timestamp
   items: WorkItem[];
+  windowId?: number;       // window the run is pinned to (§Decision 7). Session-only, but —
+                           // unlike tabId — a windowId isn't a recycled-id hazard, so it's
+                           // safe to persist in session storage (survives spindown).
 }
 
 // Run progress counts, computed by coordinator.progressOf and shared by every readout
@@ -62,7 +65,7 @@ export interface Profile {
 
 // ── messages popup/content → background ─────────────────────────────────────
 
-export interface StartRunMsg    { type: 'START_RUN';    profile: Profile }
+export interface StartRunMsg    { type: 'START_RUN';    profile: Profile; windowId?: number }
 export interface GetRunStateMsg { type: 'GET_RUN_STATE' }
 export interface GetDraftMsg    { type: 'GET_DRAFT';    itemId: string }
 export interface GetItemMsg     { type: 'GET_ITEM' }
