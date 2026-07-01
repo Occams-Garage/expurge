@@ -23,3 +23,17 @@ export function brokerHostname(renderedUrl: string): string {
     return '';
   }
 }
+
+// Is `tabUrl` on the broker's own host (exact host or a subdomain of it)? Used to tell a
+// real broker page from an off-host detour like a `challenges.cloudflare.com` interstitial:
+// the background clears a tab's challenge flag only once it lands back on-host, and won't
+// treat the CDN hop itself as the broker page. A malformed URL on either side → false.
+export function isOnHost(tabUrl: string, renderedUrl: string): boolean {
+  try {
+    const brokerHost = new URL(renderedUrl).hostname;
+    const tabHost = new URL(tabUrl).hostname;
+    return tabHost === brokerHost || tabHost.endsWith('.' + brokerHost);
+  } catch {
+    return false;
+  }
+}

@@ -148,4 +148,7 @@ export type SidebarView =
   | { view: 'saving';    item: ActiveItemInfo }
   | { view: 'recorded';  item: ActiveItemInfo };
 
-export interface SidebarUpdateMsg { type: 'SIDEBAR_UPDATE'; view: SidebarView }
+// windowId scopes the push: runtime.sendMessage broadcasts to every open sidebar (one per
+// window), so each sidebar ignores updates whose windowId isn't its own — an idle window's
+// sidebar never adopts the run window's view.
+export interface SidebarUpdateMsg { type: 'SIDEBAR_UPDATE'; windowId: number; view: SidebarView }
