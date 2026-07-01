@@ -90,3 +90,44 @@ Coverage `include` is scoped per phase (`src/shared/**` now; widen with T3/T4). 
 - **Local caveat:** `web-ext lint` (addons-linter) crashes with SIGBUS on this machine's
   Node 25.8.1 build (vitest/tsc are fine). CI pins Node 22 (`ci.yml`), where it runs normally.
   Verify the lint gate there rather than locally on Node 25.
+
+## Next steps (pick up cold from here)
+
+Branch `test/vitest-suite` is at commit `328234c` — 97 tests, 100% coverage, nothing pushed.
+
+### A. Finish tier T4 (this branch or a follow-up)
+1. **Overlay PII-injection invariant.** Extract the overlay renderer from
+   `src/content/index.ts` (`createOverlayShell`, `buildGuidancePanel`, `buildVerdictPanel`,
+   `buildChallengePanel`) into e.g. `src/content/overlay.ts`, then in jsdom render each panel
+   from an `ItemInfoMsg` and assert the (shadow) DOM contains only the generic `exposes`
+   strings — never a profile field. Note: structurally guaranteed today (the content script
+   never receives the profile — `GET_ITEM` returns only `exposes`/progress), so this is a
+   regression lock, not a live bug hunt. Largest remaining extraction; low marginal value.
+2. **Options + background integration (optional, brittle).** The message-dispatch layer in
+   `background/index.ts` and `options/index.ts`'s `init()`/`handleProfileSave` wiring aren't
+   covered — the pure logic underneath them is (coordinator, aka-form). To cover the wiring,
+   build the deferred helpers `tests/helpers/browserMock.ts` (`vi.mock('webextension-polyfill')`
+   backed by an in-memory `tests/helpers/fakeStorage.ts`), load the real `options/index.html`
+   into jsdom, import the entrypoint, and drive it. Heavier and more coupled to import-time
+   wiring — weigh against the value, since the core logic is already unit-tested.
+
+### B. Reserved — build test-first with the feature
+3. **R1 (M7) — dataset Ed25519 verify pipeline.** When implementing `verifyAndLoadDataset`
+   (`plan/dataset-delivery.md` §6), co-author the full Layer-1 matrix: valid primary/backup
+   sig, tampered→last-good-untouched, wrong key, both invalid, anti-rollback, expiry,
+   malformed-after-verify, 304 no-op, network-error keep-last-good, fetch hygiene (no
+   creds/params), RFC 8032 known-answer vectors. Add `tests/helpers/signing.ts` (Ed25519
+   keypair + `makeSignedDataset`) and MSW (`npm i -D msw`) for the fetch. Add coverage gate
+   `src/shared/dataset/**` = 100/95/100 to `vitest.config.ts`.
+4. **R2 (M9) — schema validator + `fast-check`.** Lives in the (not-yet-created) `expurge-data`
+   repo with its own `dataset-ci.yml` trust-bit gate; `fast-check` fuzzes invariant violations.
+
+### C. Infra / housekeeping
+5. **Unbreak local lint.** Add `.nvmrc` = `22` (matches CI) so `npm run lint:ext` runs locally;
+   or leave lint as CI-only and document it. The Node 25.8.1 SIGBUS is the only local gap.
+6. **Widen coverage `include`** in `vitest.config.ts` as tiers land (currently `src/shared/**`
+   + `coordinator.ts` + `classify.ts` + `aka-form.ts`).
+7. **PR.** Open `test/vitest-suite` → its base once `feature/aka-structured-names` is settled
+   (it branched off the feature branch, so sequence the merges: feature first, then this).
+8. **Commit the plan docs?** `plan/testing-plan.md` and `plan/dataset-delivery.md` are still
+   untracked working docs — track them if they should live in history.
