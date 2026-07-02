@@ -16,6 +16,7 @@ import {
   applyMarkSent,
   selectBatch,
   nextFocusTarget,
+  isComplete,
 } from './coordinator';
 
 // ── serial write queue ────────────────────────────────────────────────────────
@@ -224,11 +225,12 @@ async function handleReverdict(itemId: string, verdict: Verdict, listingUrl?: st
     await saveRun(updated);
     await updateBadge(updated);
 
-    // Editing an already-completed item from the dashboard changes the hit count, so the
-    // sidebar's done/stopped summary would go stale. Push the resting view (focus=null →
-    // done/stopped/revisit), the same one-liner handleStopRun uses. Tactical §4 fix — the
-    // deeper push-after-mutation choke-point is a separate follow-up.
-    if (updated.windowId !== undefined) {
+    // Refresh the sidebar's resting done/stopped summary ONLY when the run is complete: a
+    // post-run re-verdict changes the hit count, so that summary would otherwise go stale.
+    // Mid-run, the sidebar is stickily showing an active broker-tab view — a re-verdict edits
+    // an already-verdicted (past) item, never the active one, so the active view stands and we
+    // must not clobber it with a resting view. Focus=null → done/stopped, same as handleStopRun.
+    if (updated.windowId !== undefined && isComplete(updated)) {
       await pushView(updated.windowId, deriveView(updated, null, BROKERS));
     }
   });
@@ -587,10 +589,11 @@ browser.runtime.onMessage.addListener(
         if (!run) return;
         const updated = applyMarkSent(run, m.itemId as string, new Date().toISOString());
         await saveRun(updated);
-        // Push the resting sidebar view for parity with REVERDICT (§4). Mark-sent doesn't move
-        // the hit count, so the done/stopped summary is unchanged today — this keeps the sidebar
-        // in step with any future field it might surface, at the cost of one no-op push.
-        if (updated.windowId !== undefined) {
+        // Refresh the resting sidebar view for parity with REVERDICT, gated on isComplete so a
+        // resting view never clobbers a mid-run active-tab view. Mark-sent is effectively always
+        // post-run and doesn't move the hit count, so this is a harmless no-op push today — the
+        // guard keeps it symmetric with REVERDICT and safe if that ever changes.
+        if (updated.windowId !== undefined && isComplete(updated)) {
           await pushView(updated.windowId, deriveView(updated, null, BROKERS));
         }
       });

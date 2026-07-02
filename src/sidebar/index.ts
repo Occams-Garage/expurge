@@ -323,9 +323,10 @@ function renderProgress(view: SidebarView): void {
   p.textContent = `${done} / ${total} checked${hits > 0 ? ` · ${hits} found` : ''}`;
 }
 
-// The {done,total,hits} each view carries, matching what progressOf(run) would yield. A
-// `stopped` run is complete (every item verdicted), so done === total; its `checked` excludes
-// the abandoned run_stopped items, which belong to the detail line, not this header count.
+// The {done,total,hits} each view carries. For most views this matches progressOf(run). A
+// `stopped` run is complete in the run-state sense (every item verdicted), but the header says
+// "checked" — so it must mirror renderStopped's honest detail line and count only items the user
+// actually checked, excluding the abandoned run_stopped items. done === view.checked, not total.
 function viewProgress(view: SidebarView): { done: number; total: number; hits: number } | null {
   switch (view.view) {
     case 'guidance':
@@ -337,7 +338,7 @@ function viewProgress(view: SidebarView): { done: number; total: number; hits: n
     case 'done':
       return view.progress;
     case 'stopped':
-      return { done: view.total, total: view.total, hits: view.hits };
+      return { done: view.checked, total: view.total, hits: view.hits };
     default: // no-run / saving / recorded — no header count
       return null;
   }
