@@ -98,6 +98,13 @@ instructions with ZERO broker-specific branching. Per record:
   your age, address, relatives"). In v1 this guides the human's eyes; with the deferred
   extraction-hint enrichment it would also tell an extractor which fields to look for.
   Descriptive, never gates.
+- `guidance?`: OPTIONAL single free-text string of generic, per-broker navigation help,
+  shown in the sidebar's results/guidance state ("This site lists 'premium' results first —
+  look below them for your real profile"). Generic instructions only, NEVER the user's data;
+  rendered as `textContent` (it rides the signed dataset into our privileged UI context, so
+  never `innerHTML`). Not subject to the opt-out `trust` gate — it's search-side help, not an
+  opt-out channel. Absent for most brokers; add only where a site's results layout is
+  confusing enough to warrant it.
 
 **optout block — an ORDERED LIST of channels** (list position = preference; no explicit
 order field). Each channel:
