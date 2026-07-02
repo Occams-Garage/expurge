@@ -16,3 +16,4 @@
 - Q-014 | open | 2026-06-30 | 2026-06-30-vitest-test-runner | How to run true Firefox-runtime extension e2e (Playwright loads Chromium extensions only; web-ext/geckodriver not set up)? | areas: (none)
 - Q-015 | resolved | 2026-07-01 | 2026-07-01-sidebar-run-navigation | Does sidebarAction.open() require a user gesture, and does a synchronous call in the Start handler satisfy it? | areas: matching-overlay, run-model
 - Q-016 | open | 2026-07-01 | 2026-07-01-sidebar-nav-built | Model challenge state as content-script-owned structural state instead of side-channel per-tab session keys? | areas: matching-overlay, run-model
+- Q-017 | open | 2026-07-01 | 2026-07-01-url-free-optout-flow | For URL-free opt-out brokers (e.g. TPS), confirm on the results page or skip the search vs. the current navigate-to-profile flow? | areas: opt-out-drafts, matching-overlay, run-model
