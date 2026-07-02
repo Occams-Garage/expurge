@@ -8,6 +8,10 @@ don't get lost. Roughly priority-ordered within each section.
 `wherefore/log/2026-07-01-sidebar-nav-built.md`; open question → **Q-016**; plan →
 `plan/sidebar-nav.md`.
 
+**Specs written for the first two branches:** §1 → `plan/challenge-tab-registry-spec.md`
+(challenge-flag redesign + tab registry, closes Q-016); §2 + §4 → `plan/sidebar-cleanup-spec.md`
+(the small batched cleanup). §3/§5/§6/§7 stay parked here until their trigger.
+
 ---
 
 ## 1. Challenge-flag lifecycle redesign — the main one (Q-016)
