@@ -111,6 +111,13 @@ async function handleStartRun(profile: Profile, windowId?: number): Promise<void
     // explicitly (captured synchronously alongside the sidebar open); until then, fall back
     // to the sender's window or the last-focused one.
     const resolvedWindowId = windowId ?? (await browser.windows.getLastFocused()).id;
+    // Latent (#15): options Start passes an explicit windowId, so this shouldn't fire. But if
+    // getLastFocused().id ever came back undefined, run.windowId would be undefined and every
+    // sidebar push early-returns — no updates for the whole run. Warn so that's diagnosable
+    // rather than a silent dead sidebar.
+    if (resolvedWindowId === undefined) {
+      console.warn('[expurge] START_RUN resolved no windowId — sidebar pushes will be suppressed for this run');
+    }
     const runId = crypto.randomUUID();
     const items = buildItems(profile);
     const run: RunState = { runId, createdAt: new Date().toISOString(), items, windowId: resolvedWindowId };
@@ -216,6 +223,14 @@ async function handleReverdict(itemId: string, verdict: Verdict, listingUrl?: st
     const updated = withVerdict(run, itemId, verdict, listingUrl);
     await saveRun(updated);
     await updateBadge(updated);
+
+    // Editing an already-completed item from the dashboard changes the hit count, so the
+    // sidebar's done/stopped summary would go stale. Push the resting view (focus=null →
+    // done/stopped/revisit), the same one-liner handleStopRun uses. Tactical §4 fix — the
+    // deeper push-after-mutation choke-point is a separate follow-up.
+    if (updated.windowId !== undefined) {
+      await pushView(updated.windowId, deriveView(updated, null, BROKERS));
+    }
   });
 }
 
@@ -570,7 +585,14 @@ browser.runtime.onMessage.addListener(
       await serialWrite(async () => {
         const run = await loadRun();
         if (!run) return;
-        await saveRun(applyMarkSent(run, m.itemId as string, new Date().toISOString()));
+        const updated = applyMarkSent(run, m.itemId as string, new Date().toISOString());
+        await saveRun(updated);
+        // Push the resting sidebar view for parity with REVERDICT (§4). Mark-sent doesn't move
+        // the hit count, so the done/stopped summary is unchanged today — this keeps the sidebar
+        // in step with any future field it might surface, at the cost of one no-op push.
+        if (updated.windowId !== undefined) {
+          await pushView(updated.windowId, deriveView(updated, null, BROKERS));
+        }
       });
       return { ok: true };
     }

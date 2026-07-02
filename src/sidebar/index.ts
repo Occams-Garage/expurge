@@ -3,7 +3,7 @@ import type { RunState, WorkItem, Verdict, SidebarView, SidebarUpdateMsg, Active
 import { getBroker } from '../shared/brokers';
 import { brokerHostname } from '../shared/url';
 import { wirePasteWarning } from './paste';
-import { progressOf } from '../background/coordinator';
+import { isMissingSkip } from '../background/coordinator';
 
 // The sidebar is a thin render layer over the view the background derives (deriveView) — it
 // never re-derives. Init order matters (Slice-5 review): attach the push listener FIRST, then
@@ -87,8 +87,15 @@ function renderView(view: SidebarView): void {
   // view means THIS window has no run, so showing another window's checklist would render
   // rows whose FOCUS_ITEM{windowId} the background rejects (dead clicks) — clear it instead.
   // For any other view, the single pinned run IS this window's run, so the fetch is correct.
-  if (view.view === 'no-run') clearChecklist();
-  else void refreshChecklist();
+  if (view.view === 'no-run') {
+    clearChecklist();
+  } else {
+    // The header reads its counts straight off the pushed view (which already carries progress),
+    // so it never disagrees with the detail. The checklist ITEM LIST isn't in the view, so it
+    // still fetches GET_RUN_STATE — but that's all the fetch feeds now.
+    renderProgress(view);
+    void refreshChecklist();
+  }
 }
 
 // ── active-item detail views ────────────────────────────────────────────────────
@@ -285,28 +292,56 @@ async function castVerdict(itemId: string, verdict: Verdict): Promise<void> {
 
 // ── checklist (Decision A: rendered from GET_RUN_STATE, re-fetched on each update) ──
 
+// Generation token: rapid pushes fire overlapping refreshChecklist calls, and their
+// GET_RUN_STATE replies can resolve out of order — an older run snapshot landing last would
+// paint a checklist that disagrees with the just-rendered detail. Each call claims the latest
+// generation before awaiting and drops its paint if a newer call has since superseded it.
+// clearChecklist bumps it too, so a no-run clear can't be undone by an in-flight fetch.
+let checklistGen = 0;
+
 async function refreshChecklist(): Promise<void> {
+  const gen = ++checklistGen;
   const res = await browser.runtime.sendMessage({ type: 'GET_RUN_STATE' }) as { run?: RunState };
-  const run = res.run ?? null;
-  renderChecklist(run);
-  renderProgress(run);
+  if (gen !== checklistGen) return; // a newer refresh (or a clear) superseded this fetch
+  renderChecklist(res.run ?? null);
 }
 
 // Used for the no-run view (this window has no run) — don't show the global run's checklist.
 function clearChecklist(): void {
+  checklistGen++; // invalidate any in-flight refresh so it can't repaint after the clear
   document.getElementById('checklist')!.replaceChildren();
   document.getElementById('progress')!.textContent = '';
 }
 
-function renderProgress(run: RunState | null): void {
+// Header counts come from the pushed view, which already carries progress — no recompute, and
+// the header stays consistent with the detail even if a concurrent GET_RUN_STATE would differ.
+function renderProgress(view: SidebarView): void {
   const p = document.getElementById('progress')!;
-  if (!run) { p.textContent = ''; return; }
-  const { done, total, hits } = progressOf(run);
+  const prog = viewProgress(view);
+  if (!prog) { p.textContent = ''; return; }
+  const { done, total, hits } = prog;
   p.textContent = `${done} / ${total} checked${hits > 0 ? ` · ${hits} found` : ''}`;
 }
 
-const isMissing = (i: WorkItem): boolean =>
-  typeof i.skipReason === 'string' && i.skipReason.startsWith('missing:');
+// The {done,total,hits} each view carries, matching what progressOf(run) would yield. A
+// `stopped` run is complete (every item verdicted), so done === total; its `checked` excludes
+// the abandoned run_stopped items, which belong to the detail line, not this header count.
+function viewProgress(view: SidebarView): { done: number; total: number; hits: number } | null {
+  switch (view.view) {
+    case 'guidance':
+    case 'verdict':
+    case 'challenge':
+    case 'offsite':
+      return view.item.progress;
+    case 'revisit':
+    case 'done':
+      return view.progress;
+    case 'stopped':
+      return { done: view.total, total: view.total, hits: view.hits };
+    default: // no-run / saving / recorded — no header count
+      return null;
+  }
+}
 
 function renderChecklist(run: RunState | null): void {
   const c = document.getElementById('checklist')!;
@@ -316,7 +351,7 @@ function renderChecklist(run: RunState | null): void {
   const groups: Array<[string, WorkItem[]]> = [
     ['In progress', run.items.filter(i => i.status === 'open')],
     ['Waiting',     run.items.filter(i => i.status === 'deferred')],
-    ['Done',        run.items.filter(i => i.status === 'verdicted' && !isMissing(i))],
+    ['Done',        run.items.filter(i => i.status === 'verdicted' && !isMissingSkip(i))],
   ];
 
   for (const [title, items] of groups) {

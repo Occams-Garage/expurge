@@ -4,7 +4,7 @@ import type { Draft, EmailDraft, FormDraft } from '../shared/templates';
 import { mailtoUrl, toEml, toCopyText } from '../shared/templates';
 import { normalizeAkas } from '../shared/transforms';
 import { BROKERS, getBroker } from '../shared/brokers';
-import { progressOf, isComplete } from '../background/coordinator';
+import { progressOf, isComplete, isMissingSkip } from '../background/coordinator';
 import {
   buildAkaRow,
   addAkaRow,
@@ -103,9 +103,7 @@ function showRunDisplayState(state: RunDisplayState, run?: RunState | null): voi
       if (!run) break;
       stopPolling();
       document.getElementById('run-done')!.classList.remove('hidden');
-      const checkable = run.items.filter(
-        i => !(typeof i.skipReason === 'string' && i.skipReason.startsWith('missing:'))
-      );
+      const checkable = run.items.filter(i => !isMissingSkip(i));
       const hits  = run.items.filter(i => i.verdict === 'hit').length;
       const sites = new Set(checkable.map(i => i.brokerId)).size;
       const hitSites = new Set(run.items.filter(i => i.verdict === 'hit').map(i => i.brokerId)).size;
@@ -154,9 +152,7 @@ function renderRunActive(run: RunState): void {
 
   const inRun = new Set(run.items.map(i => i.brokerId));
   const notChecked = BROKERS.filter(b => b.status !== 'active' || !inRun.has(b.id));
-  const missingSkips = run.items.filter(
-    i => typeof i.skipReason === 'string' && i.skipReason.startsWith('missing:')
-  ).length;
+  const missingSkips = run.items.filter(isMissingSkip).length;
 
   const notes: string[] = [];
   if (notChecked.length > 0) notes.push(`${notChecked.length} broker${notChecked.length !== 1 ? 's' : ''} not in run`);

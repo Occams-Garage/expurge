@@ -25,7 +25,7 @@ header {
 .xpg-wordmark {
   font-family: var(--font-display);
   font-weight: var(--fw-semibold);
-  font-size: 20px;
+  font-size: 24px; /* STYLEGUIDE §4 floor — below 24px the tear-strip perforation collapses */
   letter-spacing: var(--tracking-display);
   color: var(--text);
   line-height: 1;
