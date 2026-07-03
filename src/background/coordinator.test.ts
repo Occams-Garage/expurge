@@ -8,6 +8,7 @@ import {
   applyStop,
   applyMarkSent,
   isComplete,
+  isMissingSkip,
   progressOf,
   selectBatch,
   nextFocusTarget,
@@ -214,6 +215,19 @@ describe('isComplete', () => {
         item({ id: 'b', status: 'deferred' }),
       ])),
     ).toBe(false);
+  });
+});
+
+describe('isMissingSkip', () => {
+  it('is true only for a missing:<field> skip reason', () => {
+    expect(isMissingSkip(item({ status: 'verdicted', verdict: 'skipped', skipReason: 'missing:city' }))).toBe(true);
+    expect(isMissingSkip(item({ status: 'verdicted', verdict: 'skipped', skipReason: 'missing:emails' }))).toBe(true);
+  });
+
+  it('is false for other skip reasons and for a non-skipped item', () => {
+    expect(isMissingSkip(item({ status: 'verdicted', verdict: 'skipped', skipReason: 'run_stopped' }))).toBe(false);
+    expect(isMissingSkip(item({ status: 'verdicted', verdict: 'skipped', skipReason: 'tab_closed' }))).toBe(false);
+    expect(isMissingSkip(item())).toBe(false); // pending, no skipReason
   });
 });
 

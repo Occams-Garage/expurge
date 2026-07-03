@@ -163,14 +163,20 @@ export function isComplete(run: RunState): boolean {
   );
 }
 
+// A pre-verdicted `missing:` skip — a variant whose broker needed a field the profile lacked,
+// so no tab ever opened. The user never sees these as work to do, so progress math, the sidebar
+// checklist, and the options coverage note all exclude them. One predicate so those four
+// call-sites can't drift on what counts as "missing".
+export function isMissingSkip(item: WorkItem): boolean {
+  return typeof item.skipReason === 'string' && item.skipReason.startsWith('missing:');
+}
+
 // Shared run progress. `done`/`total` exclude pre-verdicted `missing:` skips (the user never
 // sees those as work to do); `deferred` counts toward `total` but not `done` (tab open,
 // verdict pending). `hits` is over all items — a `missing:` skip is never a hit. Every
 // progress readout (popup, options, sidebar, ITEM_INFO) reads from here so they stay in sync.
 export function progressOf(run: RunState): { done: number; total: number; hits: number } {
-  const checkable = run.items.filter(
-    i => !(typeof i.skipReason === 'string' && i.skipReason.startsWith('missing:')),
-  );
+  const checkable = run.items.filter(i => !isMissingSkip(i));
   return {
     done:  checkable.filter(i => i.status === 'verdicted').length,
     total: checkable.length,
