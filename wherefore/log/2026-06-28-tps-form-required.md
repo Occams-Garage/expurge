@@ -6,12 +6,12 @@ topics: [ux, data-model, verification]
 stories: []
 status: active
 supersedes:
-superseded-by:
-superseded-date:
+superseded_by:
+superseded_date:
 ---
 
 ## Summary
-Live testing revealed that TruePeopleSearch does not offer an email opt-out — the correct
+Live testing revealed that TruePeopleSearch does not offer an email opt-out; the correct
 channel is a web form at `https://www.truepeoplesearch.com/removal`. The broker record was
 corrected and the `Draft` type was extended to a discriminated union to support instruction
 cards alongside email drafts without losing type safety. See also:
@@ -49,26 +49,18 @@ type Draft = EmailDraft | FormDraft
 Email send helpers (`mailtoUrl`, `toEml`, `toCopyText`) now take `EmailDraft` specifically,
 preventing accidental use on a form draft.
 
-Why a discriminated union over a nullable-field flat interface: TypeScript exhaustive checks
-on `draft.kind` ensure every rendering path handles both shapes at compile time. Nullable
-fields (`to?: string`) would allow silent omission in the email path.
-
 ### buildFormCard(): fields and steps from profile
 `buildFormCard()` generates the `FormDraft` content from the profile and broker channel:
 
-**Fields table** (shown with copy-paste values where available):
+Fields table (shown with copy-paste values where available):
 | Field | Source | Display |
 |-------|--------|---------|
 | First Name | `profile.first` | monospace highlight |
-| Middle Name | — | "you fill in" placeholder |
+| Middle Name | n/a | "you fill in" placeholder |
 | Last Name | `profile.last` | monospace highlight |
-| Email Address | — | "you fill in" + note about confirmation link |
+| Email Address | n/a | "you fill in" + note about confirmation link |
 
-Why "you fill in" for email address: expurge does not store the user's email address (not a
-profile field). Including it would require a new profile field, consent implications, and
-storage handling out of scope for M0-M3. The note makes it clear why it's needed.
-
-**Steps** (7 steps, walks the user through the full form submission including the
+Steps (7 steps, walks the user through the full form submission including the
 confirmation-link step which many users miss).
 
 ### Popup renders form card (M3 interim, moves to options page in M6)
@@ -85,18 +77,26 @@ draft panels alongside the other post-run send surfaces.
 ## Why
 The email address was a best-effort guess that was never verified. The form is what TPS
 actually uses. Implementing it now (rather than shipping a wrong email channel) avoids mailing
-a user's opt-out request to a dead or wrong address — exactly the failure mode the draft gate
+a user's opt-out request to a dead or wrong address: exactly the failure mode the draft gate
 is designed to prevent.
+
+Why a discriminated union over a nullable-field flat interface: TypeScript exhaustive checks
+on `draft.kind` ensure every rendering path handles both shapes at compile time. Nullable
+fields (`to?: string`) would allow silent omission in the email path.
+
+Why "you fill in" for email address: expurge does not store the user's email address (not a
+profile field). Including it would require a new profile field, consent implications, and
+storage handling out of scope for M0-M3. The note makes it clear why it's needed.
 
 ## Alternatives considered
 - Keep the stub `trust: unverified` email channel and skip TPS until a proper channel is
-  verified: would mean no draft generated for any TPS hit — not useful for testing.
+  verified: would mean no draft generated for any TPS hit. Not useful for testing.
 - Flat nullable interface for Draft with `kind?: 'email' | 'form'`: loses type narrowing and
   requires runtime guards throughout. Rejected in favor of discriminated union.
 
 ## Open questions / follow-ups
 - `isGeneralContact` amber callout is wired in `EmailDraft` but not yet rendered in the popup
   (M6 options page item).
-- Middle Name and Email Address not in Profile — both deferred: middle name to AKA/full-name
+- Middle Name and Email Address not in Profile; both deferred: middle name to AKA/full-name
   disambiguation work (M5); email address requires a separate design decision on storage and
   consent implications.

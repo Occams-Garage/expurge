@@ -6,17 +6,17 @@ topics: [webextensions, data-model]
 stories: []
 status: superseded
 supersedes:
-superseded-by: 2026-06-28-persistence-inversion
-superseded-date: 2026-06-28
+superseded_by: 2026-06-28-persistence-inversion
+superseded_date: 2026-06-28
 ---
 
 SUPERSEDED 2026-06-28 -> see 2026-06-28-persistence-inversion. Storage defaults reversed (ephemeral by default, opt-in to persist). Kept for history, not current.
 
 ## Summary
-v1 run model is open-and-confirm with an on-page overlay: extension opens broker tabs in paced batches, content scripts inject an overlay for user verdicts, background script collects results. Storage is `browser.storage.local` — local-first, never transmitted. Several sequencing and messaging details remain open.
+v1 run model is open-and-confirm with an on-page overlay: extension opens broker tabs in paced batches, content scripts inject an overlay for user verdicts, background script collects results. Storage is `browser.storage.local`, local-first, never transmitted. Several sequencing and messaging details remain open.
 
 ## Decisions / outcomes
-- Broker tabs opened in paced batches (default 5, tunable) — avoids wall-of-tabs and single-at-a-time slog.
+- Broker tabs opened in paced batches (default 5, tunable). Avoids wall-of-tabs and single-at-a-time slog.
 - Content script: reads DOM, runs deterministic matcher, injects overlay (match summary + confidence + confirm/clear/skip).
 - Verdicts messaged from content script back to background script, stored in hits store.
 - Hits keyed by runs so re-checks stack over time. Outcomes from closed set: `hit | clear | unknown | skipped (with reason)`.

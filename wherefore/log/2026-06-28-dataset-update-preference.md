@@ -6,8 +6,8 @@ topics: [dataset-distribution, privacy]
 stories: []
 status: active
 supersedes:
-superseded-by:
-superseded-date:
+superseded_by:
+superseded_date:
 ---
 
 ## Summary
@@ -16,14 +16,14 @@ The auto-vs-manual dataset fetch is a user-controlled setting in the options pag
 ## Decisions / outcomes
 - Options page setting: auto (on a schedule) or manual (button-triggered). Default: manual.
 - First fetch gated behind a one-time explicit consent prompt that sets this preference and discloses the request carries no user data.
-- Setting label scoped to "broker list updates" specifically — kept visually and conceptually distinct from Firefox's own extension auto-update (user manages that in Firefox, not in expurge).
+- Setting label scoped to "broker list updates" specifically. Kept visually and conceptually distinct from Firefox's own extension auto-update (user manages that in Firefox, not in expurge).
 - Plan doc §12 item 2 still says open; needs to be written back.
 
 ## Why
 A privacy tool that phones home without asking is self-undermining. Manual default means the first network contact is always user-initiated and disclosed. The consent prompt doubles as the preference picker so users don't configure it separately after the fact. The label distinction from Firefox's own updater matters: conflating the two would confuse users about what they're controlling.
 
 ## Alternatives considered
-- Default auto: rejected — a privacy tool should not phone home without explicit opt-in.
+- Default auto: rejected. A privacy tool should not phone home without explicit opt-in.
 
 ## Open questions / follow-ups
 - Q-006: What cadence should the automatic schedule run on, and what is the exact consent-prompt copy?

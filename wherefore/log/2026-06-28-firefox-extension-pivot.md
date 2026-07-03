@@ -7,8 +7,8 @@ topics: [webextensions, privacy]
 stories: []
 status: active
 supersedes:
-superseded-by:
-superseded-date:
+superseded_by:
+superseded_date:
 ---
 
 ## Summary
@@ -19,10 +19,10 @@ The project pivoted from a Go CLI/binary to a Firefox browser extension. This di
 - Distribution: AMO (addons.mozilla.org) plus signed unlisted XPIs.
 - Firefox-only for v1; Chrome port deferred to v2 (more permissive WebExtensions, target user skews Firefox).
 - Go, GoReleaser, Homebrew/Scoop, cgo, Gatekeeper/SmartScreen signing: all retired.
-- All downstream design (broker schema, matcher, draft gate, verification model) carries over from pre-pivot work untouched — it all lives downstream of "human at the gate."
+- All downstream design (broker schema, matcher, draft gate, verification model) carries over from pre-pivot work untouched. It all lives downstream of "human at the gate."
 
 ## Why
-The desired UX — a confirm/clear/skip overlay sitting on top of the real broker result page — is only cleanly achievable from inside the user's own browser. The extension reads DOM from pages the browser already loaded under the user's real session, so there is no `navigator.webdriver`, no CDP port, and no fingerprinting surface. The earlier CLI plan was not wrong about the data model; it was wrong about the request shape: "requesting sites like a robot" was the hard problem, not "reading hostile sites."
+The desired UX (a confirm/clear/skip overlay sitting on top of the real broker result page) is only cleanly achievable from inside the user's own browser. The extension reads DOM from pages the browser already loaded under the user's real session, so there is no `navigator.webdriver`, no CDP port, and no fingerprinting surface. The earlier CLI plan was not wrong about the data model; it was wrong about the request shape: "requesting sites like a robot" was the hard problem, not "reading hostile sites."
 
 ## Alternatives considered
 - Go CLI binary: rejected because automating requests to hostile sites as an agent triggers bot detection and captcha walls the tool cannot solve. The extension sidesteps this entirely.

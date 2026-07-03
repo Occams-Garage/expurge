@@ -6,12 +6,12 @@ topics: [webextensions, privacy, ux]
 stories: []
 status: active
 supersedes:
-superseded-by:
-superseded-date:
+superseded_by:
+superseded_date:
 ---
 
 ## Summary
-Discussed whether content scripts could auto-fill opt-out web forms on broker sites. Technically feasible, but auto-submitting crosses into CCPA authorized-agent territory, so full automation is out for v1. A "pre-fill assist" — fill fields, user clicks Submit — is the v2 target shape.
+Discussed whether content scripts could auto-fill opt-out web forms on broker sites. Technically feasible, but auto-submitting crosses into CCPA authorized-agent territory, so full automation is out for v1. A "pre-fill assist" (fill fields, user clicks Submit) is the v2 target shape.
 
 ## Decisions / outcomes
 - Auto-fill (fill + submit) is explicitly deferred past v1 due to authorized-agent obligations.
@@ -21,11 +21,11 @@ Discussed whether content scripts could auto-fill opt-out web forms on broker si
 ## Why
 CCPA's authorized-agent rules require written authorization and impose verification obligations when a service acts on a user's behalf. v1 deliberately keeps the user as the sender (mailto:/eml/copy-paste). Auto-submitting a form would cross that line regardless of how the fields were found.
 
-The "never inject PII into the DOM" constraint (prevents page scripts from reading it) also needs explicit revisitation before any fill-based approach ships — not a blocker, but not automatic.
+The "never inject PII into the DOM" constraint (prevents page scripts from reading it) also needs explicit revisitation before any fill-based approach ships: not a blocker, but not automatic.
 
 ## Alternatives considered
 - Static per-broker field mappings in `brokers.json` + content-script fill: technically works but brittle (sites redesign forms without notice).
-- Full auto-submit: rejected — authorized-agent obligations.
+- Full auto-submit: rejected. Authorized-agent obligations.
 
 ## Open questions / follow-ups
 - See Q-003 for the localhost/CORS question that governs the LLM-based variant.
