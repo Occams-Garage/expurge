@@ -468,7 +468,8 @@ browser.runtime.onMessage.addListener(
       // Paste-URL fallback: point the PASTED ITEM's own broker tab at the listing (via
       // findTabForItem, not the active-preferred findBrokerTab — the active tab may have
       // changed since the guidance view rendered, so the paste can't land in the wrong tab).
-      // The ensuing onUpdated recomputes page-type (results → details) and pushes verdict.
+      // The ensuing full navigation re-injects the content script, which reports on load →
+      // its CHALLENGE_* handler's pushActiveView recomputes page-type (results → details).
       const windowId = m.windowId as number;
       const run = await loadRun();
       if (run && run.windowId === windowId) {
@@ -602,18 +603,13 @@ browser.runtime.onInstalled.addListener(({ reason }) => {
   if (reason === 'install') browser.runtime.openOptionsPage().catch(console.error);
 });
 
-browser.tabs.onUpdated.addListener(async (tabId, changeInfo) => {
-  if (changeInfo.status !== 'complete') return;
-  const itemId = await itemForTab(tabId);
-  if (!itemId) return; // not a tracked broker tab
-
-  const run = await loadRun();
-  if (!run) return;
-
-  // Broker tab finished navigating (e.g. results → details, or a challenge redirect landing
-  // back on the real page) → recompute the active tab's page-type and push. The challenge flag
-  // is the content script's job now: it reports RESOLVED on the clean load, so background does
-  // NOT guess challenge state from navigation here (that misfired on on-host challenge pages,
-  // clearing the flag the content script had just set on the same load).
-  await pushActiveView(run);
-});
+// tabs.onUpdated intentionally has NO listener. The content script re-injects and reports
+// challenge state (CHALLENGE_DETECTED/RESOLVED, whose handler calls pushActiveView) on EVERY
+// broker full-page load — that report is the single authoritative post-load push, covering both
+// challenge state AND page-type (results ↔ details). An onUpdated push here was redundant and
+// raced the content report, flashing the verdict view over a challenge page (review #5).
+//
+// CAVEAT: a future SPA broker (same-document route changes, no content re-inject) would NOT
+// re-report on navigation. It would need this listener back (recompute page-type + push) OR the
+// always-armed observer extended to watch location changes. All v1 brokers are full-page-reload,
+// so this is deliberately omitted. Reverting this commit reinstates the listener.
