@@ -16,6 +16,7 @@ import {
   applyMarkSent,
   selectBatch,
   nextFocusTarget,
+  isComplete,
 } from './coordinator';
 
 // ── serial write queue ────────────────────────────────────────────────────────
@@ -111,6 +112,13 @@ async function handleStartRun(profile: Profile, windowId?: number): Promise<void
     // explicitly (captured synchronously alongside the sidebar open); until then, fall back
     // to the sender's window or the last-focused one.
     const resolvedWindowId = windowId ?? (await browser.windows.getLastFocused()).id;
+    // Latent (#15): options Start passes an explicit windowId, so this shouldn't fire. But if
+    // getLastFocused().id ever came back undefined, run.windowId would be undefined and every
+    // sidebar push early-returns — no updates for the whole run. Warn so that's diagnosable
+    // rather than a silent dead sidebar.
+    if (resolvedWindowId === undefined) {
+      console.warn('[expurge] START_RUN resolved no windowId — sidebar pushes will be suppressed for this run');
+    }
     const runId = crypto.randomUUID();
     const items = buildItems(profile);
     const run: RunState = { runId, createdAt: new Date().toISOString(), items, windowId: resolvedWindowId };
@@ -216,6 +224,15 @@ async function handleReverdict(itemId: string, verdict: Verdict, listingUrl?: st
     const updated = withVerdict(run, itemId, verdict, listingUrl);
     await saveRun(updated);
     await updateBadge(updated);
+
+    // Refresh the sidebar's resting done/stopped summary ONLY when the run is complete: a
+    // post-run re-verdict changes the hit count, so that summary would otherwise go stale.
+    // Mid-run, the sidebar is stickily showing an active broker-tab view — a re-verdict edits
+    // an already-verdicted (past) item, never the active one, so the active view stands and we
+    // must not clobber it with a resting view. Focus=null → done/stopped, same as handleStopRun.
+    if (updated.windowId !== undefined && isComplete(updated)) {
+      await pushView(updated.windowId, deriveView(updated, null, BROKERS));
+    }
   });
 }
 
@@ -570,7 +587,15 @@ browser.runtime.onMessage.addListener(
       await serialWrite(async () => {
         const run = await loadRun();
         if (!run) return;
-        await saveRun(applyMarkSent(run, m.itemId as string, new Date().toISOString()));
+        const updated = applyMarkSent(run, m.itemId as string, new Date().toISOString());
+        await saveRun(updated);
+        // Refresh the resting sidebar view for parity with REVERDICT, gated on isComplete so a
+        // resting view never clobbers a mid-run active-tab view. Mark-sent is effectively always
+        // post-run and doesn't move the hit count, so this is a harmless no-op push today — the
+        // guard keeps it symmetric with REVERDICT and safe if that ever changes.
+        if (updated.windowId !== undefined && isComplete(updated)) {
+          await pushView(updated.windowId, deriveView(updated, null, BROKERS));
+        }
       });
       return { ok: true };
     }
