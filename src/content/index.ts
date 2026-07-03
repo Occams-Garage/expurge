@@ -18,9 +18,9 @@ import { detectChallenge } from './classify';
 //   - a challenge SOLVED inline (Turnstile, no navigation) → RESOLVED.
 function reportChallenges(): void {
   let lastReported: boolean | null = null;
-  let debounce: ReturnType<typeof setTimeout> | null = null;
+  let clearTimer: ReturnType<typeof setTimeout> | null = null;
 
-  const report = (challenged: boolean): void => {
+  const send = (challenged: boolean): void => {
     if (challenged === lastReported) return; // only send on a real transition
     lastReported = challenged;
     const msg = challenged
@@ -29,20 +29,35 @@ function reportChallenges(): void {
     browser.runtime.sendMessage(msg).catch(() => {});
   };
 
-  // Load-time report, synchronous, either direction.
-  report(detectChallenge());
+  // Load-time report, synchronous, either direction — a fresh load has no mid-transition to
+  // ride out, so report it immediately.
+  send(detectChallenge());
+
+  // On each mutation, evaluate the current state. The two directions are handled asymmetrically
+  // on purpose:
+  //   - APPEARS (→ DETECTED): reported on the LEADING edge, immediately. A gate must never sit
+  //     un-reported while the sidebar shows verdict buttons, and detecting one a beat early is
+  //     harmless. This is never debounced, so sustained DOM churn can't delay or starve it.
+  //   - CLEARS (→ RESOLVED): confirmed after a 250 ms settle so a CAPTCHA widget briefly
+  //     detaching its container mid-transition can't read as a false clear. The timer is armed
+  //     ONCE per clear and NOT reset on later mutations (unlike a trailing debounce, which a
+  //     mutating page would perpetually reset and never fire) — so a busy page can't starve it.
+  const evaluate = (): void => {
+    if (detectChallenge()) {
+      if (clearTimer !== null) { clearTimeout(clearTimer); clearTimer = null; }
+      send(true);
+      return;
+    }
+    if (lastReported === false || clearTimer !== null) return; // already clear / clear pending
+    clearTimer = setTimeout(() => {
+      clearTimer = null;
+      if (!detectChallenge()) send(false);
+    }, 250);
+  };
 
   // Persistent, always-armed observer — NEVER disconnects, so a challenge is caught whether it
-  // appears or clears in place. The 250 ms debounce coalesces mutation bursts and rides out a
-  // CAPTCHA widget briefly detaching its container mid-transition (a transient that re-settles
-  // within the window nets no state change → deduped, nothing sent).
-  const observer = new MutationObserver(() => {
-    if (debounce !== null) clearTimeout(debounce);
-    debounce = setTimeout(() => {
-      debounce = null;
-      report(detectChallenge());
-    }, 250);
-  });
+  // appears or clears in place.
+  const observer = new MutationObserver(evaluate);
   observer.observe(document.documentElement, { childList: true, subtree: true });
 }
 
