@@ -31,9 +31,13 @@ async function readSnapshot(): Promise<TabSnapshot> {
   return snap;
 }
 
-// Track a freshly-opened broker tab → its work item.
+// Track a freshly-opened broker tab → its work item. Also drop any challenge key a recycled
+// tab id might still carry (an orphan from a prior tab with the same id), so a clean new tab can
+// never inherit challenge=true before its content script reports — a defensive backstop that
+// keeps removeTab's "drop both keys" invariant true from the open side too.
 export async function putTab(tabId: number, itemId: string): Promise<void> {
   await browser.storage.session.set({ [tabKey(tabId)]: itemId });
+  await browser.storage.session.remove(challengeKey(tabId));
 }
 
 // Retire one tab: drop BOTH keys atomically → the challenge key can never orphan.
