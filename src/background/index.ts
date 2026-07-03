@@ -1,7 +1,7 @@
 import browser from 'webextension-polyfill';
 import type { Profile, RunState, WorkItemStatus, Verdict, SkipReason, SidebarView, SidebarUpdateMsg } from '../shared/types';
 import { BROKERS, getBroker } from '../shared/brokers';
-import { isResultsPage } from '../shared/url';
+import { isOnHost, isResultsPage } from '../shared/url';
 import { deriveView, type SidebarFocus } from '../sidebar/state';
 import { evaluateGate } from '../shared/gate';
 import { buildDraft } from '../shared/templates';
@@ -395,7 +395,12 @@ async function captureListingUrl(
   const tab = await browser.tabs.get(brokerTabId).catch(() => null);
   if (!item || !tab?.url) return undefined;
   try {
-    if (!isResultsPage(new URL(tab.url).pathname, item.renderedUrl)) return tab.url;
+    // Only a details page on the broker's OWN host is a valid listing URL. If the tab wandered
+    // off-host (an external link, an ad, a redirect the user didn't finish backing out of),
+    // capture nothing — recording that URL would mail a wrong/irrelevant listing into the draft.
+    if (isOnHost(tab.url, item.renderedUrl) && !isResultsPage(new URL(tab.url).pathname, item.renderedUrl)) {
+      return tab.url;
+    }
   } catch { /* malformed — no listingUrl */ }
   return undefined;
 }
