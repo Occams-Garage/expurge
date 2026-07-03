@@ -5,6 +5,7 @@ import {
   tabKey,
   challengeKey,
   parseTabKey,
+  isPerTabKey,
   type TabSnapshot,
   type TabFacts,
 } from './tab-registry-resolve';
@@ -33,6 +34,14 @@ describe('key helpers', () => {
     expect(parseTabKey('expurge_challenge_42')).toBeNull(); // challenge key, not a tab key
     expect(parseTabKey('expurge_run')).toBeNull();
     expect(parseTabKey('expurge_tab_notanumber')).toBeNull();
+  });
+
+  it('isPerTabKey matches BOTH families but never the run/profile keys', () => {
+    expect(isPerTabKey('expurge_tab_42')).toBe(true);
+    expect(isPerTabKey('expurge_challenge_42')).toBe(true);
+    expect(isPerTabKey('expurge_run')).toBe(false); // must survive the Stop sweep
+    expect(isPerTabKey('expurge_profile')).toBe(false);
+    expect(isPerTabKey('something_else')).toBe(false);
   });
 });
 
@@ -70,6 +79,19 @@ describe('brokerTabInWindow', () => {
     const tabs = [
       facts({ tabId: 5, url: ON_HOST, active: false }),
       facts({ tabId: 6, url: OFF_HOST, active: true }), // active but off-host → still wins
+    ];
+    const r = run([item({ id: 'b:primary' }), item({ id: 'c:primary' })]);
+    expect(brokerTabInWindow(snap, tabs, r, 1)).toBe(6);
+  });
+
+  it('an active tab in a DIFFERENT window does not win — window scoping precedes active-preference', () => {
+    const snap: TabSnapshot = {
+      5: { itemId: 'b:primary' },
+      6: { itemId: 'c:primary' },
+    };
+    const tabs = [
+      facts({ tabId: 5, url: ON_HOST, active: true, windowId: 2 }), // active, but other window
+      facts({ tabId: 6, url: ON_HOST, active: false, windowId: 1 }),
     ];
     const r = run([item({ id: 'b:primary' }), item({ id: 'c:primary' })]);
     expect(brokerTabInWindow(snap, tabs, r, 1)).toBe(6);
