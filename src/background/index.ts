@@ -582,14 +582,15 @@ browser.runtime.onMessage.addListener(
 // ── tab closed → skipped/tab_closed ─────────────────────────────────────────
 
 browser.tabs.onRemoved.addListener(async (tabId: number) => {
-  // Read the item BEFORE dropping any key. On the tracked path, handleSkip → removeTab clears
-  // BOTH the tab key and the challenge key; an untracked tab still gets removeTab so a lingering
-  // challenge key can't orphan for a recycled tab id.
+  // Read the item BEFORE dropping any key. Untracked tab → nothing of ours to clean up: any
+  // orphan challenge key it might carry is inert (isChallenged is read only for TRACKED tabs)
+  // and putTab scrubs it if the id is ever recycled — so we skip the write rather than touch
+  // storage on every unrelated browser-wide tab close. Tracked tab → drop BOTH keys NOW, before
+  // handleSkip, so the cleanup can't be skipped by handleSkip's `!run` early-return (its own
+  // removeTab then no-ops).
   const itemId = await itemForTab(tabId);
-  if (!itemId) {
-    await removeTab(tabId);
-    return;
-  }
+  if (!itemId) return;
+  await removeTab(tabId);
   await handleSkip(itemId, 'tab_closed', tabId);
 });
 
