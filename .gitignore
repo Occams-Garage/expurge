@@ -4,3 +4,5 @@ coverage/
 *.xpi
 .idea/
 temp/
+.DS_Store
+.playwright-mcp/
