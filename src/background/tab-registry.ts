@@ -10,11 +10,10 @@
 import browser from 'webextension-polyfill';
 import type { RunState } from '../shared/types';
 import {
-  TAB_PREFIX,
-  CHALLENGE_PREFIX,
   tabKey,
   challengeKey,
   parseTabKey,
+  isPerTabKey,
   tabForItem,
   brokerTabInWindow,
   type TabSnapshot,
@@ -49,9 +48,7 @@ export async function removeTab(tabId: number): Promise<void> {
 // key was already removed — the orphan-challenge-key bug the old sweep left behind).
 export async function removeAllTabs(): Promise<void> {
   const all = (await browser.storage.session.get(null)) as Record<string, unknown>;
-  const keys = Object.keys(all).filter(
-    k => k.startsWith(TAB_PREFIX) || k.startsWith(CHALLENGE_PREFIX),
-  );
+  const keys = Object.keys(all).filter(isPerTabKey);
   if (keys.length > 0) await browser.storage.session.remove(keys);
 }
 
@@ -67,17 +64,21 @@ export async function findTabForItem(itemId: string): Promise<number | null> {
 }
 
 // The window's broker tab to reflect (active-preferred, on-host, off-host fallback). Resolves
-// every tracked tab against live browser state, PRUNING any whose tab is gone (drops both
-// keys), then lets the pure resolver decide.
+// every tracked tab against live browser state IN PARALLEL, PRUNING any whose tab is gone
+// (drops both keys), then lets the pure resolver decide.
 export async function findBrokerTab(windowId: number, run: RunState): Promise<number | null> {
   const snapshot = await readSnapshot();
+  const resolved = await Promise.all(
+    Object.keys(snapshot).map(async idStr => {
+      const tabId = Number(idStr);
+      const tab = await browser.tabs.get(tabId).catch(() => null);
+      return { tabId, tab };
+    }),
+  );
+
   const facts: TabFacts[] = [];
-  for (const idStr of Object.keys(snapshot)) {
-    const tabId = Number(idStr);
-    let tab: browser.Tabs.Tab;
-    try {
-      tab = await browser.tabs.get(tabId);
-    } catch {
+  for (const { tabId, tab } of resolved) {
+    if (!tab) {
       await removeTab(tabId); // stale — tab closed; prune BOTH keys
       continue;
     }

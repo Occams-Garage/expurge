@@ -20,6 +20,13 @@ export function parseTabKey(key: string): number | null {
   return Number.isNaN(id) ? null : id;
 }
 
+// Does this session key belong to per-tab state (either family)? The one definition of "which
+// keys are ours", so the Stop sweep drops every tab/challenge key without ever touching
+// expurge_run / expurge_profile — even if a prefix constant is later changed.
+export function isPerTabKey(key: string): boolean {
+  return key.startsWith(TAB_PREFIX) || key.startsWith(CHALLENGE_PREFIX);
+}
+
 // tabId → itemId, the projection of every `expurge_tab_` key the resolvers reason over.
 export type TabSnapshot = Record<number, { itemId: string }>;
 
