@@ -7,38 +7,57 @@ import { detectChallenge } from './classify';
 // broker page is gated behind a bot-challenge. Background identifies the tab via sender.tab.id
 // — this script runs in the broker tab.
 
-// Report the page's challenge state on EVERY load, either way — the content script is the
-// single per-load source of truth (background no longer guesses challenge state from
-// navigation). An on-host Cloudflare interstitial reports DETECTED and stays challenged;
-// the redirect to the real page is a fresh load that reports RESOLVED and clears the flag.
-// (Out of scope: a challenge APPEARING after a clean load without a navigation — e.g. a
-// mid-run rate-limit that swaps the page in place. The load-time report wouldn't catch it.)
+// Report the page's challenge state — on load AND on any in-place change thereafter. The
+// content script is the single per-tab owner of the challenge signal; background only stores
+// what it's told and drops it when the tab closes. Only TRANSITIONS are sent (deduped against
+// the last thing reported), in BOTH directions:
+//   - an on-host Cloudflare interstitial loads → DETECTED; its redirect to the real page is a
+//     fresh load that reports RESOLVED.
+//   - a challenge that APPEARS after a clean load — a mid-run rate-limit re-gate that swaps the
+//     page in place, no navigation → DETECTED, so verdict buttons never render over a live gate.
+//   - a challenge SOLVED inline (Turnstile, no navigation) → RESOLVED.
 function reportChallenges(): void {
-  if (!detectChallenge()) {
-    browser.runtime.sendMessage({ type: 'CHALLENGE_RESOLVED' } satisfies ChallengeResolvedMsg).catch(() => {});
-    return;
-  }
+  let lastReported: boolean | null = null;
+  let clearTimer: ReturnType<typeof setTimeout> | null = null;
 
-  browser.runtime.sendMessage({ type: 'CHALLENGE_DETECTED' } satisfies ChallengeDetectedMsg).catch(() => {});
+  const send = (challenged: boolean): void => {
+    if (challenged === lastReported) return; // only send on a real transition
+    lastReported = challenged;
+    const msg = challenged
+      ? ({ type: 'CHALLENGE_DETECTED' } satisfies ChallengeDetectedMsg)
+      : ({ type: 'CHALLENGE_RESOLVED' } satisfies ChallengeResolvedMsg);
+    browser.runtime.sendMessage(msg).catch(() => {});
+  };
 
-  // Also watch for an IN-PAGE clear (e.g. Turnstile solved inline, no navigation). The 250 ms
-  // debounce guards against CAPTCHA widgets briefly detaching their container mid-transition,
-  // which would read as "resolved" for an instant. Lifted from the old buildChallengePanel.
-  let dismissTimer: ReturnType<typeof setTimeout> | null = null;
-  const observer = new MutationObserver(() => {
+  // Load-time report, synchronous, either direction — a fresh load has no mid-transition to
+  // ride out, so report it immediately.
+  send(detectChallenge());
+
+  // On each mutation, evaluate the current state. The two directions are handled asymmetrically
+  // on purpose:
+  //   - APPEARS (→ DETECTED): reported on the LEADING edge, immediately. A gate must never sit
+  //     un-reported while the sidebar shows verdict buttons, and detecting one a beat early is
+  //     harmless. This is never debounced, so sustained DOM churn can't delay or starve it.
+  //   - CLEARS (→ RESOLVED): confirmed after a 250 ms settle so a CAPTCHA widget briefly
+  //     detaching its container mid-transition can't read as a false clear. The timer is armed
+  //     ONCE per clear and NOT reset on later mutations (unlike a trailing debounce, which a
+  //     mutating page would perpetually reset and never fire) — so a busy page can't starve it.
+  const evaluate = (): void => {
     if (detectChallenge()) {
-      if (dismissTimer !== null) { clearTimeout(dismissTimer); dismissTimer = null; }
+      if (clearTimer !== null) { clearTimeout(clearTimer); clearTimer = null; }
+      send(true);
       return;
     }
-    if (dismissTimer !== null) return;
-    dismissTimer = setTimeout(() => {
-      dismissTimer = null;
-      if (!detectChallenge()) {
-        observer.disconnect();
-        browser.runtime.sendMessage({ type: 'CHALLENGE_RESOLVED' } satisfies ChallengeResolvedMsg).catch(() => {});
-      }
+    if (lastReported === false || clearTimer !== null) return; // already clear / clear pending
+    clearTimer = setTimeout(() => {
+      clearTimer = null;
+      if (!detectChallenge()) send(false);
     }, 250);
-  });
+  };
+
+  // Persistent, always-armed observer — NEVER disconnects, so a challenge is caught whether it
+  // appears or clears in place.
+  const observer = new MutationObserver(evaluate);
   observer.observe(document.documentElement, { childList: true, subtree: true });
 }
 
