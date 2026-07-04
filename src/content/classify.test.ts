@@ -60,4 +60,31 @@ describe('detectChallenge', () => {
     addEl(tag, attr, value);
     expect(detectChallenge()).toBe(true);
   });
+
+  // Explicitly-rendered Turnstile (turnstile.render(...)) — the TruePeopleSearch /InternalCaptcha
+  // managed-challenge shape: no .cf-turnstile container, widget iframes are about:blank, but the
+  // Turnstile API script is in the top document. That script is the only reliable signal.
+  it('explicitly-rendered Turnstile managed challenge (API script, no container) → true', () => {
+    addEl('script', 'src', 'https://challenges.cloudflare.com/turnstile/v0/api.js');
+    expect(detectChallenge()).toBe(true);
+  });
+
+  // A real solved Turnstile page carries the api.js script too. The `!turnstile` guard must route
+  // the container case to the solved/unsolved logic above, so the new script branch does NOT
+  // re-detect a solved container-Turnstile just because the script is present.
+  it('solved container-Turnstile with the API script present → false (!turnstile guard)', () => {
+    document.body.innerHTML =
+      '<div class="cf-turnstile"></div><input name="cf-turnstile-response" value="tok">';
+    addEl('script', 'src', 'https://challenges.cloudflare.com/turnstile/v0/api.js');
+    expect(detectChallenge()).toBe(false);
+  });
+
+  // Trap: the /InternalCaptcha page also hosts a cf.clym-widget.net iframe (Clym consent widget,
+  // not Cloudflare). Keying off a bare "cf"/"cloudflare" substring would false-positive on it — the
+  // selector must match the specific challenges.cloudflare.com host only.
+  it('Clym consent widget only (cf.clym-widget.net, no Cloudflare challenge script) → false', () => {
+    addEl('iframe', 'src', 'https://cf.clym-widget.net/latest/api-bridge/?instance=us6.clym.io');
+    addEl('script', 'src', 'https://cf.clym-widget.net/latest/loader.js');
+    expect(detectChallenge()).toBe(false);
+  });
 });
