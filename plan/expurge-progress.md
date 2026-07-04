@@ -99,6 +99,7 @@ superseded by the sidebar architecture — see `sidebar-nav.md` for the current 
 - ~25 verified people-search brokers in brokers.json (all channels personally verified, trust bits stamped)
 - Pre-launch verify: CCPA template legal language; DROP registry cross-reference (Q-010)
 - CI schema validator: rejects malformed records, enforces trust-bit hygiene (contributed records must be `trust: unverified`)
+- **Per-broker challenge-resolve gate** (onboarding checklist item): for each new broker, confirm its bot-gate **navigates away on solve** (like TPS `/InternalCaptcha`). `detectChallenge()`'s Turnstile-script signal is generic and manifest-bounded (it only runs where `content_scripts.matches` injects), but resolve-safety is proven on TPS **only (n=1)**. If a broker instead resolves **inline** — results swap in place, URL unchanged, the `challenges.cloudflare.com/turnstile` `<script>` persists — the detector would strand the challenge view over real results → forced Skip → missed hit. Before enabling such a broker, add a resolve signal (URL-path check or solved-token) or an option-2 per-broker `challenge` hint, plus a challenge fixture in `classify.test.ts`. (Origin: `fix/challenge-detection-managed`, 2026-07-03; the human-in-the-loop + Skip is the backstop that keeps a miss recoverable, not silent.)
 - Optional stamp helper: `verify <broker-id> <channel>` CLI sets last_checked / verified_by / trust
 - Full run on real brokers, bugs fixed
 - AMO submission prep: screenshots, description, privacy notice, data-practices declaration
@@ -125,6 +126,7 @@ superseded by the sidebar architecture — see `sidebar-nav.md` for the current 
 | `src/background/index.ts` | AKA parsing splits on first space only — "Mary Jane Smith" gives first="Mary", last="Jane Smith"; smarter parsing (e.g. last-space split) deferred |
 | `src/options/index.ts` | Settings section has no import JSON (export only); import deferred to M8 alongside persistence opt-ins |
 | `src/background/index.ts` | `webNavigation` is declared in manifest permissions but `browser.webNavigation.onErrorOccurred` is not yet wired — add when M9 broker set makes load-error detection meaningful |
+| `src/content/classify.ts` | Turnstile-script detection assumes solve **navigates away** (proven on TPS only). A broker that resolves the gate **inline** would strand the challenge view — see the M9 per-broker challenge-resolve gate before onboarding one |
 
 ---
 
