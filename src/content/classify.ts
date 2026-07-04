@@ -24,6 +24,16 @@ export function detectChallenge(): boolean {
     return true; // standalone CF iframe (non-Turnstile challenge)
   }
 
+  // Explicitly-rendered Turnstile (turnstile.render(...)): no .cf-turnstile container and the widget
+  // iframes are about:blank, so neither branch above matches — but the Turnstile API script is in the
+  // top document. This is the TruePeopleSearch /InternalCaptcha managed-challenge shape. Match the
+  // specific host ONLY: a co-resident cf.clym-widget.net iframe (Clym consent, not Cloudflare) must
+  // not match a bare "cf"/"cloudflare" substring. The `!turnstile` guard defers the container case to
+  // the block above — a solved container-Turnstile still carries this script and must stay resolved.
+  if (!turnstile && document.querySelector('script[src*="challenges.cloudflare.com/turnstile"]')) {
+    return true;
+  }
+
   // Other embedded CAPTCHA widgets.
   return [
     'iframe[src*="hcaptcha.com"]',
