@@ -18,6 +18,16 @@ import {
   nextFocusTarget,
   isComplete,
 } from './coordinator';
+import {
+  putTab,
+  removeTab,
+  removeAllTabs,
+  itemForTab,
+  findTabForItem,
+  findBrokerTab,
+  setChallenge,
+  isChallenged,
+} from './tab-registry';
 
 // ── serial write queue ────────────────────────────────────────────────────────
 // Prevents TOCTOU: loadRun → mutate → saveRun is not atomic; concurrent verdicts
@@ -97,7 +107,7 @@ async function openNextBatch(run: RunState, focusFirst = false): Promise<RunStat
     // Pin new broker tabs to the run's window so they share its sidebar (window-level surface).
     const tab = await browser.tabs.create({ url: item.renderedUrl, active, windowId: run.windowId });
     if (tab.id !== undefined) {
-      await browser.storage.session.set({ [`expurge_tab_${tab.id}`]: item.id });
+      await putTab(tab.id, item.id);
     }
   }
   return updated;
@@ -150,7 +160,7 @@ async function handleVerdict(itemId: string, verdict: Verdict, explicitListingUr
     const target = run.items.find(i => i.id === itemId);
     if (!target || target.status === 'verdicted') return;
 
-    const brokerTabId = await tabIdForItem(itemId);
+    const brokerTabId = await findTabForItem(itemId);
     const listingUrl = await captureListingUrl(run, itemId, brokerTabId, explicitListingUrl);
 
     const updated = withVerdict(run, itemId, verdict, listingUrl);
@@ -158,7 +168,7 @@ async function handleVerdict(itemId: string, verdict: Verdict, explicitListingUr
     await updateBadge(updated);
 
     if (brokerTabId !== null) {
-      await browser.storage.session.remove(`expurge_tab_${brokerTabId}`);
+      await removeTab(brokerTabId);
     }
 
     await advance(updated);
@@ -245,7 +255,7 @@ async function handleSkip(itemId: string, skipReason: SkipReason, tabId?: number
     await saveRun(updated);
 
     if (tabId !== undefined) {
-      await browser.storage.session.remove(`expurge_tab_${tabId}`);
+      await removeTab(tabId);
     }
 
     await advance(updated);
@@ -260,13 +270,10 @@ async function handleStopRun(): Promise<void> {
     const updated = applyStop(run);
     await saveRun(updated);
 
-    // Remove all tab session keys so tabs.onRemoved can't fire after stop and overwrite
-    // run_stopped → tab_closed for each still-open broker tab.
-    const all = await browser.storage.session.get(null) as Record<string, unknown>;
-    const tabKeys = Object.keys(all).filter(k => k.startsWith('expurge_tab_'));
-    if (tabKeys.length > 0) {
-      await browser.storage.session.remove(tabKeys);
-    }
+    // Drop all per-tab state (both tab keys AND challenge keys) so tabs.onRemoved can't fire
+    // after stop and overwrite run_stopped → tab_closed for each still-open broker tab, and no
+    // challenge key is left orphaned for a recycled tab id to read.
+    await removeAllTabs();
 
     // Stop can come from the popup/options, not the sidebar — so push the resting view or the
     // sidebar keeps showing live verdict/guidance controls for a run that's over. A stopped run
@@ -277,37 +284,13 @@ async function handleStopRun(): Promise<void> {
   });
 }
 
-async function itemIdForTab(tabId: number): Promise<string | null> {
-  const key = `expurge_tab_${tabId}`;
-  const r = await browser.storage.session.get(key);
-  return (r[key] as string) ?? null;
-}
-
-// ── per-tab challenge flag ─────────────────────────────────────────────────────
-// Set by CHALLENGE_DETECTED, cleared by CHALLENGE_RESOLVED / tab close / on-host nav.
-// Stored in session storage (keyed by tabId) so it survives event-page spindown mid-
-// challenge — an in-memory Map would lose it. Feeds SidebarFocus.challenge → deriveView.
-
-const challengeKey = (tabId: number) => `expurge_challenge_${tabId}`;
-
-async function setChallengeFlag(tabId: number, on: boolean): Promise<void> {
-  if (on) await browser.storage.session.set({ [challengeKey(tabId)]: true });
-  else    await browser.storage.session.remove(challengeKey(tabId));
-}
-
-async function isChallenged(tabId: number): Promise<boolean> {
-  const key = challengeKey(tabId);
-  const r = await browser.storage.session.get(key);
-  return r[key] === true;
-}
-
 // ── focus resolution (SidebarFocus builders) ───────────────────────────────────
 // deriveView (sidebar/state.ts) is the single source of view truth; the background only
 // BUILDS its inputs. A SidebarFocus pairs the focused broker tab's work item with its URL
 // (results-vs-details) and challenge flag; null focus → deriveView yields revisit/done/no-run.
 
 async function focusForTab(tabId: number, run: RunState): Promise<SidebarFocus | null> {
-  const itemId = await itemIdForTab(tabId);
+  const itemId = await itemForTab(tabId);
   if (!itemId) return null;   // not a tracked broker tab
   const item = run.items.find(i => i.id === itemId) ?? null;
   if (!item) return null;
@@ -315,37 +298,11 @@ async function focusForTab(tabId: number, run: RunState): Promise<SidebarFocus |
   return { item, tabUrl: tab?.url ?? null, challenge: await isChallenged(tabId) };
 }
 
-// The window's broker tab to reflect: prefer the active tab if it's tracked, else any tracked
-// broker tab in the window (prefer on-host; keep a mid-redirect off-host tab as a fallback so
-// the challenges.cloudflare.com hop doesn't make us open a duplicate). Prunes stale tab keys.
-// Retains the old findActiveBrokerTab scan, scoped to one window and active-preferring.
-async function findWindowBrokerTab(windowId: number, run: RunState): Promise<number | null> {
-  const [active] = await browser.tabs.query({ windowId, active: true });
-  if (active?.id !== undefined && await itemIdForTab(active.id)) return active.id;
-
-  const all = await browser.storage.session.get(null) as Record<string, unknown>;
-  let fallbackTabId: number | null = null;
-  for (const key of Object.keys(all)) {
-    if (!key.startsWith('expurge_tab_')) continue;
-    const tabId = parseInt(key.slice('expurge_tab_'.length), 10);
-    if (isNaN(tabId)) continue;
-    let tab: browser.Tabs.Tab;
-    try { tab = await browser.tabs.get(tabId); }
-    catch { await browser.storage.session.remove(key); continue; } // stale — tab closed
-    if (tab.windowId !== windowId) continue;
-    const item = run.items.find(i => i.id === (all[key] as string));
-    if (item && tab.url && !isOnHost(tab.url, item.renderedUrl)) {
-      if (fallbackTabId === null) fallbackTabId = tabId; // mid-redirect, don't prune
-      continue;
-    }
-    return tabId;
-  }
-  return fallbackTabId;
-}
-
-// PULL focus (SIDEBAR_GET_STATE): the window's broker tab, active-preferred with fallback.
+// PULL focus (SIDEBAR_GET_STATE): the window's broker tab, active-preferred with fallback
+// (tab-registry.findBrokerTab owns the scan + stale-key pruning; the pure decision is in
+// tab-registry-resolve.brokerTabInWindow).
 async function buildFocus(windowId: number, run: RunState): Promise<SidebarFocus | null> {
-  const tabId = await findWindowBrokerTab(windowId, run);
+  const tabId = await findBrokerTab(windowId, run);
   return tabId === null ? null : focusForTab(tabId, run);
 }
 
@@ -377,23 +334,11 @@ async function pushActiveView(run: RunState): Promise<void> {
 // ── focus driving ──────────────────────────────────────────────────────────────
 // After any action, move focus to the next actionable item and push the resulting view.
 
-// The live tab tracking an item, or null (reverse of the expurge_tab_<id> → itemId map).
-async function tabIdForItem(itemId: string): Promise<number | null> {
-  const all = await browser.storage.session.get(null) as Record<string, unknown>;
-  for (const key of Object.keys(all)) {
-    if (key.startsWith('expurge_tab_') && all[key] === itemId) {
-      const tabId = parseInt(key.slice('expurge_tab_'.length), 10);
-      if (!isNaN(tabId)) return tabId;
-    }
-  }
-  return null;
-}
-
 // Ensure an item has a live tab; open a fresh one from its renderedUrl if not. Covers a
 // resumed `deferred`/`open` item whose tab was lost (finding #3) and a pending item being
 // promoted. Returns the (possibly updated) run and the tabId.
 async function ensureItemTab(run: RunState, itemId: string): Promise<{ run: RunState; tabId: number | null }> {
-  const existing = await tabIdForItem(itemId);
+  const existing = await findTabForItem(itemId);
   if (existing !== null) return { run, tabId: existing };
 
   const item = run.items.find(i => i.id === itemId);
@@ -401,7 +346,7 @@ async function ensureItemTab(run: RunState, itemId: string): Promise<{ run: RunS
 
   const tab = await browser.tabs.create({ url: item.renderedUrl, active: true, windowId: run.windowId });
   if (tab.id === undefined) return { run, tabId: null };
-  await browser.storage.session.set({ [`expurge_tab_${tab.id}`]: item.id });
+  await putTab(tab.id, item.id);
   // It now has a live tab → it's open.
   const updated: RunState = {
     ...run,
@@ -450,7 +395,12 @@ async function captureListingUrl(
   const tab = await browser.tabs.get(brokerTabId).catch(() => null);
   if (!item || !tab?.url) return undefined;
   try {
-    if (!isResultsPage(new URL(tab.url).pathname, item.renderedUrl)) return tab.url;
+    // Only a details page on the broker's OWN host is a valid listing URL. If the tab wandered
+    // off-host (an external link, an ad, a redirect the user didn't finish backing out of),
+    // capture nothing — recording that URL would mail a wrong/irrelevant listing into the draft.
+    if (isOnHost(tab.url, item.renderedUrl) && !isResultsPage(new URL(tab.url).pathname, item.renderedUrl)) {
+      return tab.url;
+    }
   } catch { /* malformed — no listingUrl */ }
   return undefined;
 }
@@ -491,7 +441,7 @@ browser.runtime.onMessage.addListener(
     if (m.type === 'CHALLENGE_DETECTED' || m.type === 'CHALLENGE_RESOLVED') {
       const tabId = sender.tab?.id;
       if (tabId !== undefined) {
-        await setChallengeFlag(tabId, m.type === 'CHALLENGE_DETECTED');
+        await setChallenge(tabId, m.type === 'CHALLENGE_DETECTED');
         const run = await loadRun();
         if (run) await pushActiveView(run);
       }
@@ -521,13 +471,14 @@ browser.runtime.onMessage.addListener(
 
     if (m.type === 'NAVIGATE_BROKER_TAB') {
       // Paste-URL fallback: point the PASTED ITEM's own broker tab at the listing (via
-      // tabIdForItem, not the active-preferred findWindowBrokerTab — the active tab may have
+      // findTabForItem, not the active-preferred findBrokerTab — the active tab may have
       // changed since the guidance view rendered, so the paste can't land in the wrong tab).
-      // The ensuing onUpdated recomputes page-type (results → details) and pushes verdict.
+      // The ensuing full navigation re-injects the content script, which reports on load →
+      // its CHALLENGE_* handler's pushActiveView recomputes page-type (results → details).
       const windowId = m.windowId as number;
       const run = await loadRun();
       if (run && run.windowId === windowId) {
-        const tabId = await tabIdForItem(m.itemId as string);
+        const tabId = await findTabForItem(m.itemId as string);
         if (tabId !== null) await browser.tabs.update(tabId, { url: m.url as string }).catch(() => {});
       }
       return { ok: true };
@@ -606,7 +557,7 @@ browser.runtime.onMessage.addListener(
       const windowId = m.windowId as number | undefined;
       const run = await loadRun();
       if (windowId !== undefined && run) {
-        const tabId = await findWindowBrokerTab(windowId, run);
+        const tabId = await findBrokerTab(windowId, run);
         if (tabId !== null) await browser.tabs.remove(tabId).catch(() => {});
       }
       return { ok: true };
@@ -631,9 +582,15 @@ browser.runtime.onMessage.addListener(
 // ── tab closed → skipped/tab_closed ─────────────────────────────────────────
 
 browser.tabs.onRemoved.addListener(async (tabId: number) => {
-  await setChallengeFlag(tabId, false); // drop any challenge flag for the now-gone tab
-  const itemId = await itemIdForTab(tabId);
+  // Read the item BEFORE dropping any key. Untracked tab → nothing of ours to clean up: any
+  // orphan challenge key it might carry is inert (isChallenged is read only for TRACKED tabs)
+  // and putTab scrubs it if the id is ever recycled — so we skip the write rather than touch
+  // storage on every unrelated browser-wide tab close. Tracked tab → drop BOTH keys NOW, before
+  // handleSkip, so the cleanup can't be skipped by handleSkip's `!run` early-return (its own
+  // removeTab then no-ops).
+  const itemId = await itemForTab(tabId);
   if (!itemId) return;
+  await removeTab(tabId);
   await handleSkip(itemId, 'tab_closed', tabId);
 });
 
@@ -652,18 +609,13 @@ browser.runtime.onInstalled.addListener(({ reason }) => {
   if (reason === 'install') browser.runtime.openOptionsPage().catch(console.error);
 });
 
-browser.tabs.onUpdated.addListener(async (tabId, changeInfo) => {
-  if (changeInfo.status !== 'complete') return;
-  const itemId = await itemIdForTab(tabId);
-  if (!itemId) return; // not a tracked broker tab
-
-  const run = await loadRun();
-  if (!run) return;
-
-  // Broker tab finished navigating (e.g. results → details, or a challenge redirect landing
-  // back on the real page) → recompute the active tab's page-type and push. The challenge flag
-  // is the content script's job now: it reports RESOLVED on the clean load, so background does
-  // NOT guess challenge state from navigation here (that misfired on on-host challenge pages,
-  // clearing the flag the content script had just set on the same load).
-  await pushActiveView(run);
-});
+// tabs.onUpdated intentionally has NO listener. The content script re-injects and reports
+// challenge state (CHALLENGE_DETECTED/RESOLVED, whose handler calls pushActiveView) on EVERY
+// broker full-page load — that report is the single authoritative post-load push, covering both
+// challenge state AND page-type (results ↔ details). An onUpdated push here was redundant and
+// raced the content report, flashing the verdict view over a challenge page (review #5).
+//
+// CAVEAT: a future SPA broker (same-document route changes, no content re-inject) would NOT
+// re-report on navigation. It would need this listener back (recompute page-type + push) OR the
+// always-armed observer extended to watch location changes. All v1 brokers are full-page-reload,
+// so this is deliberately omitted. Reverting this commit reinstates the listener.
