@@ -22,6 +22,8 @@ export default defineConfig({
         'src/shared/types.ts', // type-only, no runtime
         'src/test-support/**', // shared test fixtures
         'src/background/index.ts', // entrypoint: message dispatch / storage I/O — integration-test TODO
+        'src/background/tab-registry.ts', // polyfill-bound session-storage I/O wrappers — not node-testable
+                                          //   (the pure resolvers in tab-registry-resolve.ts ARE covered)
         'src/content/index.ts', // entrypoint: headless challenge reporter (DOM observer) — integration-test TODO
         'src/options/index.ts', // entrypoint: form/nav wiring — integration-test TODO
         'src/popup/index.ts', // entrypoint: thin popup render — integration-test TODO
