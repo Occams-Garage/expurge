@@ -76,6 +76,14 @@ export interface MarkSentMsg    { type: 'MARK_SENT';    itemId: string }
 export interface DeleteAllMsg   { type: 'DELETE_ALL' }
 export interface CloseTabMsg    { type: 'CLOSE_TAB'; windowId?: number }
 
+// ── messages options → background: signed dataset updates (M7) ───────────────
+// The host-permission grant for the data origin is requested in the OPTIONS click
+// handler (it needs a user gesture); these messages drive the background-owned
+// fetch/verify/store once that grant exists.
+export interface CheckDatasetUpdateMsg  { type: 'CHECK_DATASET_UPDATE' }
+export interface GetDatasetStatusMsg    { type: 'GET_DATASET_STATUS' }
+export interface SetDatasetAutoFetchMsg { type: 'SET_DATASET_AUTOFETCH'; on: boolean }
+
 // ── messages sidebar → background ───────────────────────────────────────────
 // The sidebar lives in its own document (not a broker tab), so it can't rely on
 // `sender.tab` to identify the run — it passes the pinned `windowId` explicitly.
@@ -113,7 +121,8 @@ export interface StopRunMsg { type: 'STOP_RUN' }
 export type ToBackground =
   | StartRunMsg | GetRunStateMsg | GetDraftMsg | VerdictMsg | ReverdictMsg
   | StopRunMsg | SaveProfileMsg | GetProfileMsg | MarkSentMsg | DeleteAllMsg | CloseTabMsg
-  | SidebarGetStateMsg | DeferMsg | FocusItemMsg | NavigateBrokerTabMsg | ChallengeDetectedMsg | ChallengeResolvedMsg;
+  | SidebarGetStateMsg | DeferMsg | FocusItemMsg | NavigateBrokerTabMsg | ChallengeDetectedMsg | ChallengeResolvedMsg
+  | CheckDatasetUpdateMsg | GetDatasetStatusMsg | SetDatasetAutoFetchMsg;
 
 // ── sidebar view model ──────────────────────────────────────────────────────
 // The sidebar's display is derived purely from run state + focus (src/sidebar/state.ts).
