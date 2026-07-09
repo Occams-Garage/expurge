@@ -1,8 +1,23 @@
 # expurge — Signed Broker Dataset Delivery (GitHub Pages)
 
-**Status:** plan / build-ready
+**Status:** decisions resolved (2026-07-09) · **extension side BUILT & TESTED** · publishing/infra
+side pending (human runbook).
 **Scope:** v1 remote-update delivery path for `brokers.json`
 **Owner:** Occam's Garage
+
+> **Decisions locked (2026-07-09), superseding the "open decisions" framing below:**
+> 1. **Posture B** — accept either pinned key (§5.2).
+> 2. **Host: `data.expurge.com`** — a custom domain on Pages from day one (§3.4 Option B), NOT
+>    `dustinvk.github.io` or `occamsgarage.dev`. Origin is single-sourced in code as
+>    `DATASET_ORIGIN` / `DATASET_HOST_PATTERN` in `src/shared/dataset.ts`; the manifest
+>    `optional_host_permissions` entry must match verbatim.
+> 3. **WebCrypto** — native `crypto.subtle` Ed25519, no crypto dependency (§10.3).
+>
+> The extension-side implementation (verify pipeline, active-dataset getter, Settings UI) is done
+> and unit-tested — see `plan/expurge-progress.md` → M7. The remaining human/ops steps (repo,
+> keygen, key-pinning, sign script, CI, DNS) are in **`plan/dataset-delivery-runbook.md`**. The
+> `dustinvk.github.io` / `occamsgarage.dev` strings below are the pre-decision proposals; read
+> them as `data.expurge.com`.
 
 ---
 
@@ -50,8 +65,8 @@ Single-repo alternative: serve from `DustinVK/expurge` via a `/docs` folder or a
 ### 3.2 URL structure
 
 ```
-https://dustinvk.github.io/expurge-data/brokers.json        # the dataset
-https://dustinvk.github.io/expurge-data/brokers.sig.json     # detached signatures
+https://data.expurge.com/brokers.json        # the dataset          (RESOLVED host)
+https://data.expurge.com/brokers.sig.json     # detached signatures
 ```
 
 Single origin, no cross-host redirect (unlike GitHub *Releases*, whose download URL bounces to `release-assets.githubusercontent.com` and would force a second host permission). Fastly-backed CDN, free Let's Encrypt TLS, ETag/`Last-Modified` support for cheap conditional checks.
@@ -61,7 +76,7 @@ Single origin, no cross-host redirect (unlike GitHub *Releases*, whose download 
 Declare exactly the one origin/path, scoped tightly, in `optional_host_permissions` — never `<all_urls>`:
 
 ```json
-"optional_host_permissions": ["https://dustinvk.github.io/expurge-data/*"]
+"optional_host_permissions": ["https://data.expurge.com/*"]   // RESOLVED — matches DATASET_HOST_PATTERN
 ```
 
 Granted at the moment the user first opts into updates, so a user who never enables updates never grants it.
@@ -237,11 +252,14 @@ Zero for v1. GitHub Pages is free for public repositories, includes Fastly CDN a
 
 ---
 
-## 10. Open decisions
+## 10. Open decisions — RESOLVED (2026-07-09)
 
-1. **Dual-key verification posture** (§5.2) — recommend Posture B for v1. Confirm.
-2. **Host commitment** (§3.4) — `dustinvk.github.io` now, or stand up `data.occamsgarage.dev` from day one. Recommend the latter if a custom domain is at all likely.
-3. **Ed25519 implementation** — WebCrypto (no dependency) vs bundled `@noble/ed25519` (explicit, auditable). Recommend WebCrypto given the Firefox 140+ floor.
+1. **Dual-key verification posture** (§5.2) — ✅ **Posture B** (accept either pinned key; primary
+   signs routinely in CI, backup is offline for emergency re-sign + rotation).
+2. **Host commitment** (§3.4) — ✅ **`data.expurge.com`**, a custom domain on Pages from day one
+   (Option B). Pinned now to avoid a future permission-churn release.
+3. **Ed25519 implementation** — ✅ **WebCrypto** (`crypto.subtle`, no dependency), given the
+   Firefox 140+ floor.
 
 ---
 
