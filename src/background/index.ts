@@ -1,6 +1,6 @@
 import browser from 'webextension-polyfill';
 import type { Profile, RunState, WorkItemStatus, Verdict, SkipReason, SidebarView, SidebarUpdateMsg } from '../shared/types';
-import { BROKERS, getBroker } from '../shared/brokers';
+import { BROKERS } from '../shared/brokers';
 import { isOnHost, isResultsPage } from '../shared/url';
 import { deriveView, type SidebarFocus } from '../sidebar/state';
 import { evaluateGate } from '../shared/gate';
@@ -28,6 +28,13 @@ import {
   setChallenge,
   isChallenged,
 } from './tab-registry';
+import {
+  getActiveBrokers,
+  getActiveBroker,
+  verifyAndLoadDataset,
+  getDatasetStatus,
+  setAutoFetch,
+} from './dataset-store';
 
 // ── serial write queue ────────────────────────────────────────────────────────
 // Prevents TOCTOU: loadRun → mutate → saveRun is not atomic; concurrent verdicts
@@ -130,7 +137,11 @@ async function handleStartRun(profile: Profile, windowId?: number): Promise<void
       console.warn('[expurge] START_RUN resolved no windowId — sidebar pushes will be suppressed for this run');
     }
     const runId = crypto.randomUUID();
-    const items = buildItems(profile);
+    // Build the run from the ACTIVE dataset (verified remote if present+unexpired, else bundled),
+    // so a signed dataset update changes which brokers a run covers. (Display-path broker lookups
+    // in the sidebar/options still read the compile-time BROKERS list — that migration is an M9
+    // follow-up; with only the bundled dataset today the two are identical.)
+    const items = buildItems(profile, await getActiveBrokers());
     const run: RunState = { runId, createdAt: new Date().toISOString(), items, windowId: resolvedWindowId };
     // Persist before opening tabs so content scripts can find their items on load.
     await saveRun(run);
@@ -508,7 +519,9 @@ browser.runtime.onMessage.addListener(
       );
       if (!hitItem) return { draft: null, reason: 'no_hit' };
 
-      const broker = getBroker(hitItem.brokerId);
+      // Active-dataset lookup (not the compile-time getBroker) so a hit on a broker that exists
+      // only in a signed remote dataset can still generate its draft.
+      const broker = await getActiveBroker(hitItem.brokerId);
       if (!broker) return { draft: null, reason: 'unknown_broker' };
 
       const gate = evaluateGate(broker, 'hit');
@@ -560,6 +573,23 @@ browser.runtime.onMessage.addListener(
         const tabId = await findBrokerTab(windowId, run);
         if (tabId !== null) await browser.tabs.remove(tabId).catch(() => {});
       }
+      return { ok: true };
+    }
+
+    // ── signed dataset updates (M7) ──────────────────────────────────────────
+    // The host-permission grant is requested in the options click handler (user gesture); by the
+    // time these arrive it's held, so background owns the fetch/verify/store.
+    if (m.type === 'CHECK_DATASET_UPDATE') {
+      const result = await verifyAndLoadDataset();
+      return { result };
+    }
+
+    if (m.type === 'GET_DATASET_STATUS') {
+      return { status: await getDatasetStatus() };
+    }
+
+    if (m.type === 'SET_DATASET_AUTOFETCH') {
+      await setAutoFetch(m.on as boolean);
       return { ok: true };
     }
 
