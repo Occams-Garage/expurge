@@ -194,6 +194,28 @@
           </div>
 
           <div class="settings-block">
+            <h3 class="settings-heading">Broker data updates</h3>
+            <p class="note">
+              The broker list ships with the extension and works fully offline. You can optionally
+              check for a newer, cryptographically signed list. Nothing about you is sent — the
+              request carries no cookies or identifiers, and any update is verified against a key
+              built into the extension before it's trusted.
+            </p>
+            <p class="note" id="dataset-status">Loading…</p>
+            <label class="radio-item">
+              <input type="checkbox" id="dataset-autofetch">
+              <div class="radio-text">
+                <span class="radio-label">Check for updates automatically</span>
+                <span class="radio-desc">About once a week, when you open this page. Off by default.</span>
+              </div>
+            </label>
+            <div class="action-row">
+              <button id="btn-dataset-check" class="btn-secondary">Check for updates now</button>
+            </div>
+            <p class="note hidden" id="dataset-check-result"></p>
+          </div>
+
+          <div class="settings-block">
             <h3 class="settings-heading">Your data</h3>
             <p class="note">All data is in this browser session only. Nothing is uploaded.</p>
             <div class="action-row">
