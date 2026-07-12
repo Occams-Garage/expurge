@@ -10,15 +10,16 @@
 import { BROKERS, type Broker } from './brokers';
 
 // ── host commitment (plan §3.4) ──────────────────────────────────────────────
-// Committed to a custom domain under expurge.com from day one so a future move never forces a
-// permission-churn release. Single source of truth: the manifest optional_host_permission and the
-// two fetch URLs all derive from this origin — change ONLY here (and the manifest) to repoint.
-export const DATASET_ORIGIN = 'https://data.expurge.com';
+// Committed to a custom domain under expurge.dev from day one so a future move never forces a
+// permission-churn release. expurge.dev matches the extension id (expurge@expurge.dev) and is
+// HSTS-preloaded (HTTPS-only). Single source of truth: the manifest optional_host_permission and
+// the two fetch URLs all derive from this origin — change ONLY here (and the manifest) to repoint.
+export const DATASET_ORIGIN = 'https://data.expurge.dev';
 export const DATASET_URL = `${DATASET_ORIGIN}/brokers.json`;
 export const SIG_URL = `${DATASET_ORIGIN}/brokers.sig.json`;
 // The host pattern requested via browser.permissions.request() at opt-in time. MUST match the
 // manifest optional_host_permissions entry verbatim.
-export const DATASET_HOST_PATTERN = 'https://data.expurge.com/*';
+export const DATASET_HOST_PATTERN = 'https://data.expurge.dev/*';
 
 // ── pinned public keys (plan §5.3) ───────────────────────────────────────────
 // Raw 32-byte Ed25519 public keys, base64url, keyed by the `keyid` that appears in

@@ -11,22 +11,27 @@ inert-by-default state is intentional and safe: shipping the current build to AM
 update feature simply announces itself as "not enabled in this build yet" until keys are pinned.
 
 Decisions already locked (2026-07-09): **Posture B** (accept either pinned key) · host
-**`data.expurge.com`** · **WebCrypto** (no crypto dependency). Rationale in `plan/dataset-delivery.md`.
+**`data.expurge.dev`** (finalized 2026-07-12 — matches the extension id, HSTS-preloaded) ·
+**WebCrypto** (no crypto dependency). Rationale in `plan/dataset-delivery.md`.
 
 ---
 
 ## Single source of truth for the host
 `DATASET_ORIGIN` / `DATASET_URL` / `SIG_URL` / `DATASET_HOST_PATTERN` all live in
 `src/shared/dataset.ts`. The manifest `optional_host_permissions` entry
-(`https://data.expurge.com/*`) must match `DATASET_HOST_PATTERN` **verbatim**. Change both
-together if the subdomain moves. Confirm `data.` vs `updates.` before you commit — a later change
-costs a permission-churn release.
+(`https://data.expurge.dev/*`) must match `DATASET_HOST_PATTERN` **verbatim**. Change both
+together if the subdomain moves. Subdomain finalized as `data.` (not `updates.`) on 2026-07-12 —
+a later change costs a permission-churn release.
 
 ## 1. Stand up the data repo + host
 - Create a dedicated public repo, e.g. `DustinVK/expurge-data` (separate blast radius from the
   extension source — the signing secret lives only here).
-- Enable GitHub Pages. Add the custom domain `data.expurge.com` (CNAME → `dustinvk.github.io`,
-  plus a DNS record). Verify HTTPS (Let's Encrypt) resolves at `https://data.expurge.com/`.
+- Enable GitHub Pages. Add the custom domain `data.expurge.dev` (DNS `CNAME` record: `data` →
+  `dustinvk.github.io`, the account Pages host — not the repo). Also add the account-level domain-
+  verification TXT record GitHub issues (`_github-pages-challenge-dustinvk.expurge.dev`) to prevent
+  cross-account takeover of `*.expurge.dev`. Verify HTTPS (Let's Encrypt) resolves at
+  `https://data.expurge.dev/`. Note: `.dev` is HSTS-preloaded, so there is NO http fallback — the
+  site is simply unreachable until the cert provisions (minutes to ~24h); that's expected.
 - Layout: `brokers.json` and `brokers.sig.json` at the site root.
 
 ## 2. Generate keys
@@ -72,7 +77,7 @@ release as the provenance record. See `plan/dataset-delivery.md` §8.
 
 ## 7. First real end-to-end check (Firefox)
 Load the extension (`web-ext run` / `about:debugging`). Settings → **Broker data updates** →
-enable "Check automatically" (grants the `data.expurge.com` host permission) → "Check for updates
+enable "Check automatically" (grants the `data.expurge.dev` host permission) → "Check for updates
 now". Expect: version bumps from bundled(0) to your published version; a second click reports
 "already have the latest" (304 / not-newer). Then test the guardrails against the live host:
 - **Tamper:** serve a `brokers.json` byte that the signature doesn't cover → "signature did not
@@ -81,8 +86,9 @@ now". Expect: version bumps from bundled(0) to your published version; a second 
 - **Expiry:** serve a past-`expires` dataset → "expired. Keeping your current list."
 
 ## 8. Pre-AMO
-- Reconcile the extension id: `browser_specific_settings.gecko.id` is `expurge@expurge.dev` while
-  the domain is expurge.com — decide before listing (the id ties AMO updates together).
+- Extension id `browser_specific_settings.gecko.id` = `expurge@expurge.dev` now matches the dataset
+  host `data.expurge.dev` (host finalized 2026-07-12) — no id reconcile needed. Just confirm the id
+  is the one you want to list under, since it ties AMO updates together.
 - Disclose the opt-in update fetch in the AMO listing (the in-product disclosure already lives in
   Settings). Confirm `data_collection_permissions` stays `["none"]` (the fetch sends no user data:
   `credentials: 'omit'`, no identifiers).

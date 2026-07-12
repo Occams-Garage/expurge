@@ -77,7 +77,7 @@ superseded by the sidebar architecture — see `sidebar-nav.md` for the current 
 #### M7 — Signed remote dataset (Ed25519)
 
 **Decisions (confirmed 2026-07-09):** Posture B (accept either pinned key) · custom domain
-`data.expurge.com` (host single-sourced as `DATASET_HOST_PATTERN` in `src/shared/dataset.ts` +
+`data.expurge.dev` (host single-sourced as `DATASET_HOST_PATTERN` in `src/shared/dataset.ts` +
 the manifest `optional_host_permissions`) · WebCrypto (no crypto dependency). Full design in
 `plan/dataset-delivery.md`; infra half in `plan/dataset-delivery-runbook.md`.
 
@@ -108,7 +108,7 @@ the manifest `optional_host_permissions`) · WebCrypto (no crypto dependency). F
 `plan/dataset-delivery-runbook.md`. Until the real keypair is generated and its public halves
 replace the `TRUSTED_PUBKEYS_RAW` placeholders in `dataset.ts`, `loadTrustedKeys()` yields no
 usable key → `configured: false` → the feature is inert by design and the bundled baseline is
-always used. Steps: generate keypair · pin public keys · stand up `data.expurge.com` on Pages ·
+always used. Steps: generate keypair · pin public keys · stand up `data.expurge.dev` on Pages ·
 sign `brokers.json` → `brokers.sig.json` · CI validate-sign-publish workflow · first real
 end-to-end fetch in Firefox.
 
@@ -160,7 +160,7 @@ consent-prompt copy still needs legal review (Q-006).
 | `src/options/index.ts` | Settings section has no import JSON (export only); import deferred to M8 alongside persistence opt-ins |
 | `src/background/index.ts` | `webNavigation` is declared in manifest permissions but `browser.webNavigation.onErrorOccurred` is not yet wired — add when M9 broker set makes load-error detection meaningful |
 | `src/content/classify.ts` | Turnstile-script detection assumes solve **navigates away** (proven on TPS only). A broker that resolves the gate **inline** would strand the challenge view — see the M9 per-broker challenge-resolve gate before onboarding one |
-| `src/shared/dataset.ts` | `TRUSTED_PUBKEYS_RAW` holds **placeholder** keys — replace with the real published Ed25519 public keys (runbook). Until then no remote dataset validates (feature inert by design). Host `data.expurge.com` needs the exact subdomain confirmed; extension id is still `expurge@expurge.dev` (domain is expurge.com) — reconcile before AMO |
+| `src/shared/dataset.ts` | `TRUSTED_PUBKEYS_RAW` holds **placeholder** keys — replace with the real published Ed25519 public keys (runbook). Until then no remote dataset validates (feature inert by design). Host finalized `data.expurge.dev` (2026-07-12), matching extension id `expurge@expurge.dev` — no id reconcile needed |
 
 ---
 
