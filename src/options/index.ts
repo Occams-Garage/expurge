@@ -4,6 +4,7 @@ import type { Draft, EmailDraft, FormDraft } from '../shared/templates';
 import { mailtoUrl, toEml, toCopyText } from '../shared/templates';
 import { normalizeAkas } from '../shared/transforms';
 import { BROKERS, getBroker } from '../shared/brokers';
+import { DATASET_HOST_PATTERN, type DatasetStatus, type CheckResult } from '../shared/dataset';
 import { progressOf, isComplete, isMissingSkip } from '../background/coordinator';
 import {
   buildAkaRow,
@@ -846,6 +847,105 @@ function renderBrokerCoverage(): void {
   document.getElementById('broker-list')!.innerHTML = rows;
 }
 
+// ── signed dataset updates (M7) ────────────────────────────────────────────────
+// The host-permission grant needs a user gesture, so it's requested HERE (in the click/change
+// handler), not in the background. Everything else (fetch/verify/store) is a background message.
+
+function describeDatasetStatus(s: DatasetStatus): string {
+  if (!s.configured) {
+    return 'Broker-data updates aren’t enabled in this build yet. The bundled list is in use.';
+  }
+  const src = s.source === 'remote'
+    ? `signed update, version ${s.version}`
+    : `bundled with the extension (version ${s.version})`;
+  const checked = s.lastChecked
+    ? `Last checked ${new Date(s.lastChecked).toLocaleDateString()}.`
+    : 'Not checked for updates yet.';
+  const warn = s.expiresSoon ? ' This list is getting old — a check is recommended.' : '';
+  return `Current list: ${src}. ${checked}${warn}`;
+}
+
+function describeCheckResult(r: CheckResult): string {
+  if (r.changed) return `Updated to version ${r.version}.`;
+  switch (r.reason) {
+    case 'not_modified':
+    case 'not_newer':
+      return 'You already have the latest broker list.';
+    case 'no_permission':
+      return 'Update access was declined.';
+    case 'no_keys':
+      return 'Updates aren’t enabled in this build yet.';
+    case 'bad_signature':
+      return 'Update rejected: its signature did not verify. Keeping your current list.';
+    case 'expired':
+      return 'Update rejected: the offered list has expired. Keeping your current list.';
+    case 'malformed':
+      return 'Update rejected: the offered list was malformed. Keeping your current list.';
+    case 'network_error':
+      return 'Could not reach the update server. Keeping your current list.';
+  }
+}
+
+async function loadDatasetStatus(): Promise<DatasetStatus> {
+  const res = (await browser.runtime.sendMessage({ type: 'GET_DATASET_STATUS' })) as {
+    status: DatasetStatus;
+  };
+  return res.status;
+}
+
+async function renderDatasetSettings(): Promise<DatasetStatus> {
+  const s = await loadDatasetStatus();
+  document.getElementById('dataset-status')!.textContent = describeDatasetStatus(s);
+  (document.getElementById('dataset-autofetch') as HTMLInputElement).checked = s.autoFetch;
+  // Placeholder-key build: no real signer pinned → the feature can't do anything. Disable the
+  // controls rather than let every click fail with "not enabled".
+  (document.getElementById('dataset-autofetch') as HTMLInputElement).disabled = !s.configured;
+  (document.getElementById('btn-dataset-check') as HTMLButtonElement).disabled = !s.configured;
+  return s;
+}
+
+async function ensureDatasetPermission(): Promise<boolean> {
+  if (await browser.permissions.contains({ origins: [DATASET_HOST_PATTERN] })) return true;
+  // request() must run inside the gesture that called us (button click / checkbox change).
+  return browser.permissions.request({ origins: [DATASET_HOST_PATTERN] });
+}
+
+async function handleDatasetCheck(): Promise<void> {
+  const out = document.getElementById('dataset-check-result')!;
+  const btn = document.getElementById('btn-dataset-check') as HTMLButtonElement;
+  out.classList.add('hidden');
+
+  if (!(await ensureDatasetPermission())) {
+    out.textContent = 'Update access was declined.';
+    out.classList.remove('hidden');
+    return;
+  }
+
+  const prev = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Checking…';
+  try {
+    const { result } = (await browser.runtime.sendMessage({ type: 'CHECK_DATASET_UPDATE' })) as {
+      result: CheckResult;
+    };
+    out.textContent = describeCheckResult(result);
+    out.classList.remove('hidden');
+    await renderDatasetSettings();
+  } finally {
+    btn.disabled = false;
+    btn.textContent = prev;
+  }
+}
+
+async function handleAutoFetchToggle(on: boolean): Promise<void> {
+  const box = document.getElementById('dataset-autofetch') as HTMLInputElement;
+  if (on && !(await ensureDatasetPermission())) {
+    box.checked = false; // permission declined → can't auto-fetch; revert the toggle
+    return;
+  }
+  await browser.runtime.sendMessage({ type: 'SET_DATASET_AUTOFETCH', on });
+}
+
 async function handleExport(): Promise<void> {
   const [profileRes, runRes] = await Promise.all([
     browser.runtime.sendMessage({ type: 'GET_PROFILE' }),
@@ -959,6 +1059,16 @@ async function init(): Promise<void> {
   await loadPrefs();
   renderBrokerCoverage();
 
+  // Dataset update panel. If a weekly auto-fetch is due (opted in + permitted + configured), run
+  // it now — this page opening IS the lazy trigger (plan §6.1) — then re-render the status line.
+  const dsStatus = await renderDatasetSettings();
+  if (dsStatus.autoFetchDue) {
+    browser.runtime
+      .sendMessage({ type: 'CHECK_DATASET_UPDATE' })
+      .then(() => renderDatasetSettings())
+      .catch(console.error);
+  }
+
   if (currentProfile) populateProfileForm(currentProfile);
   else resetAkaRows([]); // first-time user: show one empty "Other names" row
 
@@ -988,6 +1098,11 @@ document.querySelectorAll<HTMLElement>('[data-nav]').forEach(btn => {
 });
 
 document.getElementById('btn-start')!.addEventListener('click', () => { handleStartRun().catch(console.error); });
+
+document.getElementById('btn-dataset-check')!.addEventListener('click', () => { handleDatasetCheck().catch(console.error); });
+document.getElementById('dataset-autofetch')!.addEventListener('change', e => {
+  handleAutoFetchToggle((e.target as HTMLInputElement).checked).catch(console.error);
+});
 
 // Re-open a closed sidebar. Synchronous in the click gesture; opens in the active window,
 // which then SIDEBAR_GET_STATEs (shows the run if this is the run's window, else no-run).
