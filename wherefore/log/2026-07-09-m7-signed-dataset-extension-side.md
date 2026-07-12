@@ -55,7 +55,7 @@ enabled until real keys are pinned.
 - Hashing then signing the hash (the original 2026-06-28 sketch), rejected in favor of signing the raw bytes: Ed25519 hashes internally, and signing the literal bytes sidesteps canonicalization drift.
 
 ## Open questions / follow-ups
-- Q-019: finalize the dataset host identity before AMO (exact subdomain, and whether the extension id changes to match expurge.com).
+- Q-019: finalize the dataset host identity before AMO (exact subdomain, and whether the extension id changes to match expurge.com). (resolved 2026-07-12 → `data.expurge.dev`, id unchanged; see `wherefore/questions/Q-019-dataset-host-identity.md`)
 - Infra half pending: repo, keygen, key-pinning, sign script, CI, DNS. See `plan/dataset-delivery-runbook.md`.
 - Display-path broker lookups still read the compile-time list; migrate at M9.
 - First-fetch consent-prompt copy still needs legal review (Q-006 stays partial).

@@ -20,7 +20,7 @@ It's written to be self-contained; the durable state lives in the docs it points
 IO wrapper in `src/background/dataset-store.ts` (`verifyAndLoadDataset`, `getActiveBrokers`),
 Settings → "Broker data updates" UI. Feature is **inert until real keys replace the
 `TRUSTED_PUBKEYS_RAW` placeholders** (runbook) — that's intentional. Decisions locked: Posture B,
-host `data.expurge.com`, WebCrypto.
+host `data.expurge.dev`, WebCrypto.
 
 **Check git state before starting:** `git log --oneline -5 && git status`. If the M7 extension-side
 changes are still uncommitted in the working tree, commit them first on a branch
