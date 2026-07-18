@@ -81,8 +81,8 @@ now". Expect: version bumps from bundled(0) to your published version; a second 
 - **Expiry:** serve a past-`expires` dataset → "expired. Keeping your current list."
 
 ## 8. Pre-AMO
-- Reconcile the extension id: `browser_specific_settings.gecko.id` is `expurge@expurge.dev` while
-  the domain is expurge.com — decide before listing (the id ties AMO updates together).
+- ~~Reconcile the extension id~~ **DONE (2026-07-18, Q-019):** `browser_specific_settings.gecko.id`
+  is `expurge@expurge.com`, matching the domain (the id ties AMO updates together).
 - Disclose the opt-in update fetch in the AMO listing (the in-product disclosure already lives in
   Settings). Confirm `data_collection_permissions` stays `["none"]` (the fetch sends no user data:
   `credentials: 'omit'`, no identifiers).
