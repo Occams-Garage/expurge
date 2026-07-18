@@ -18,3 +18,4 @@
 - Q-016 | resolved | 2026-07-01 | 2026-07-01-sidebar-nav-built | Model challenge state as content-script-owned structural state instead of side-channel per-tab session keys? | areas: matching-overlay, run-model
 - Q-017 | open | 2026-07-01 | 2026-07-01-url-free-optout-flow | For URL-free opt-out brokers (e.g. TPS), confirm on the results page or skip the search vs. the current navigate-to-profile flow? | areas: opt-out-drafts, matching-overlay, run-model
 - Q-018 | open | 2026-07-03 | 2026-07-03-turnstile-detection-gap | Should per-broker challenge hints live in brokers.json (signed data), or should challenge detection stay purely generic and cross-site? | areas: matching-overlay, broker-dataset
+- Q-019 | resolved | 2026-07-09 | 2026-07-09-m7-signed-dataset-extension-side | Dataset host subdomain + extension id (resolved 2026-07-18: ship data.expurge.com; id → expurge@expurge.com to match the domain) | areas: permissions, broker-dataset

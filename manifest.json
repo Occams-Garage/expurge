@@ -33,7 +33,7 @@
   ],
   "browser_specific_settings": {
     "gecko": {
-      "id": "expurge@expurge.dev",
+      "id": "expurge@expurge.com",
       "strict_min_version": "140.0",
       "data_collection_permissions": {
         "required": ["none"]
@@ -42,7 +42,7 @@
   },
   "_notes": {
     "webNavigation": "Removed — was reserved for background webNavigation.onErrorOccurred (load-error skipping) but never wired. Re-add to permissions when M9 wires webNavigation.onErrorOccurred.",
-    "dataset_update_host": "https://data.expurge.com/* is OPTIONAL, not required: the signed-dataset fetch (M7) is consent-gated, so the host permission is requested via browser.permissions.request() at opt-in time (Settings → Broker data updates), never held by default. Origin is single-sourced as DATASET_HOST_PATTERN in src/shared/dataset.ts — change BOTH together. Confirm the exact subdomain (data. vs updates.) before M7 ships; extension id is still expurge@expurge.dev (domain is expurge.com — reconcile before AMO).",
+    "dataset_update_host": "https://data.expurge.com/* is OPTIONAL, not required: the signed-dataset fetch (M7) is consent-gated, so the host permission is requested via browser.permissions.request() at opt-in time (Settings → Broker data updates), never held by default. Origin is single-sourced as DATASET_HOST_PATTERN in src/shared/dataset.ts — change BOTH together. Subdomain confirmed: data.expurge.com; extension id reconciled to expurge@expurge.com to match the domain (Q-019, 2026-07-18).",
     "m9_new_brokers": "Each new broker domain needs TWO entries: (1) optional_host_permissions so browser.permissions.request() can offer it at run start; (2) content_scripts.matches so the headless challenge reporter injects (challenge detection). Both are required — either alone does not work. Verdict UI lives in the window-level sidebar (sidebar_action), which needs no per-domain entry.",
     "m8_no_new_permissions": "Persistence opt-ins (M8) use storage.local only — no new permissions needed.",
     "firefox_ignores_underscore_keys": "Firefox logs a warning for unknown top-level keys but loads the extension. Remove _notes before AMO submission if it causes review friction."

@@ -14,7 +14,7 @@ sections, redesigned popup (run-control-panel only). No persistence opt-ins.
 
 | File | What it does |
 |------|--------------|
-| `manifest.json` | MV3, Firefox 140+, data-taxonomy declaration; permissions: storage/tabs/downloads/scripting/webNavigation (webNavigation declared for `onErrorOccurred`, not yet wired in background); host_permissions: updates.expurge.dev (M7 remote fetch); optional_host_permissions: TruePeopleSearch; `options_ui.open_in_tab: true`; `_notes` block documents M7/M9 requirements (strip before AMO submission) |
+| `manifest.json` | MV3, Firefox 140+, data-taxonomy declaration; permissions: storage/tabs/downloads/scripting/webNavigation (webNavigation declared for `onErrorOccurred`, not yet wired in background); optional_host_permissions: TruePeopleSearch + data.expurge.com (M7 remote fetch, consent-gated); `options_ui.open_in_tab: true`; `_notes` block documents M7/M9 requirements (strip before AMO submission) |
 | `package.json` | webextension-polyfill, esbuild, typescript; scripts: build / dev (--watch) / typecheck |
 | `tsconfig.json` | ES2022 target, moduleResolution: bundler, noEmit: true |
 | `build.mjs` | esbuild; five IIFE bundles (background, content, popup, options, options.css); copies popup.html, options.html, style.css to dist/ |
@@ -160,7 +160,7 @@ consent-prompt copy still needs legal review (Q-006).
 | `src/options/index.ts` | Settings section has no import JSON (export only); import deferred to M8 alongside persistence opt-ins |
 | `src/background/index.ts` | `webNavigation` is declared in manifest permissions but `browser.webNavigation.onErrorOccurred` is not yet wired — add when M9 broker set makes load-error detection meaningful |
 | `src/content/classify.ts` | Turnstile-script detection assumes solve **navigates away** (proven on TPS only). A broker that resolves the gate **inline** would strand the challenge view — see the M9 per-broker challenge-resolve gate before onboarding one |
-| `src/shared/dataset.ts` | `TRUSTED_PUBKEYS_RAW` holds **placeholder** keys — replace with the real published Ed25519 public keys (runbook). Until then no remote dataset validates (feature inert by design). Host `data.expurge.com` needs the exact subdomain confirmed; extension id is still `expurge@expurge.dev` (domain is expurge.com) — reconcile before AMO |
+| `src/shared/dataset.ts` | `TRUSTED_PUBKEYS_RAW` holds **placeholder** keys — replace with the real published Ed25519 public keys (runbook). Until then no remote dataset validates (feature inert by design). Host subdomain confirmed `data.expurge.com`; extension id reconciled to `expurge@expurge.com` to match the domain (Q-019, 2026-07-18) |
 
 ---
 
