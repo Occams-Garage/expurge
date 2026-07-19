@@ -100,7 +100,7 @@ DNS, so this only produces artifacts they run. Pull the M9 CI schema validator f
 - `dist/` is gitignored (a build artifact); so is `node_modules/`.
 - Green-bar command before any commit: `npm run typecheck && npm test && npm run build`
   (add `npm run coverage` to confirm thresholds).
-- Git identity is set repo-locally to `Dustin VanKrimpen <Dustinrvk@gmail.com>` (global was
+- Git identity is set repo-locally to `Occam's Garage <admin@occamsgarage.com>` (global was
   unset). Branch off `main`; end commit messages with the `Co-Authored-By: Claude ...` trailer.
   The project uses PRs (`gh pr create`) but merges docs-only changes fast-forward locally.
 

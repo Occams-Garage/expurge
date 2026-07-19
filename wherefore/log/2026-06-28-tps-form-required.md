@@ -22,7 +22,7 @@ cards alongside email drafts without losing type safety. See also:
 ### TPS channel corrected to web_form / form_required
 The broker record's optout array was updated from `method: email, kind: dedicated_optout`
 to `method: web_form, kind: form_required, target: https://www.truepeoplesearch.com/removal`.
-Trust fields set: `trust: verified, last_checked: 2026-06-28, verified_by: dustinrvk@gmail.com`.
+Trust fields set: `trust: verified, last_checked: 2026-06-28, verified_by: admin@occamsgarage.com`.
 
 The old `optout@truepeoplesearch.com` email address in the prior record was never verified;
 the form at `/removal` is the real, current opt-out path.
