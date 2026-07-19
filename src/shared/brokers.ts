@@ -51,7 +51,7 @@ export const BROKERS: readonly Broker[] = [
         trust: 'verified',
         last_checked: '2026-06-28',
         source: 'https://www.truepeoplesearch.com/removal',
-        verified_by: 'dustinrvk@gmail.com',
+        verified_by: 'admin@occamsgarage.com',
       },
     ],
   },
