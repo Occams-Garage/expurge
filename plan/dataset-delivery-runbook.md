@@ -37,12 +37,15 @@ what `importEd25519Key` expects).
 ```bash
 # One keypair. Repeat for the backup, store its private key OFFLINE (never in CI).
 openssl genpkey -algorithm ed25519 -out primary.pem
-# raw 32-byte public key → base64url (strip the 12-byte SPKI/DER prefix, then base64url):
-openssl pkey -in primary.pem -pubout -outform DER | tail -c 32 \
-  | basenc --base64url | tr -d '='
+# raw 32-byte public key → base64url. Portable — Node is already required by the sign/verify
+# scripts, and this matches exactly what importEd25519Key / verify.mjs expect:
+node -e "const c=require('crypto');const pub=c.createPublicKey(c.createPrivateKey(require('fs').readFileSync('primary.pem'))).export({type:'spki',format:'der'}).subarray(-32);console.log(pub.toString('base64url'))"
+
+# GNU-coreutils alternative (basenc is absent on stock macOS):
+openssl pkey -in primary.pem -pubout -outform DER | tail -c 32 | basenc --base64url | tr -d '='
 ```
-(Any tool that yields the raw 32-byte public key works — Node `crypto`, `age-keygen`-style tools,
-etc. The sign step below must produce a raw 64-byte Ed25519 signature, base64url.)
+(Any tool that yields the raw 32-byte public key works. The sign step below must produce a raw
+64-byte Ed25519 signature, base64url.)
 
 ## 3. Pin the public keys in the extension
 In `src/shared/dataset.ts`, replace the two `TRUSTED_PUBKEYS_RAW` placeholder values with the
