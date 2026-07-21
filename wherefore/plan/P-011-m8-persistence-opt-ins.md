@@ -1,5 +1,5 @@
 ---
-id: P-003
+id: P-011
 title: M8 persistence opt-ins (three toggles, cross-session resume, import JSON)
 status: todo
 created: 2026-07-19

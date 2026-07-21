@@ -1,5 +1,5 @@
 ---
-id: P-002
+id: P-010
 title: M7 dataset go-live (keypair, pin keys, host, first end-to-end fetch)
 status: todo
 created: 2026-07-19
@@ -12,7 +12,7 @@ decision_ref: 2026-07-09-m7-signed-dataset-extension-side, 2026-06-28-dataset-up
 The human-only half of M7 infra: generate and hold the keys, stand up the host, and
 prove the first real fetch. Until this ships, `loadTrustedKeys()` finds no usable key,
 `DatasetStatus.configured` stays `false`, and the bundled baseline is always used (that
-inert state is intentional and AMO-safe). Depends on [[P-001-m7-infra-scaffolding]].
+inert state is intentional and AMO-safe). Depends on [[P-009-m7-infra-scaffolding]].
 Source: `plan/dataset-delivery-runbook.md` steps 2, 3, 7.
 
 - [ ] Generate two Ed25519 keypairs, primary (routine CI signing) and backup (offline, emergency re-sign + rotation); export each public key as raw 32 bytes, base64url

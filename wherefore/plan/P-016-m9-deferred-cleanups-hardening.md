@@ -1,5 +1,5 @@
 ---
-id: P-008
+id: P-016
 title: M9 deferred cleanups and real-broker hardening
 status: todo
 created: 2026-07-19
@@ -9,7 +9,7 @@ milestone: M9
 ---
 
 The consciously-deferred code-review findings and integration hardening that come due
-once the full broker set lands ([[P-004-m9-populate-verified-brokers]]). Several are
+once the full broker set lands ([[P-012-m9-populate-verified-brokers]]). Several are
 contingent on a broker with a shape the current set lacks (SPA, second form channel).
 Source: `plan/expurge-progress.md` "Known code TODOs" + "Consciously deferred" tables,
 and the M7 display-path deferral.
