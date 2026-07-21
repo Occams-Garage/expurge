@@ -1,8 +1,9 @@
 ---
 id: P-009
 title: M7 dataset infra scaffolding (sign.mjs, CI validate-sign-publish, data repo)
-status: todo
+status: doing
 created: 2026-07-19
+updated: 2026-07-20
 area: broker-dataset
 topics: [security-signing, dataset-distribution]
 milestone: M7
