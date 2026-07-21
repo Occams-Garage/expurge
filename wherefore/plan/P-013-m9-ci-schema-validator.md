@@ -1,5 +1,5 @@
 ---
-id: P-005
+id: P-013
 title: M9 CI schema validator + trust-bit hygiene enforcement
 status: todo
 created: 2026-07-19
@@ -10,7 +10,7 @@ decision_ref: 2026-06-28-broker-dataset-schema, 2026-06-28-verification-draft-ga
 ---
 
 Mechanical guard on the dataset so malformed or over-trusted records cannot ship. This
-is the validator the M7 CI pipeline pulls forward ([[P-001-m7-infra-scaffolding]]).
+is the validator the M7 CI pipeline pulls forward ([[P-009-m7-infra-scaffolding]]).
 Source: `plan/expurge-progress.md` -> M9, `plan/expurge-plan.md` §5 + §5a. The
 trust-bit rule is the crown jewel: a wrong opt-out address mails PII to the wrong place.
 

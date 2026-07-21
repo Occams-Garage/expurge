@@ -1,5 +1,5 @@
 ---
-id: P-007
+id: P-015
 title: M9 CCPA template + DROP registry legal verify (pre-launch)
 status: todo
 created: 2026-07-19
@@ -17,6 +17,6 @@ it ends by capturing a decision (or raising new questions). Source:
 
 - [ ] Does the CA CCPA template body match current statute language? What exact wording is required?
 - [ ] Does the US general opt-out template body hold up for the non-CA states in scope?
-- [ ] Which of the ~25 sites in [[P-004-m9-populate-verified-brokers]] overlap the public California DROP registry, and how does the DROP informational notice need to describe that overlap?
+- [ ] Which of the ~25 sites in [[P-012-m9-populate-verified-brokers]] overlap the public California DROP registry, and how does the DROP informational notice need to describe that overlap?
 - [ ] Is the auto-select-by-`state` behavior (US general vs CA CCPA + DROP notice) correct for the verified language?
 - [ ] Capture the outcome as a decision and resolve Q-010; if unknowns remain, raise them via `ask`

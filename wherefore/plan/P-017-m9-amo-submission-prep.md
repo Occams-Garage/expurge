@@ -1,5 +1,5 @@
 ---
-id: P-009
+id: P-017
 title: M9 AMO submission prep
 status: todo
 created: 2026-07-19
@@ -10,8 +10,8 @@ decision_ref: 2026-06-28-amo-compliance
 ---
 
 The launch gate: package and list the extension on AMO. Depends on the dataset and
-hardening being real ([[P-004-m9-populate-verified-brokers]], [[P-008-m9-deferred-cleanups-hardening]])
-and on the legal review ([[P-007-m9-ccpa-drop-legal-verify]]). Source:
+hardening being real ([[P-012-m9-populate-verified-brokers]], [[P-016-m9-deferred-cleanups-hardening]])
+and on the legal review ([[P-015-m9-ccpa-drop-legal-verify]]). Source:
 `plan/expurge-progress.md` -> M9, `plan/dataset-delivery-runbook.md` §8,
 `plan/expurge-plan.md` §8a, `plan/sidebar-nav-follow-up.md` §7.
 
