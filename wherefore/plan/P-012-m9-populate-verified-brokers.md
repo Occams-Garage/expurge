@@ -1,5 +1,5 @@
 ---
-id: P-004
+id: P-012
 title: M9 populate ~25 verified brokers in brokers.json
 status: todo
 created: 2026-07-19
@@ -12,7 +12,7 @@ decision_ref: 2026-06-28-broker-dataset-schema, 2026-06-28-verification-workflow
 Grow the dataset from one broker (TruePeopleSearch) to ~25 hand-curated people-search
 sites, every channel personally verified with trust bits stamped. Records are never
 deleted. Source: `plan/expurge-progress.md` -> M9, `plan/expurge-plan.md` §3 + §5.
-Each new broker must also pass the challenge-resolve gate ([[P-006-m9-challenge-resolve-gate]])
+Each new broker must also pass the challenge-resolve gate ([[P-014-m9-challenge-resolve-gate]])
 before it is enabled.
 
 - [ ] Curate the ~25-site list; assign stable `id` slugs (never change after shipping)
