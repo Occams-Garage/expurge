@@ -1,7 +1,7 @@
 ---
 id: P-010
 title: M7 dataset go-live (keypair, pin keys, host, first end-to-end fetch)
-status: todo
+status: doing
 created: 2026-07-19
 area: broker-dataset
 topics: [security-signing, dataset-distribution]
