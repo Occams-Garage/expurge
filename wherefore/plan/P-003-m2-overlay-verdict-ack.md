@@ -2,8 +2,8 @@
 id: P-003
 title: "M2: content-script overlay + four-way verdict + ACK contract"
 status: done
-created: 2026-07-20
-updated: 2026-07-20
+created: 2026-06-28
+updated: 2026-06-28
 area: matching-overlay
 topics: [webextensions, ux]
 milestone: M2

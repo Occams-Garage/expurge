@@ -2,8 +2,8 @@
 id: P-004
 title: "M3: draft gate + three send surfaces"
 status: done
-created: 2026-07-20
-updated: 2026-07-20
+created: 2026-06-28
+updated: 2026-06-28
 area: opt-out-drafts
 topics: [verification]
 milestone: M3

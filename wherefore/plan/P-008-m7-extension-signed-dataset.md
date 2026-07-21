@@ -2,8 +2,8 @@
 id: P-008
 title: "M7 extension-side: signed remote dataset core (inert until keys pinned)"
 status: done
-created: 2026-07-20
-updated: 2026-07-20
+created: 2026-07-09
+updated: 2026-07-09
 area: broker-dataset
 topics: [security-signing, dataset-distribution]
 milestone: M7

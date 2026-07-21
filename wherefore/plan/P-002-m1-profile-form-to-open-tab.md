@@ -2,8 +2,8 @@
 id: P-002
 title: "M1: profile form to URL render to open tab"
 status: done
-created: 2026-07-20
-updated: 2026-07-20
+created: 2026-06-28
+updated: 2026-06-28
 area: run-model
 topics: [webextensions]
 milestone: M1

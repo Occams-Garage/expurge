@@ -2,8 +2,8 @@
 id: P-001
 title: "M0: manifest + build skeleton"
 status: done
-created: 2026-07-20
-updated: 2026-07-20
+created: 2026-06-28
+updated: 2026-06-28
 topics: [webextensions, typescript]
 milestone: M0
 decision_ref: 2026-06-28-mv3-and-manifest, 2026-06-28-firefox-extension-pivot

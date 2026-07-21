@@ -2,8 +2,8 @@
 id: P-006
 title: "M5: multi-broker batching + AKA name-variant fan-out"
 status: done
-created: 2026-07-20
-updated: 2026-07-20
+created: 2026-06-29
+updated: 2026-06-29
 area: run-model
 milestone: M5
 decision_ref: 2026-06-30-aka-structured-name-fields, 2026-06-28-run-model-mechanics
