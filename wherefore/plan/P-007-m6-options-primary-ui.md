@@ -2,8 +2,8 @@
 id: P-007
 title: "M6: options page as primary UI + popup redesign"
 status: done
-created: 2026-07-20
-updated: 2026-07-20
+created: 2026-06-29
+updated: 2026-06-30
 topics: [ux]
 milestone: M6
 decision_ref: 2026-06-29-m6-options-design-decisions, 2026-06-28-ux-architecture, 2026-06-30-results-broker-grouped

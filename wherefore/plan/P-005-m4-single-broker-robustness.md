@@ -2,8 +2,8 @@
 id: P-005
 title: "M4: single-broker robustness"
 status: done
-created: 2026-07-20
-updated: 2026-07-20
+created: 2026-06-29
+updated: 2026-06-29
 area: run-model
 topics: [webextensions]
 milestone: M4
