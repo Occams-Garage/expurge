@@ -11,7 +11,7 @@ superseded-date:
 ---
 
 ## Summary
-Four related bugs around Cloudflare challenge pages were diagnosed and fixed in one session. "Restore Overlay" was opening a fresh tab (triggering a new Cloudflare session instead of reusing the existing one); the Turnstile widget's persistent DOM node was permanently blocking the challenge→main panel transition; navigation errors on CDN validation paths were falsely marking items as skipped; and `tabs.onUpdated` was attempting overlay injection on off-host challenge domains. All four were addressed in `b800797`.
+Four related bugs around Cloudflare challenge pages were diagnosed and fixed in one session. "Restore Overlay" was opening a fresh tab (triggering a new Cloudflare session instead of reusing the existing one); the Turnstile widget's persistent DOM node was permanently blocking the challenge→main panel transition; navigation errors on CDN validation paths were falsely marking items as skipped; and `tabs.onUpdated` was attempting overlay injection on off-host challenge domains. All four were addressed in `506acdd`.
 
 ## Decisions / outcomes
 - **Fallback tab pattern** (`findActiveBrokerTab`): mid-redirect tabs (hostname mismatch) are saved as a fallback rather than pruned. "Restore Overlay" now focuses the existing challenged tab instead of opening a new Cloudflare session.

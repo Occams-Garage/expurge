@@ -93,7 +93,7 @@ Coverage `include` is scoped per phase (`src/shared/**` now; widen with T3/T4). 
 
 ## Next steps (pick up cold from here)
 
-Branch `test/vitest-suite` is at commit `328234c` — 97 tests, 100% coverage, nothing pushed.
+Branch `test/vitest-suite` is at commit `9c5851b` — 97 tests, 100% coverage, nothing pushed.
 
 ### A. Finish tier T4 (this branch or a follow-up)
 1. **Overlay PII-injection invariant.** Extract the overlay renderer from
