@@ -40,6 +40,16 @@
             <p id="start-error" class="error-msg hidden"></p>
           </div>
 
+          <div id="run-resumable" class="hidden">
+            <h2>Resume your scan</h2>
+            <p class="body-text" id="run-resumable-desc"></p>
+            <div class="action-row">
+              <button id="btn-resume" class="btn-primary">Resume scan</button>
+              <button id="btn-resume-new" class="btn-secondary">Start a new scan</button>
+            </div>
+            <p id="resume-error" class="error-msg hidden"></p>
+          </div>
+
           <div id="run-active" class="hidden">
             <h2 id="run-active-heading">Scan in progress</h2>
             <p id="run-active-desc" class="body-text"></p>
@@ -80,7 +90,7 @@
         <!-- ── Profile ───────────────────────────────────────── -->
         <section id="section-profile" class="hidden">
           <h2>Your profile</h2>
-          <p class="note">Stored only in this browser session — never uploaded.</p>
+          <p class="note">Kept on this device only — never uploaded. By default it's cleared when you close the browser; see Settings → Storage to keep it.</p>
 
           <form id="profile-form" novalidate>
             <fieldset class="field-group">
@@ -161,6 +171,22 @@
           <h2>Settings</h2>
 
           <div class="settings-block">
+            <h3 class="settings-heading">Storage</h3>
+            <p class="note">
+              By default nothing is kept — your profile and scan results live in memory only and
+              are cleared when you close the browser. Turn this on to keep them on this device
+              between sessions. Nothing is ever uploaded either way.
+            </p>
+            <label class="radio-item">
+              <input type="checkbox" id="optin-profile-storage">
+              <div class="radio-text">
+                <span class="radio-label">Remember my profile on this device</span>
+                <span class="radio-desc">Saves your profile so you don't re-enter it each session, and lets an unfinished scan resume after you reopen the browser. Stored only on this device · never uploaded.</span>
+              </div>
+            </label>
+          </div>
+
+          <div class="settings-block">
             <h3 class="settings-heading">Preferred send method</h3>
             <p class="note">How you prefer to deliver opt-out emails.</p>
             <div class="radio-group" id="send-method-group">
@@ -217,13 +243,23 @@
 
           <div class="settings-block">
             <h3 class="settings-heading">Your data</h3>
-            <p class="note">All data is in this browser session only. Nothing is uploaded.</p>
+            <p class="note">Everything stays on this device. Nothing is ever uploaded.</p>
             <div class="action-row">
-              <button id="btn-export" class="btn-secondary">Export session data</button>
+              <button id="btn-export" class="btn-secondary">Export data</button>
+              <button id="btn-import" class="btn-secondary">Import data</button>
               <button id="btn-delete-all" class="btn-danger">Delete all data</button>
             </div>
+            <input type="file" id="import-file" accept="application/json" class="hidden">
+            <p id="import-msg" class="note hidden"></p>
+            <div id="import-confirm-panel" class="hidden confirm-panel">
+              <p>You already have a profile. Importing replaces it with the file's profile — no merge. This can't be undone.</p>
+              <div class="action-row">
+                <button id="btn-import-confirm" class="btn-danger">Replace my profile</button>
+                <button id="btn-import-cancel" class="btn-quiet">Cancel</button>
+              </div>
+            </div>
             <div id="delete-confirm-panel" class="hidden confirm-panel">
-              <p>This clears your profile and run data from this session. This can't be undone.</p>
+              <p>This clears your profile and run data from this device. This can't be undone.</p>
               <div class="action-row">
                 <button id="btn-delete-confirm" class="btn-danger">Delete everything</button>
                 <button id="btn-delete-cancel" class="btn-quiet">Cancel</button>

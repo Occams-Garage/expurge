@@ -154,6 +154,26 @@ export function applyMarkSent(run: RunState, itemId: string, nowIso: string): Ru
   };
 }
 
+// Prepare a persisted run for cross-session resume after a browser restart (M8). Every `open`
+// AND `deferred` item lost its live tab — the tab registry is session-scoped and wiped on close —
+// so both revert to `pending`; the batch opener re-creates their tabs. `verdicted` items keep
+// their verdicts; `pending` items are untouched. `tabId` is stripped defensively (never durable,
+// but a stale one must not survive), and `windowId` is dropped: the pre-close window is dead, and
+// a stale windowId makes every sidebar push a silent no-op — the resume gesture re-pins a fresh
+// one. Idempotent, so it's safe to re-apply on the resume click even after onStartup ran it.
+export function rehydrateForResume(run: RunState): RunState {
+  const { windowId: _windowId, ...rest } = run; // drop windowId — pre-close window is dead
+  return {
+    ...rest,
+    items: run.items.map(i => {
+      const { tabId: _tabId, ...item } = i;
+      return i.status === 'open' || i.status === 'deferred'
+        ? { ...item, status: 'pending' as WorkItemStatus }
+        : item;
+    }),
+  };
+}
+
 // A run is done only when nothing is still in flight: no pending, open, or deferred items
 // remain (deferred is non-terminal — its tab is open and its verdict isn't in yet). Popup,
 // options, and the sidebar share this one definition so their "done" states can't drift.

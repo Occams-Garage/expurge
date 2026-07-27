@@ -118,15 +118,35 @@ actually lands (with only the bundled dataset today the two are identical). Also
 consent-prompt copy still needs legal review (Q-006).
 
 #### M8 — Persistence opt-ins
-- Three independent toggles in Settings → Storage (all default OFF):
-  1. Profile storage → `storage.local` (enables cross-session run resume)
-  2. Run metadata (per-broker last-checked + result, no PII)
-  3. Rich hits/drafts history (rides profile opt-in)
-- Contextual first-exposure banners (Run done → run-metadata opt-in; Results → rich-history opt-in; Profile → profile-storage opt-in)
-- Background: loadRun() / saveRun() promote to `storage.local` when profile-storage opt-in is active; cross-session resume on reopen
-- Export: JSON (no draft bodies, raw data only), download via downloads API
-- Import: read JSON, warn-and-overwrite if profile exists (no merge)
-- Delete-all: inline single-confirmation panel, wipes all `storage.local` expurge keys
+
+Three independent opt-in toggles (all default OFF) that promote ephemeral state to
+`storage.local`. Delivered in **two phases** (decision `2026-07-27-m8-persistence-optins-build`);
+plan item [[P-011]]. Rich hits/drafts history (#3) is scoped **current-run-only** (no cross-run
+archive; deferred to v2).
+
+**Phase 1 — DONE (2026-07-27, branch `feat/m8-persistence-optins`):**
+- `src/shared/storage-prefs.ts` (pure): `StoragePrefs`, `mergeStoragePrefs` (coerce + ride-along
+  normalize — `richHistory` can't be on without `profileStorage`), `applyStorageOptIn`. Unit-tested.
+- `src/background/storage-prefs-store.ts` (IO, coverage-excluded): `expurge_storage_prefs` key,
+  `readStoragePrefs` (fail-safe to ephemeral default → no-wedge) / `writeStoragePrefs`, purge stubs.
+- `src/shared/import-export.ts` (pure): `parseSessionImport` validates the full profile shape
+  (required scalars, optional scalars, string-arrays, `also_known_as`) before any write. Unit-tested.
+- Background: the four persistence funcs are **area-routed** by the profile-storage flag
+  (write-through + inactive-area cleanup, read-active-only, NO fallback; `tab_id` never durable).
+  `SET_STORAGE_OPTIN` migrates run/profile between areas (populate-new → flip-pref-last → purge-old,
+  crash-safe). Cross-session resume: pure `rehydrateForResume` (open/deferred→pending, keep verdicts,
+  drop windowId) on `onStartup` **and** `onInstalled('update')`; user-gestured `RESUME_RUN`.
+  `GET_RUN_STATE` serialized against the write queue. DELETE_ALL clears both areas in `serialWrite`.
+- Options UI: Settings → **Storage** sub-section (profile-storage toggle, on-device reassurance,
+  tokens only); Import JSON in "Your data" (warn-and-overwrite via `.confirm-panel`, routed through
+  `SAVE_PROFILE`); **Resume** affordance in the Run panel when a persisted in-flight run is detected.
+- Verified: typecheck + 238 tests + build + coverage (98.8/98.4/100/100) + xhigh code review + fixes.
+
+**Phase 2 — PENDING:**
+- Run metadata (#2): per-broker last-checked + result, no PII; the #2 toggle + persistence (independent of #1).
+- Rich hits/drafts history (#3), current-run-only: the #3 toggle (rides #1) + persistence + purge-on-opt-out.
+- Contextual first-exposure banners (Run done → run-metadata; Results → rich-history; Profile → profile-storage).
+- Manual Firefox verification of the IO/UI paths (`web-ext run` / `about:debugging`).
 
 #### M9 — Full dataset + launch polish
 - ~25 verified people-search brokers in brokers.json (all channels personally verified, trust bits stamped)

@@ -26,6 +26,8 @@ export default defineConfig({
                                           //   (the pure resolvers in tab-registry-resolve.ts ARE covered)
         'src/background/dataset-store.ts', // polyfill/fetch/permissions I/O wrapper — not node-testable
                                            //   (the pure core in src/shared/dataset.ts IS covered)
+        'src/background/storage-prefs-store.ts', // polyfill-bound storage.local I/O wrapper — not node-testable
+                                                 //   (the pure core in src/shared/storage-prefs.ts IS covered)
         'src/content/index.ts', // entrypoint: headless challenge reporter (DOM observer) — integration-test TODO
         'src/options/index.ts', // entrypoint: form/nav wiring — integration-test TODO
         'src/popup/index.ts', // entrypoint: thin popup render — integration-test TODO
