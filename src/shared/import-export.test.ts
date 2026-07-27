@@ -6,13 +6,22 @@ const wrap = (over: Record<string, unknown> = {}): string =>
   JSON.stringify({ expurge_export: true, version: 1, profile: validProfile, run: null, ...over });
 
 describe('parseSessionImport', () => {
-  it('accepts a well-formed export and returns profile + run', () => {
-    const run = { runId: 'x', createdAt: 't', items: [] };
-    expect(parseSessionImport(wrap({ run }))).toEqual({ ok: true, profile: validProfile, run });
+  it('accepts a well-formed export and returns the profile (run is ignored in Phase 1)', () => {
+    expect(parseSessionImport(wrap({ run: { runId: 'x', createdAt: 't', items: [] } })))
+      .toEqual({ ok: true, profile: validProfile });
+  });
+
+  it('accepts a full profile with valid optional fields', () => {
+    const profile = {
+      ...validProfile, middle: 'Q', zip: '89501', age: '40',
+      relatives: ['Bob Doe'], emails: ['jane@example.com'], phones: ['555-1234'],
+      also_known_as: [{ first: 'Janie', last: 'Doe', middle: 'Q' }, { first: 'J', last: 'D' }],
+    };
+    expect(parseSessionImport(wrap({ profile }))).toEqual({ ok: true, profile });
   });
 
   it('accepts a null profile (the caller decides there is nothing to import)', () => {
-    expect(parseSessionImport(wrap({ profile: null }))).toEqual({ ok: true, profile: null, run: null });
+    expect(parseSessionImport(wrap({ profile: null }))).toEqual({ ok: true, profile: null });
   });
 
   it('rejects invalid JSON', () => {
@@ -42,5 +51,25 @@ describe('parseSessionImport', () => {
 
   it('rejects a non-object profile', () => {
     expect(parseSessionImport(wrap({ profile: 'nope' })).ok).toBe(false);
+  });
+
+  it('rejects a non-string optional scalar (would store junk)', () => {
+    expect(parseSessionImport(wrap({ profile: { ...validProfile, age: 40 } })).ok).toBe(false);
+  });
+
+  it('rejects a string where a string-array field is expected (would throw in .join after overwrite)', () => {
+    expect(parseSessionImport(wrap({ profile: { ...validProfile, relatives: 'Bob Doe' } })).ok).toBe(false);
+    expect(parseSessionImport(wrap({ profile: { ...validProfile, emails: 'a@b.com' } })).ok).toBe(false);
+  });
+
+  it('rejects a string-array containing a non-string element', () => {
+    expect(parseSessionImport(wrap({ profile: { ...validProfile, phones: ['555-1234', 42] } })).ok).toBe(false);
+  });
+
+  it('rejects a malformed also_known_as (not an aka-object array)', () => {
+    expect(parseSessionImport(wrap({ profile: { ...validProfile, also_known_as: 'Janie Doe' } })).ok).toBe(false);
+    expect(parseSessionImport(wrap({ profile: { ...validProfile, also_known_as: [{ first: 'J' }] } })).ok).toBe(false);
+    expect(parseSessionImport(wrap({ profile: { ...validProfile, also_known_as: ['Janie'] } })).ok).toBe(false);
+    expect(parseSessionImport(wrap({ profile: { ...validProfile, also_known_as: [null] } })).ok).toBe(false);
   });
 });

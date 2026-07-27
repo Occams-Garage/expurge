@@ -4,6 +4,7 @@ import type { Draft, EmailDraft, FormDraft } from '../shared/templates';
 import { mailtoUrl, toEml, toCopyText } from '../shared/templates';
 import { normalizeAkas } from '../shared/transforms';
 import { parseSessionImport } from '../shared/import-export';
+import { DEFAULT_STORAGE_PREFS } from '../shared/storage-prefs';
 import { BROKERS, getBroker } from '../shared/brokers';
 import { DATASET_HOST_PATTERN, type DatasetStatus, type CheckResult } from '../shared/dataset';
 import { progressOf, isComplete, isMissingSkip } from '../background/coordinator';
@@ -28,7 +29,7 @@ let currentProfile: Profile | null = null;
 let sendMethod: SendMethod = 'mailto';
 let pollHandle: number | null = null;
 let lastResultsSig = ''; // results view signature of the last render — gates the 2s poll
-let storagePrefs: StoragePrefs = { profileStorage: false, runMetadata: false, richHistory: false };
+let storagePrefs: StoragePrefs = { ...DEFAULT_STORAGE_PREFS };
 let pendingImportProfile: Profile | null = null; // stashed between file-read and warn-and-overwrite confirm
 
 // ── section routing ──────────────────────────────────────────────────────────
@@ -872,10 +873,16 @@ function reflectStoragePrefs(): void {
 }
 
 async function handleStorageOptIn(key: keyof StoragePrefs, on: boolean): Promise<void> {
-  // Background returns the NORMALIZED prefs (e.g. turning profileStorage off forces richHistory
-  // off too), so reflect what actually took effect rather than the raw checkbox value.
-  const res = (await browser.runtime.sendMessage({ type: 'SET_STORAGE_OPTIN', key, on })) as { prefs: StoragePrefs };
-  storagePrefs = res.prefs;
+  try {
+    // Background returns the NORMALIZED prefs (e.g. turning profileStorage off forces richHistory
+    // off too), so reflect what actually took effect rather than the raw checkbox value.
+    const res = (await browser.runtime.sendMessage({ type: 'SET_STORAGE_OPTIN', key, on })) as { prefs: StoragePrefs };
+    storagePrefs = res.prefs;
+  } catch (e) {
+    // The write never landed — leave storagePrefs at its last-known-good so reflect reverts the
+    // natively-toggled checkbox, rather than leaving it showing a state the background never applied.
+    console.error(e);
+  }
   reflectStoragePrefs();
 }
 
@@ -909,6 +916,9 @@ async function handleImportFile(file: File): Promise<void> {
 async function applyImportedProfile(profile: Profile): Promise<void> {
   await browser.runtime.sendMessage({ type: 'SAVE_PROFILE', profile });
   currentProfile = profile;
+  // Drafts are built from the profile — drop stale cached panels so a loaded draft can't keep
+  // rendering (and mail) the PREVIOUS profile's PII (mirrors handleProfileSave).
+  invalidateDraftPanels();
   populateProfileForm(profile); // pre-fill so the Profile tab is ready when the user navigates there
   // Confirm in place (Settings, where the Import button lives) — switching sections would hide this.
   const msg = document.getElementById('import-msg')!;
@@ -1066,6 +1076,11 @@ async function handleDeleteAll(): Promise<void> {
   await browser.runtime.sendMessage({ type: 'DELETE_ALL' });
   currentProfile = null;
   currentRun = null;
+  // DELETE_ALL's storage.local.clear() also wiped the opt-in flags → the background is back to the
+  // all-OFF ephemeral default. Re-sync the in-memory mirror + checkbox so they can't keep showing a
+  // stale ON (which would route a re-entered profile to storage.session and lose it on close).
+  storagePrefs = { ...DEFAULT_STORAGE_PREFS };
+  reflectStoragePrefs();
   lastResultsSig = ''; // run cleared — drop the early-out cache so the next render rebuilds
   stopPolling();
   (document.getElementById('profile-form') as HTMLFormElement).reset();
@@ -1271,7 +1286,10 @@ document.getElementById('optin-profile-storage')!.addEventListener('change', e =
 
 // Resume a persisted run (M8)
 document.getElementById('btn-resume')!.addEventListener('click', () => { handleResume().catch(console.error); });
-document.getElementById('btn-resume-new')!.addEventListener('click', () => { showRunDisplayState('ready'); });
+// Start fresh: handleStartRun builds a new run and saveRun overwrites the persisted one, so the
+// old scan is actually discarded (merely showing 'ready' would leave it to resurface). Mirrors
+// "Run again" on the done screen.
+document.getElementById('btn-resume-new')!.addEventListener('click', () => { handleStartRun().catch(console.error); });
 
 document.getElementById('btn-export')!.addEventListener('click', () => { handleExport().catch(console.error); });
 

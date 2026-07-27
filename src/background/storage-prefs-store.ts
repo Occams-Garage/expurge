@@ -5,7 +5,7 @@
 
 import browser from 'webextension-polyfill';
 import type { StoragePrefs } from '../shared/types';
-import { mergeStoragePrefs } from '../shared/storage-prefs';
+import { mergeStoragePrefs, DEFAULT_STORAGE_PREFS } from '../shared/storage-prefs';
 
 // storage.local (durable). Kept separate from the options page's `expurge_prefs` (send-method),
 // which is whole-object-overwritten by saveSendMethod — co-locating the flags would clobber them.
@@ -15,8 +15,16 @@ const KEY_RUN_METADATA = 'expurge_run_metadata'; // per-broker last-checked + re
 const KEY_HISTORY = 'expurge_history';           // rich hits/drafts history (Phase 2 writes it)
 
 export async function readStoragePrefs(): Promise<StoragePrefs> {
-  const r = await browser.storage.local.get(KEY_STORAGE_PREFS);
-  return mergeStoragePrefs(r[KEY_STORAGE_PREFS]);
+  try {
+    const r = await browser.storage.local.get(KEY_STORAGE_PREFS);
+    return mergeStoragePrefs(r[KEY_STORAGE_PREFS]);
+  } catch {
+    // Fail-safe: loadRun/saveRun call this on every run read/write, so a storage.local error must
+    // not throw (that would reject a verdict write → no ACK → the sidebar retries forever, wedging
+    // the run). Degrade to the ephemeral default — run/profile stay in storage.session, the safe
+    // fallback — rather than propagate.
+    return DEFAULT_STORAGE_PREFS;
+  }
 }
 
 export async function writeStoragePrefs(prefs: StoragePrefs): Promise<void> {

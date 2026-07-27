@@ -109,8 +109,8 @@ async function loadRun(): Promise<RunState | null> {
 
 async function saveRun(run: RunState): Promise<void> {
   const { active, inactive } = areasFor(await readStoragePrefs());
-  await writeRun(active, run);
-  await inactive.remove(KEY_RUN);
+  // Write-to-active and remove-from-inactive touch different areas → run them in parallel.
+  await Promise.all([writeRun(active, run), inactive.remove(KEY_RUN)]);
 }
 
 async function loadProfile(): Promise<Profile | null> {
@@ -121,8 +121,7 @@ async function loadProfile(): Promise<Profile | null> {
 
 async function saveProfile(profile: Profile): Promise<void> {
   const { active, inactive } = areasFor(await readStoragePrefs());
-  await active.set({ [KEY_PROFILE]: profile });
-  await inactive.remove(KEY_PROFILE);
+  await Promise.all([active.set({ [KEY_PROFILE]: profile }), inactive.remove(KEY_PROFILE)]);
 }
 
 // ── badge ─────────────────────────────────────────────────────────────────────
@@ -159,20 +158,24 @@ async function openNextBatch(run: RunState, focusFirst = false): Promise<RunStat
 
 // ── handlers ─────────────────────────────────────────────────────────────────
 
+// Resolve the window a run pins to: the caller's explicit windowId (popup/options pass it,
+// captured synchronously alongside the sidebar open), else the last-focused window. A missing id
+// means every windowId-scoped sidebar push silently no-ops, so warn — diagnosable, not a silent
+// dead sidebar. `label` names the caller (START_RUN / RESUME_RUN) in the log.
+async function resolveWindowId(windowId: number | undefined, label: string): Promise<number | undefined> {
+  const resolved = windowId ?? (await browser.windows.getLastFocused()).id;
+  if (resolved === undefined) {
+    console.warn(`[expurge] ${label} resolved no windowId — sidebar pushes will be suppressed for this run`);
+  }
+  return resolved;
+}
+
 async function handleStartRun(profile: Profile, windowId?: number): Promise<void> {
-  await saveProfile(profile);
   return serialWrite(async () => {
-    // Pin the run to the Start-click's window. §7 wires popup/options to pass windowId
-    // explicitly (captured synchronously alongside the sidebar open); until then, fall back
-    // to the sender's window or the last-focused one.
-    const resolvedWindowId = windowId ?? (await browser.windows.getLastFocused()).id;
-    // Latent (#15): options Start passes an explicit windowId, so this shouldn't fire. But if
-    // getLastFocused().id ever came back undefined, run.windowId would be undefined and every
-    // sidebar push early-returns — no updates for the whole run. Warn so that's diagnosable
-    // rather than a silent dead sidebar.
-    if (resolvedWindowId === undefined) {
-      console.warn('[expurge] START_RUN resolved no windowId — sidebar pushes will be suppressed for this run');
-    }
+    // saveProfile inside the lock: it's now area-routed by the persistence opt-in, so a concurrent
+    // SET_STORAGE_OPTIN area-flip could otherwise race it (misplacing/deleting the write).
+    await saveProfile(profile);
+    const resolvedWindowId = await resolveWindowId(windowId, 'START_RUN');
     const runId = crypto.randomUUID();
     // Build the run from the ACTIVE dataset (verified remote if present+unexpired, else bundled),
     // so a signed dataset update changes which brokers a run covers. (Display-path broker lookups
@@ -201,10 +204,7 @@ async function handleResumeRun(windowId?: number): Promise<void> {
   return serialWrite(async () => {
     const existing = await loadRun();
     if (!existing) return;
-    const resolvedWindowId = windowId ?? (await browser.windows.getLastFocused()).id;
-    if (resolvedWindowId === undefined) {
-      console.warn('[expurge] RESUME_RUN resolved no windowId — sidebar pushes will be suppressed for this run');
-    }
+    const resolvedWindowId = await resolveWindowId(windowId, 'RESUME_RUN');
     const run: RunState = { ...rehydrateForResume(existing), windowId: resolvedWindowId };
     await saveRun(run);
     await updateBadge(run);
@@ -490,7 +490,13 @@ browser.runtime.onMessage.addListener(
     }
 
     if (m.type === 'GET_RUN_STATE') {
-      const run = await loadRun();
+      // Serialize the read against the write queue so a poll can't observe a mid-mutation snapshot.
+      // handleVerdict persists the just-verdicted item, then opens the next batch in later awaits;
+      // between them the run transiently has 0 open/deferred + pending items, which the options
+      // page would misread as a "resumable" (restart) run and get stuck on. Reading after writes
+      // settle collapses that window.
+      let run: RunState | null = null;
+      await serialWrite(async () => { run = await loadRun(); });
       return { run };
     }
 
@@ -597,7 +603,8 @@ browser.runtime.onMessage.addListener(
     }
 
     if (m.type === 'SAVE_PROFILE') {
-      await saveProfile(m.profile as Profile);
+      // Serialize: saveProfile is area-routed, so it must not race a concurrent SET_STORAGE_OPTIN flip.
+      await serialWrite(() => saveProfile(m.profile as Profile));
       return { ok: true };
     }
 
@@ -744,16 +751,16 @@ browser.tabs.onActivated.addListener(async ({ windowId }) => {
   await pushActiveView(run);
 });
 
-// ── browser restart → rehydrate a persisted run for resume (M8) ───────────────
-// storage.session was wiped on close, so an ephemeral run is already gone. A run that persisted
-// (profileStorage opt-in) survived in storage.local, but its open/deferred items lost their tabs
-// (the tab registry is session-scoped). Revert them to pending NOW so every reader (options Run
-// panel, sidebar) sees consistent resumable state; the user re-opens the tabs via the Run panel's
-// Resume control (RESUME_RUN), which needs a gesture + a window to pin to.
-browser.runtime.onStartup.addListener(async () => {
+// ── wake into a fresh session → rehydrate a persisted run for resume (M8) ─────
+// storage.session is wiped both on a browser restart AND on an in-place extension update/reload,
+// while a profileStorage-opted-in run persists in storage.local. Its open/deferred items lost
+// their tabs (the tab registry is session-scoped), so revert them to pending — otherwise the run
+// is stranded as "active" with orphaned tabs and no resume path. An ephemeral run is already gone;
+// if opted out, sweep any run/profile orphan a mid-flip crash left. The user re-opens the tabs via
+// the Run panel's Resume control (RESUME_RUN), which needs a gesture + a window to pin to.
+async function rehydratePersistedRunOnWake(): Promise<void> {
   const prefs = await readStoragePrefs();
   if (!prefs.profileStorage) {
-    // Opted out → nothing should be durable. Sweep any run/profile orphan a mid-flip crash left.
     await browser.storage.local.remove([KEY_RUN, KEY_PROFILE]);
     return;
   }
@@ -761,12 +768,21 @@ browser.runtime.onStartup.addListener(async () => {
     const run = await loadRun();
     if (run) await saveRun(rehydrateForResume(run));
   });
+}
+
+// Browser restart fires onStartup. An in-place extension update/reload does NOT fire onStartup —
+// it fires onInstalled with reason 'update' — yet it also clears storage.session, so it needs the
+// same rehydrate (idempotent, so a browser_update firing both is harmless).
+browser.runtime.onStartup.addListener(() => {
+  rehydratePersistedRunOnWake().catch(console.error);
 });
 
-// ── first install → open options page ────────────────────────────────────────
-
 browser.runtime.onInstalled.addListener(({ reason }) => {
-  if (reason === 'install') browser.runtime.openOptionsPage().catch(console.error);
+  if (reason === 'install') {
+    browser.runtime.openOptionsPage().catch(console.error);
+  } else if (reason === 'update' || reason === 'browser_update') {
+    rehydratePersistedRunOnWake().catch(console.error);
+  }
 });
 
 // tabs.onUpdated intentionally has NO listener. The content script re-injects and reports
