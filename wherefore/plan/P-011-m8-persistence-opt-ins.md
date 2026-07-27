@@ -1,24 +1,36 @@
 ---
 id: P-011
 title: M8 persistence opt-ins (three toggles, cross-session resume, import JSON)
-status: todo
+status: doing
 created: 2026-07-19
+updated: 2026-07-27
 area: run-model
 topics: [privacy, ux]
 milestone: M8
-decision_ref: 2026-06-28-persistence-inversion
+decision_ref: 2026-06-28-persistence-inversion, 2026-07-27-m8-persistence-optins-build
 ---
 
 Everything is ephemeral by default (`browser.storage.session`). M8 adds three
 independent opt-in toggles, all default OFF, that let a user persist to
-`storage.local`. Source: `plan/expurge-plan.md` §4a + §10, `plan/expurge-progress.md`
--> M8, `wherefore/log/2026-06-28-persistence-inversion.md`. Follow `design/STYLEGUIDE.md`
+`storage.local`. Delivered in two phases (2026-07-27): Phase 1 is the backbone
+(profile-storage opt-in, cross-session resume, Storage settings UI, import JSON);
+Phase 2 is run metadata, the current-run-only rich-history flag, and the
+first-exposure banners. Source: `plan/expurge-plan.md` §4a + §10,
+`plan/expurge-progress.md` -> M8, `wherefore/log/2026-06-28-persistence-inversion.md`,
+`wherefore/log/2026-07-27-m8-persistence-optins-build.md`. Follow `design/STYLEGUIDE.md`
 and design tokens (no hard-coded colors).
 
-- [ ] Settings -> Storage sub-section: three toggles with inline privacy-boundary descriptions (profile storage; run metadata, no PII; rich hits/drafts history, rides the profile opt-in)
+Phase 1 (done):
+- [x] Background area-routing: `loadRun`/`saveRun`/`loadProfile`/`saveProfile` route by the profile-storage opt-in (write-through with inactive-area cleanup, read-active-only, no fallback; `tab_id` never durable)
+- [x] Cross-session resume: pure `rehydrateForResume` (open/deferred -> pending, keep verdicts, drop the dead windowId); rehydrate on `onStartup` and `onInstalled('update')`; user-gestured `RESUME_RUN`
+- [x] Settings -> Storage sub-section: profile-storage toggle (Phase 1 wires this one only)
+- [x] Import JSON (Settings -> Your data): validate the full profile shape, warn-and-overwrite if a profile exists (no merge), route via `SAVE_PROFILE`
+- [x] Delete-all clears the new opt-in keys and resets to the ephemeral default; signed dataset NOT gated (it lives in `storage.local` unconditionally, signed data not PII)
+- [x] `GET_RUN_STATE` serialized against the write queue; `readStoragePrefs` fail-safe to ephemeral default (no-wedge)
+- [x] Green-bar: `npm run typecheck && npm test && npm run build` + `npm run coverage`, plus an xhigh code review + fixes
+
+Phase 2 (remaining):
+- [ ] Run metadata: per-broker last-checked date + result, no PII; wire the #2 toggle + its persistence (independent of profile storage)
+- [ ] Rich hits/drafts history (current-run-only): wire the #3 toggle (rides the profile-storage opt-in) + its persistence + purge-on-opt-out
 - [ ] Contextual first-exposure banners: Run-done -> run-metadata; Results -> rich-history; Profile -> profile-storage
-- [ ] Background: `loadRun()` / `saveRun()` promote to `storage.local` when the profile-storage opt-in is active (keep the stateless-coordinator pattern; `tab_id` never durable)
-- [ ] Cross-session resume: a persisted run rehydrates on reopen (`open` items revert to `pending`, verdicted items keep verdicts)
-- [ ] Import JSON (Settings -> Your data): read JSON, warn-and-overwrite if a profile exists (no merge); mirror `handleExport` shape
-- [ ] Confirm delete-all still clears the new opt-in keys; do NOT gate the signed dataset (it lives in `storage.local` unconditionally, it is signed data not PII)
-- [ ] Green-bar: `npm run typecheck && npm test && npm run build` + `npm run coverage` (thresholds hold)
+- [ ] Manual Firefox verification of the IO/UI paths (`web-ext run` / `about:debugging`): ephemeral default, resume after restart, toggle-flip migration, import, delete-all
