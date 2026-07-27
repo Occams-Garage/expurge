@@ -1,8 +1,9 @@
 import browser from 'webextension-polyfill';
-import type { Profile, RunState, WorkItem } from '../shared/types';
+import type { Profile, RunState, WorkItem, StoragePrefs } from '../shared/types';
 import type { Draft, EmailDraft, FormDraft } from '../shared/templates';
 import { mailtoUrl, toEml, toCopyText } from '../shared/templates';
 import { normalizeAkas } from '../shared/transforms';
+import { parseSessionImport } from '../shared/import-export';
 import { BROKERS, getBroker } from '../shared/brokers';
 import { DATASET_HOST_PATTERN, type DatasetStatus, type CheckResult } from '../shared/dataset';
 import { progressOf, isComplete, isMissingSkip } from '../background/coordinator';
@@ -17,7 +18,7 @@ import {
 } from './aka-form';
 
 type Section = 'run' | 'results' | 'profile' | 'settings';
-type RunDisplayState = 'welcome' | 'ready' | 'active' | 'done';
+type RunDisplayState = 'welcome' | 'ready' | 'resumable' | 'active' | 'done';
 type SendMethod = 'mailto' | 'eml' | 'copy';
 
 const PREF_KEY = 'expurge_prefs';
@@ -27,6 +28,8 @@ let currentProfile: Profile | null = null;
 let sendMethod: SendMethod = 'mailto';
 let pollHandle: number | null = null;
 let lastResultsSig = ''; // results view signature of the last render — gates the 2s poll
+let storagePrefs: StoragePrefs = { profileStorage: false, runMetadata: false, richHistory: false };
+let pendingImportProfile: Profile | null = null; // stashed between file-read and warn-and-overwrite confirm
 
 // ── section routing ──────────────────────────────────────────────────────────
 
@@ -72,11 +75,15 @@ function runDisplayState(profile: Profile | null, run: RunState | null): RunDisp
   if (!profile) return 'welcome';
   if (!run) return 'ready';
   if (isComplete(run)) return 'done';
+  // A persisted run reopened after a browser restart has no live tabs — onStartup reverted its
+  // open/deferred items to pending. Offer resume rather than the active monitor (whose tabs are
+  // gone). Mid-session an active run always holds ≥1 open/deferred item, so this won't misfire.
+  if (!run.items.some(i => i.status === 'open' || i.status === 'deferred')) return 'resumable';
   return 'active';
 }
 
 function showRunDisplayState(state: RunDisplayState, run?: RunState | null): void {
-  (['run-welcome', 'run-ready', 'run-active', 'run-done'] as const).forEach(id => {
+  (['run-welcome', 'run-ready', 'run-resumable', 'run-active', 'run-done'] as const).forEach(id => {
     document.getElementById(id)!.classList.add('hidden');
   });
 
@@ -90,6 +97,18 @@ function showRunDisplayState(state: RunDisplayState, run?: RunState | null): voi
       const n = BROKERS.filter(b => b.status === 'active').length;
       document.getElementById('run-ready-desc')!.textContent =
         `Ready to check ${n} people-search site${n !== 1 ? 's' : ''} for your data.`;
+      break;
+    }
+
+    case 'resumable': {
+      if (!run) break;
+      stopPolling();
+      document.getElementById('run-resumable')!.classList.remove('hidden');
+      const total   = run.items.filter(i => !isMissingSkip(i)).length;
+      const checked = run.items.filter(i => i.status === 'verdicted' && !isMissingSkip(i)).length;
+      const left    = total - checked;
+      document.getElementById('run-resumable-desc')!.textContent =
+        `You have an unfinished scan — ${checked} of ${total} checked, ${left} still to go.`;
       break;
     }
 
@@ -838,6 +857,80 @@ async function saveSendMethod(method: SendMethod): Promise<void> {
   await browser.storage.local.set({ [PREF_KEY]: { sendMethod: method } });
 }
 
+// ── persistence opt-ins (M8) ───────────────────────────────────────────────────
+// The flags live in the background (it routes run/profile storage + owns the migration side
+// effects), so the options page reads/writes them via messages, not storage.local directly.
+
+async function loadStoragePrefs(): Promise<void> {
+  const res = (await browser.runtime.sendMessage({ type: 'GET_STORAGE_PREFS' })) as { prefs: StoragePrefs };
+  storagePrefs = res.prefs;
+  reflectStoragePrefs();
+}
+
+function reflectStoragePrefs(): void {
+  (document.getElementById('optin-profile-storage') as HTMLInputElement).checked = storagePrefs.profileStorage;
+}
+
+async function handleStorageOptIn(key: keyof StoragePrefs, on: boolean): Promise<void> {
+  // Background returns the NORMALIZED prefs (e.g. turning profileStorage off forces richHistory
+  // off too), so reflect what actually took effect rather than the raw checkbox value.
+  const res = (await browser.runtime.sendMessage({ type: 'SET_STORAGE_OPTIN', key, on })) as { prefs: StoragePrefs };
+  storagePrefs = res.prefs;
+  reflectStoragePrefs();
+}
+
+// ── import (M8) ─────────────────────────────────────────────────────────────────
+// Mirror of handleExport: read the file, validate the envelope (parseSessionImport, pure), then
+// warn-and-overwrite if a profile already exists. Only the profile is restored in Phase 1; it
+// routes through SAVE_PROFILE so it lands in whichever area the persistence opt-in selects.
+
+async function handleImportFile(file: File): Promise<void> {
+  const msg = document.getElementById('import-msg')!;
+  msg.classList.add('hidden');
+  const result = parseSessionImport(await file.text());
+  if (!result.ok) {
+    msg.textContent = result.error;
+    msg.classList.remove('hidden');
+    return;
+  }
+  if (result.profile === null) {
+    msg.textContent = 'That export has no profile to import.';
+    msg.classList.remove('hidden');
+    return;
+  }
+  if (currentProfile) {
+    pendingImportProfile = result.profile; // hold for the warn-and-overwrite confirm
+    document.getElementById('import-confirm-panel')!.classList.remove('hidden');
+    return;
+  }
+  await applyImportedProfile(result.profile);
+}
+
+async function applyImportedProfile(profile: Profile): Promise<void> {
+  await browser.runtime.sendMessage({ type: 'SAVE_PROFILE', profile });
+  currentProfile = profile;
+  populateProfileForm(profile); // pre-fill so the Profile tab is ready when the user navigates there
+  // Confirm in place (Settings, where the Import button lives) — switching sections would hide this.
+  const msg = document.getElementById('import-msg')!;
+  msg.textContent = 'Profile imported — open the Profile tab to review it.';
+  msg.classList.remove('hidden');
+}
+
+// Broker host match-patterns for the run's optional-permission request. Shared by Start and
+// Resume so a resumed run gets the same content-script capabilities (challenge detection).
+function brokerOrigins(): browser.Manifest.MatchPattern[] {
+  return BROKERS
+    .filter(b => b.status === 'active')
+    .map(b => {
+      try {
+        const host = new URL(b.search.url.replace(/{[^}]+}/g, 'x')).hostname.replace(/^www\./, '');
+        return `*://*.${host}/*`;
+      } catch { return null; }
+    })
+    .filter((o): o is string => o !== null)
+    .filter((v, i, a) => a.indexOf(v) === i) as browser.Manifest.MatchPattern[];
+}
+
 function renderBrokerCoverage(): void {
   const rows = BROKERS.map(b => `
     <div class="broker-coverage-row">
@@ -1009,18 +1102,7 @@ async function handleStartRun(): Promise<void> {
   btn.textContent = 'Requesting access…';
 
   try {
-    const origins = BROKERS
-      .filter(b => b.status === 'active')
-      .map(b => {
-        try {
-          const host = new URL(b.search.url.replace(/{[^}]+}/g, 'x')).hostname.replace(/^www\./, '');
-          return `*://*.${host}/*`;
-        } catch { return null; }
-      })
-      .filter((o): o is string => o !== null)
-      .filter((v, i, a) => a.indexOf(v) === i) as browser.Manifest.MatchPattern[];
-
-    const granted = await browser.permissions.request({ origins });
+    const granted = await browser.permissions.request({ origins: brokerOrigins() });
     if (!granted) {
       errEl.textContent = 'Permission not granted — allow access when prompted to continue.';
       errEl.classList.remove('hidden');
@@ -1045,6 +1127,41 @@ async function handleStartRun(): Promise<void> {
   }
 }
 
+// ── resume run (M8) ─────────────────────────────────────────────────────────────
+// Re-open the in-flight tabs of a run that persisted across a browser restart. Mirrors the Start
+// gesture: open the sidebar + request broker permissions synchronously in the click, then pin the
+// resume to this window. Background rehydrates (open/deferred→pending) and opens the next batch.
+
+async function handleResume(): Promise<void> {
+  const errEl = document.getElementById('resume-error')!;
+  errEl.classList.add('hidden');
+  const btn = document.getElementById('btn-resume') as HTMLButtonElement;
+
+  browser.sidebarAction.open().catch(() => {});
+  btn.disabled = true;
+  btn.textContent = 'Requesting access…';
+  try {
+    const granted = await browser.permissions.request({ origins: brokerOrigins() });
+    if (!granted) {
+      errEl.textContent = 'Permission not granted — allow access when prompted to resume.';
+      errEl.classList.remove('hidden');
+      return;
+    }
+    btn.textContent = 'Resuming…';
+    const windowId = (await browser.windows.getCurrent()).id;
+    await browser.runtime.sendMessage({ type: 'RESUME_RUN', windowId });
+    const res = (await browser.runtime.sendMessage({ type: 'GET_RUN_STATE' })) as { run?: RunState };
+    currentRun = res.run ?? null;
+    showRunDisplayState(runDisplayState(currentProfile, currentRun), currentRun);
+  } catch {
+    errEl.textContent = 'Something went wrong. Is the extension active?';
+    errEl.classList.remove('hidden');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Resume scan';
+  }
+}
+
 // ── init ──────────────────────────────────────────────────────────────────────
 
 async function init(): Promise<void> {
@@ -1057,6 +1174,7 @@ async function init(): Promise<void> {
   currentRun     = runRes.run ?? null;
 
   await loadPrefs();
+  await loadStoragePrefs();
   renderBrokerCoverage();
 
   // Dataset update panel. If a weekly auto-fetch is due (opted in + permitted + configured), run
@@ -1146,7 +1264,39 @@ document.getElementById('send-method-group')!.addEventListener('change', e => {
   if (radio.type === 'radio') saveSendMethod(radio.value as SendMethod).catch(console.error);
 });
 
+// Persistence opt-ins (M8)
+document.getElementById('optin-profile-storage')!.addEventListener('change', e => {
+  handleStorageOptIn('profileStorage', (e.target as HTMLInputElement).checked).catch(console.error);
+});
+
+// Resume a persisted run (M8)
+document.getElementById('btn-resume')!.addEventListener('click', () => { handleResume().catch(console.error); });
+document.getElementById('btn-resume-new')!.addEventListener('click', () => { showRunDisplayState('ready'); });
+
 document.getElementById('btn-export')!.addEventListener('click', () => { handleExport().catch(console.error); });
+
+// Import (M8): the button opens the hidden file picker; the change event reads + validates it.
+document.getElementById('btn-import')!.addEventListener('click', () => {
+  (document.getElementById('import-file') as HTMLInputElement).click();
+});
+document.getElementById('import-file')!.addEventListener('change', e => {
+  const input = e.target as HTMLInputElement;
+  const file = input.files?.[0];
+  if (file) handleImportFile(file).catch(console.error);
+  input.value = ''; // reset so re-selecting the same file fires change again
+});
+document.getElementById('btn-import-confirm')!.addEventListener('click', () => {
+  document.getElementById('import-confirm-panel')!.classList.add('hidden');
+  if (pendingImportProfile) {
+    const p = pendingImportProfile;
+    pendingImportProfile = null;
+    applyImportedProfile(p).catch(console.error);
+  }
+});
+document.getElementById('btn-import-cancel')!.addEventListener('click', () => {
+  document.getElementById('import-confirm-panel')!.classList.add('hidden');
+  pendingImportProfile = null;
+});
 
 document.getElementById('btn-delete-all')!.addEventListener('click', () => {
   document.getElementById('delete-confirm-panel')!.classList.remove('hidden');

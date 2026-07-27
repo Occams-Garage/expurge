@@ -12,6 +12,7 @@ import {
   progressOf,
   selectBatch,
   nextFocusTarget,
+  rehydrateForResume,
   BATCH_SIZE,
   MAX_OPEN_TABS,
 } from './coordinator';
@@ -400,5 +401,50 @@ describe('nextFocusTarget', () => {
 
   it('null when nothing non-terminal remains', () => {
     expect(nextFocusTarget(run([item({ status: 'verdicted', verdict: 'clear' })]))).toBeNull();
+  });
+});
+
+describe('rehydrateForResume', () => {
+  it('reverts open AND deferred items to pending, stripping tabId', () => {
+    const r = {
+      ...run([
+        item({ id: 'b:primary', status: 'open', tabId: 11 }),
+        item({ id: 'c:primary', brokerId: 'c', status: 'deferred', tabId: 12 }),
+      ]),
+      windowId: 7,
+    };
+    const out = rehydrateForResume(r);
+    expect(out.items[0]).toMatchObject({ id: 'b:primary', status: 'pending' });
+    expect(out.items[1]).toMatchObject({ id: 'c:primary', status: 'pending' });
+    expect(out.items[0].tabId).toBeUndefined();
+    expect(out.items[1].tabId).toBeUndefined();
+  });
+
+  it('keeps verdicted items and their verdicts; leaves pending untouched', () => {
+    const out = rehydrateForResume(
+      run([
+        item({ id: 'b:primary', status: 'verdicted', verdict: 'hit', matchedAs: 'primary' }),
+        item({ id: 'c:primary', brokerId: 'c', status: 'pending' }),
+      ]),
+    );
+    expect(out.items[0]).toMatchObject({ status: 'verdicted', verdict: 'hit', matchedAs: 'primary' });
+    expect(out.items[1]).toMatchObject({ status: 'pending' });
+  });
+
+  it('drops windowId — the pre-close window is dead; resume re-pins a fresh one', () => {
+    const r = { ...run([item()]), windowId: 42 };
+    expect(rehydrateForResume(r).windowId).toBeUndefined();
+  });
+
+  it('preserves runId and createdAt', () => {
+    const out = rehydrateForResume({ ...run([item({ status: 'open' })]), windowId: 1 });
+    expect(out.runId).toBe('r');
+    expect(out.createdAt).toBe('2026-01-01T00:00:00Z');
+  });
+
+  it('is idempotent (re-applying on the resume click after onStartup is a no-op)', () => {
+    const r = { ...run([item({ status: 'open', tabId: 9 }), item({ id: 'x', status: 'verdicted', verdict: 'clear' })]), windowId: 3 };
+    const once = rehydrateForResume(r);
+    expect(rehydrateForResume(once)).toEqual(once);
   });
 });

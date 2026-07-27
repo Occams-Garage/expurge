@@ -63,6 +63,16 @@ export interface Profile {
   phones?: string[];
 }
 
+// The three persistence opt-ins (M8), all default OFF. Everything is ephemeral
+// (storage.session) until the user opts in; each flag promotes a slice to storage.local.
+// richHistory "rides" profileStorage — it can only be on when profileStorage is on
+// (enforced in mergeStoragePrefs / applyStorageOptIn, the single home for that invariant).
+export interface StoragePrefs {
+  profileStorage: boolean;  // persist profile to storage.local; also enables cross-session run resume
+  runMetadata: boolean;     // per-broker last-checked date + result, no PII (independent of profileStorage)
+  richHistory: boolean;     // current-run hits/drafts history; rides profileStorage
+}
+
 // ── messages popup/content → background ─────────────────────────────────────
 
 export interface StartRunMsg    { type: 'START_RUN';    profile: Profile; windowId?: number }
@@ -83,6 +93,16 @@ export interface CloseTabMsg    { type: 'CLOSE_TAB'; windowId?: number }
 export interface CheckDatasetUpdateMsg  { type: 'CHECK_DATASET_UPDATE' }
 export interface GetDatasetStatusMsg    { type: 'GET_DATASET_STATUS' }
 export interface SetDatasetAutoFetchMsg { type: 'SET_DATASET_AUTOFETCH'; on: boolean }
+
+// ── messages options → background: persistence opt-ins (M8) ──────────────────
+// Opt-in flags gate whether run/profile persist to storage.local. The SET path has
+// background-only migration side effects (move data between areas, purge on opt-out),
+// so the options page routes through these rather than writing the pref key itself.
+export interface GetStoragePrefsMsg { type: 'GET_STORAGE_PREFS' }
+export interface SetStorageOptInMsg { type: 'SET_STORAGE_OPTIN'; key: keyof StoragePrefs; on: boolean }
+// Re-open a persisted run's in-flight tabs after a browser restart (user-gestured, since
+// it opens broker tabs and needs a window to pin to). windowId is the resume-click's window.
+export interface ResumeRunMsg       { type: 'RESUME_RUN'; windowId?: number }
 
 // ── messages sidebar → background ───────────────────────────────────────────
 // The sidebar lives in its own document (not a broker tab), so it can't rely on
@@ -122,7 +142,8 @@ export type ToBackground =
   | StartRunMsg | GetRunStateMsg | GetDraftMsg | VerdictMsg | ReverdictMsg
   | StopRunMsg | SaveProfileMsg | GetProfileMsg | MarkSentMsg | DeleteAllMsg | CloseTabMsg
   | SidebarGetStateMsg | DeferMsg | FocusItemMsg | NavigateBrokerTabMsg | ChallengeDetectedMsg | ChallengeResolvedMsg
-  | CheckDatasetUpdateMsg | GetDatasetStatusMsg | SetDatasetAutoFetchMsg;
+  | CheckDatasetUpdateMsg | GetDatasetStatusMsg | SetDatasetAutoFetchMsg
+  | GetStoragePrefsMsg | SetStorageOptInMsg | ResumeRunMsg;
 
 // ── sidebar view model ──────────────────────────────────────────────────────
 // The sidebar's display is derived purely from run state + focus (src/sidebar/state.ts).
