@@ -46,3 +46,4 @@
 - 2026-07-01 | 2026-07-01-sidebar-run-navigation | Sidebar replaces on-page overlay for run nav | areas: matching-overlay, run-model, broker-dataset | topics: ux, webextensions, privacy | stories: [] | active
 - 2026-07-01 | 2026-07-01-sidebar-nav-built | Sidebar-nav built, reviewed, QA'd | areas: matching-overlay, run-model | topics: ux, webextensions, privacy | stories: [] | active
 - 2026-07-01 | 2026-07-01-url-free-optout-flow | URL-free opt-out: profile-nav friction (parked) | areas: opt-out-drafts, matching-overlay, run-model | topics: ux, data-model | stories: [] | active
+- 2026-07-28 | 2026-07-28-m8-persistence-optins-phase2 | M8 persistence opt-ins Phase 2 implemented | areas: profile, run-model, coverage-report | topics: privacy, data-model, ux, testing | stories: [] | active

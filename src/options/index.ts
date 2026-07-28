@@ -53,6 +53,7 @@ let storagePromptStateLoaded = false;
 let storageRefreshGeneration = 0;
 let contextRefreshGeneration = 0;
 let removalConvergenceGeneration = 0;
+let contextRemovalGeneration = 0;
 let suppressStorageBannerRendering = false;
 let storedContextRemovalPending = false;
 let storageTogglePending = false;
@@ -245,8 +246,12 @@ function brokerBadge(items: WorkItem[]): { kind: string; label: string } {
 
 function startPolling(): void {
   pollHandle = window.setInterval(() => {
+    const contextGeneration = contextRefreshGeneration;
     browser.runtime.sendMessage({ type: 'GET_RUN_STATE' })
       .then(res => {
+        // A cross-tab migration or Delete all may have started after this poll was sent.
+        // Never let its older snapshot repaint run-derived PII after authoritative convergence.
+        if (contextGeneration !== contextRefreshGeneration) return;
         currentRun = (res as { run?: RunState }).run ?? null;
         const state = runDisplayState(currentProfile, currentRun);
         showRunDisplayState(state, currentRun);
@@ -539,12 +544,16 @@ function buildItemRow(item: WorkItem): HTMLElement {
     const hitBtn   = row.querySelector<HTMLButtonElement>('.btn-review-hit')!;
     const clearBtn = row.querySelector<HTMLButtonElement>('.btn-review-clear')!;
     const reverdictFrom = async (verdict: 'hit' | 'clear'): Promise<void> => {
+      const contextGeneration = contextRefreshGeneration;
       hitBtn.disabled = clearBtn.disabled = true;
       statusEl.textContent = 'Saving…';
       try {
         await browser.runtime.sendMessage({
           type: 'REVERDICT', itemId: item.id, verdict, listingUrl: item.listingUrl,
         });
+        // storage.onChanged may have reconciled a newer run (or Delete all) while this write was
+        // in flight. Its DOM row may also have been replaced by the poll-driven renderer.
+        if (contextGeneration !== contextRefreshGeneration || !row.isConnected) return;
         if (currentRun) {
           currentRun = {
             ...currentRun,
@@ -728,12 +737,16 @@ function renderEmailDraftInPanel(panel: HTMLElement, draft: EmailDraft, item: Wo
 
   const markSentBtn = panel.querySelector<HTMLButtonElement>('[data-action="mark-sent"]');
   if (markSentBtn) markSentBtn.onclick = async () => {
+    const contextGeneration = contextRefreshGeneration;
     try {
       await browser.runtime.sendMessage({ type: 'MARK_SENT', itemId: item.id });
     } catch {
       return; // leave the button actionable so the user can retry
     }
-    panel.querySelector('.draft-mark-sent')!.innerHTML = '<span class="sent-badge">Sent ✓</span>';
+    if (contextGeneration !== contextRefreshGeneration || !panel.isConnected) return;
+    const sentState = panel.querySelector('.draft-mark-sent');
+    if (!sentState) return;
+    sentState.innerHTML = '<span class="sent-badge">Sent ✓</span>';
     const toggleBtn = document.querySelector<HTMLButtonElement>(`.btn-draft-toggle[data-item="${CSS.escape(item.id)}"]`);
     if (toggleBtn) { toggleBtn.textContent = 'Sent ✓'; toggleBtn.classList.add('sent'); }
     if (currentRun) {
@@ -785,12 +798,16 @@ function renderFormDraftInPanel(panel: HTMLElement, draft: FormDraft, item: Work
 
   const markSubmittedBtn = panel.querySelector<HTMLButtonElement>('[data-action="mark-submitted"]');
   if (markSubmittedBtn) markSubmittedBtn.onclick = async () => {
+    const contextGeneration = contextRefreshGeneration;
     try {
       await browser.runtime.sendMessage({ type: 'MARK_SENT', itemId: item.id });
     } catch {
       return; // leave the button actionable so the user can retry
     }
-    panel.querySelector('.draft-mark-sent')!.innerHTML = '<span class="sent-badge">Submitted ✓</span>';
+    if (contextGeneration !== contextRefreshGeneration || !panel.isConnected) return;
+    const sentState = panel.querySelector('.draft-mark-sent');
+    if (!sentState) return;
+    sentState.innerHTML = '<span class="sent-badge">Submitted ✓</span>';
     const toggleBtn = document.querySelector<HTMLButtonElement>(`.btn-draft-toggle[data-item="${CSS.escape(item.id)}"]`);
     if (toggleBtn) { toggleBtn.textContent = 'Submitted ✓'; toggleBtn.classList.add('sent'); }
     if (currentRun) {
@@ -876,12 +893,27 @@ async function handleProfileSave(e: Event): Promise<void> {
   }
 
   const btn = document.getElementById('btn-save-profile') as HTMLButtonElement;
+  const contextGeneration = contextRefreshGeneration;
+  const removalGeneration = contextRemovalGeneration;
   btn.disabled = true;
-  await browser.runtime.sendMessage({ type: 'SAVE_PROFILE', profile });
-  currentProfile = profile;
-  invalidateDraftPanels(); // drafts are built from the profile — drop stale cached panels
-  renderStorageBanners();
+  try {
+    await browser.runtime.sendMessage({ type: 'SAVE_PROFILE', profile });
+  } catch {
+    errEl.textContent = 'Profile could not be saved — try again.';
+    errEl.classList.remove('hidden');
+    btn.disabled = false;
+    return;
+  }
   btn.disabled = false;
+  if (contextGeneration === contextRefreshGeneration) {
+    currentProfile = profile;
+    invalidateDraftPanels(); // drafts are built from the profile — drop stale cached panels
+    renderStorageBanners();
+  }
+  // An ordinary storage.onChanged convergence for this successful write may have won the race
+  // and already rendered the authoritative profile. Still confirm success. A removal migration
+  // or Delete all invalidates the older action and must not claim the profile remains saved.
+  if (removalGeneration !== contextRemovalGeneration) return;
   savedEl.classList.remove('hidden');
   setTimeout(() => savedEl.classList.add('hidden'), 3000);
 
@@ -985,12 +1017,17 @@ async function handleImportFile(file: File): Promise<void> {
 }
 
 async function applyImportedProfile(profile: Profile): Promise<void> {
+  const contextGeneration = contextRefreshGeneration;
+  const removalGeneration = contextRemovalGeneration;
   await browser.runtime.sendMessage({ type: 'SAVE_PROFILE', profile });
-  currentProfile = profile;
-  // Drafts are built from the profile — drop stale cached panels so a loaded draft can't keep
-  // rendering (and mail) the PREVIOUS profile's PII (mirrors handleProfileSave).
-  invalidateDraftPanels();
-  populateProfileForm(profile); // pre-fill so the Profile tab is ready when the user navigates there
+  if (contextGeneration === contextRefreshGeneration) {
+    currentProfile = profile;
+    // Drafts are built from the profile — drop stale cached panels so a loaded draft can't keep
+    // rendering (and mail) the PREVIOUS profile's PII (mirrors handleProfileSave).
+    invalidateDraftPanels();
+    populateProfileForm(profile); // pre-fill so Profile is ready when the user navigates there
+  }
+  if (removalGeneration !== contextRemovalGeneration) return;
   // Confirm in place (Settings, where the Import button lives) — switching sections would hide this.
   const msg = document.getElementById('import-msg')!;
   msg.textContent = 'Profile imported — open the Profile tab to review it.';
@@ -1162,7 +1199,7 @@ async function refreshStorageSettings(preserveRenderedPrompts = true): Promise<v
   const promptPayload = promptResult as { seen?: unknown; epoch?: unknown } | null;
   const seen = promptPayload?.seen;
   const epoch = promptPayload?.epoch;
-  const validEpoch = typeof epoch === 'number' && Number.isSafeInteger(epoch);
+  const validEpoch = typeof epoch === 'number' && Number.isSafeInteger(epoch) && epoch >= 0;
   const refreshedSeen = seen === null || seen === undefined || !validEpoch
     ? { ...SUPPRESS_STORAGE_PROMPTS }
     : mergeStoragePromptsSeen(seen);
@@ -1427,12 +1464,14 @@ async function handleExport(): Promise<void> {
 }
 
 async function handleDeleteAll(): Promise<void> {
+  // Invalidate in-flight context readers immediately, before the background wipe finishes.
+  contextRefreshGeneration++;
+  contextRemovalGeneration++;
   const response = await browser.runtime.sendMessage({ type: 'DELETE_ALL' }) as {
     promptEpoch?: unknown;
   };
   // Invalidate any settings reads that began before the clear and reset every page-local mirror.
   storageRefreshGeneration++;
-  contextRefreshGeneration++;
   removalConvergenceGeneration++;
   suppressStorageBannerRendering = false;
   storedContextRemovalPending = false;
@@ -1446,6 +1485,7 @@ async function handleDeleteAll(): Promise<void> {
   resetPagePromptState();
   storagePromptEpoch = typeof response.promptEpoch === 'number'
     && Number.isSafeInteger(response.promptEpoch)
+    && response.promptEpoch >= 0
     ? response.promptEpoch
     : null;
   storagePromptStateLoaded = storagePromptEpoch !== null;
@@ -1499,8 +1539,10 @@ async function handleStartRun(): Promise<void> {
     btn.textContent = 'Starting…';
     // Pin the run to this window so batch tabs open alongside the sidebar we just opened.
     const windowId = (await browser.windows.getCurrent()).id;
+    const contextGeneration = contextRefreshGeneration;
     await browser.runtime.sendMessage({ type: 'START_RUN', profile: currentProfile, windowId });
     const res = await browser.runtime.sendMessage({ type: 'GET_RUN_STATE' }) as { run?: RunState };
+    if (contextGeneration !== contextRefreshGeneration) return;
     currentRun = res.run ?? null;
     showRunDisplayState(runDisplayState(currentProfile, currentRun), currentRun);
   } catch {
@@ -1534,8 +1576,10 @@ async function handleResume(): Promise<void> {
     }
     btn.textContent = 'Resuming…';
     const windowId = (await browser.windows.getCurrent()).id;
+    const contextGeneration = contextRefreshGeneration;
     await browser.runtime.sendMessage({ type: 'RESUME_RUN', windowId });
     const res = (await browser.runtime.sendMessage({ type: 'GET_RUN_STATE' })) as { run?: RunState };
+    if (contextGeneration !== contextRefreshGeneration) return;
     currentRun = res.run ?? null;
     showRunDisplayState(runDisplayState(currentProfile, currentRun), currentRun);
   } catch {
@@ -1619,8 +1663,10 @@ document.getElementById('btn-show-sidebar')!.addEventListener('click', () => {
 });
 
 document.getElementById('btn-stop')!.addEventListener('click', async () => {
+  const contextGeneration = contextRefreshGeneration;
   await browser.runtime.sendMessage({ type: 'STOP_RUN' });
   const res = await browser.runtime.sendMessage({ type: 'GET_RUN_STATE' }) as { run?: RunState };
+  if (contextGeneration !== contextRefreshGeneration) return;
   currentRun = res.run ?? null;
   stopPolling();
   showRunDisplayState(runDisplayState(currentProfile, currentRun), currentRun);
@@ -1729,6 +1775,7 @@ browser.storage.onChanged.addListener((changes, areaName) => {
   const contextRemoved = contextChanged && changedKeys.some(
     key => STORED_CONTEXT_KEYS.has(key) && changes[key]?.newValue === undefined,
   );
+  if (contextRemoved) contextRemovalGeneration++;
   if (contextChanged || suppressStorageBannerRendering) {
     convergeStoredContext(contextRemoved).catch(error => {
       console.error('[expurge] could not converge stored context', error);

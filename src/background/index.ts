@@ -885,6 +885,7 @@ browser.runtime.onMessage.addListener(
         !isStoragePromptId(prompt)
         || typeof epoch !== 'number'
         || !Number.isSafeInteger(epoch)
+        || epoch < 0
       ) {
         return { ok: false };
       }

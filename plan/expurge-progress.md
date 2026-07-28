@@ -4,11 +4,13 @@
 
 ## What exists today
 
-**M0–M6 is complete and buildable.** The codebase supports multi-broker paced
-batching, AKA name-variant fan-out, and a full options-page UI. One broker
-(TruePeopleSearch), up to BATCH_SIZE=5 concurrent tabs, `also_known_as[]`
-expansion, serial write queue, badge, options dashboard with Run/Results/Profile/Settings
-sections, redesigned popup (run-control-panel only). No persistence opt-ins.
+**M0–M6 is complete and buildable.** The M7 extension-side dataset path and M8
+persistence-opt-in code are also built; their remaining infrastructure/manual-verification
+work is called out below. The codebase supports multi-broker paced batching, AKA name-variant
+fan-out, and a full options-page UI. One broker (TruePeopleSearch), up to BATCH_SIZE=5
+concurrent tabs, `also_known_as[]` expansion, serial write queue, badge, options dashboard
+with Run/Results/Profile/Settings sections, a redesigned popup (run-control-panel only), and
+three default-off on-device storage choices.
 
 ### Files in place
 
@@ -119,10 +121,11 @@ consent-prompt copy still needs legal review (Q-006).
 
 #### M8 — Persistence opt-ins
 
-Three independent opt-in toggles (all default OFF) that promote ephemeral state to
-`storage.local`. Delivered in **two phases** (decision `2026-07-27-m8-persistence-optins-build`);
-plan item [[P-011]]. Rich hits/drafts history (#3) is scoped **current-run-only** (no cross-run
-archive; deferred to v2).
+Three separately controlled opt-in toggles (all default OFF) that promote specific ephemeral
+state to `storage.local`. Run metadata is independent of profile storage; rich results require
+profile storage. Delivered in **two phases** (decision
+`2026-07-27-m8-persistence-optins-build`); plan item [[P-011]]. Rich hits/drafts history (#3)
+is scoped **current-run-only** (no cross-run archive; deferred to v2).
 
 **Phase 1 — DONE (2026-07-27, branch `feat/m8-persistence-optins`):**
 - `src/shared/storage-prefs.ts` (pure): `StoragePrefs`, `mergeStoragePrefs` (coerce + ride-along
@@ -142,11 +145,26 @@ archive; deferred to v2).
   `SAVE_PROFILE`); **Resume** affordance in the Run panel when a persisted in-flight run is detected.
 - Verified: typecheck + 238 tests + build + coverage (98.8/98.4/100/100) + xhigh code review + fixes.
 
-**Phase 2 — PENDING:**
-- Run metadata (#2): per-broker last-checked + result, no PII; the #2 toggle + persistence (independent of #1).
-- Rich hits/drafts history (#3), current-run-only: the #3 toggle (rides #1) + persistence + purge-on-opt-out.
-- Contextual first-exposure banners (Run done → run-metadata; Results → rich-history; Profile → profile-storage).
-- Manual Firefox verification of the IO/UI paths (`web-ext run` / `about:debugging`).
+**Phase 2 — CODE COMPLETE (2026-07-28, branch `feat/p-011-m8-persistence-opt-ins-phase2`):**
+- Lifecycle-aware current-run routing: incomplete runs persist for resume under profile storage;
+  completed runs persist only when rich history is also on. Completion is stamped once across
+  verdict, skip, Stop, and initially-complete paths.
+- Run metadata (#2): a separately opted-in, PII-free broker → last-checked + closed-set result
+  record. Completion writes are ancillary and no-wedge; enabling after Run done backfills the
+  current completed run; disabling purges the whole metadata key.
+- Rich hits/drafts history (#3): current-run-only, rides profile storage, migrates between local
+  and session storage on normalized toggle changes, and never creates a cross-run archive.
+- Settings reflects all three normalized choices and explains the rich-history dependency.
+  Profile, Run done, and Results show one-time informational offers with equal CTA/dismiss actions;
+  consent remains in Settings. Prompt-seen state stores exactly three non-sensitive booleans.
+- Automated verification passed: typecheck, 330 tests, coverage (98.99% statements, 100% lines),
+  build, and extension lint (zero errors, 12 warnings). Implementation was reviewed and fixed
+  after each slice.
+
+**Still pending:**
+- Manual Firefox verification of the IO/UI paths (`web-ext run` / `about:debugging`). Automated
+  checks do not exercise Firefox storage migration, restart, cross-tab, focus, or rendered-banner
+  behavior.
 
 #### M9 — Full dataset + launch polish
 - ~25 verified people-search brokers in brokers.json (all channels personally verified, trust bits stamped)

@@ -1,7 +1,7 @@
 # M8 persistence opt-ins, Phase 2 implementation plan
 
-Date: 2026-07-27  
-Plan item: `wherefore/plan/P-011-m8-persistence-opt-ins.md`  
+Date: 2026-07-27
+Plan item: `wherefore/plan/P-011-m8-persistence-opt-ins.md`
 Branch: `feat/p-011-m8-persistence-opt-ins-phase2`
 
 ## Outcome
@@ -279,7 +279,7 @@ by the manual matrix until Q-014 produces a Firefox e2e harness.
 8. Run metadata on with profile storage off: finish a run; restart; only broker id, date,
    and closed-set result remain in local storage.
 9. Turn run metadata on from Run done: the just-finished run backfills immediately.
-10. Turn either persistence toggle off: its durable slice is removed immediately.
+10. Turn each persistence toggle off: its durable slice is removed immediately.
 11. Each contextual offer appears once, dismisses cleanly, and its CTA focuses Settings.
 12. Import still validates and overwrites only the profile. Delete all resets every toggle,
     metadata row, prompt-seen flag, profile, run, and cached dataset.
