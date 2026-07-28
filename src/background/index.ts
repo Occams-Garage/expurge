@@ -38,17 +38,22 @@ import {
 } from './dataset-store';
 import {
   readRunMetadata,
+  readStoragePromptEpoch,
+  readStoragePromptsSeen,
   readStoragePrefs,
   readStoragePrefsStrict,
+  markStoredStoragePromptSeen,
   mergeStoredRunMetadata,
   writeRunMetadata,
+  writeStoragePromptEpoch,
   writeStoragePrefs,
   purgeRunMetadata,
   purgeHistory,
 } from './storage-prefs-store';
-import { applyStorageOptIn } from '../shared/storage-prefs';
+import { applyStorageOptIn, isStoragePrefKey } from '../shared/storage-prefs';
 import {
   deriveRunMetadata,
+  isStoragePromptId,
   runStorageDestination,
   selectRunForLoad,
   stampCompletedAt,
@@ -850,7 +855,10 @@ browser.runtime.onMessage.addListener(
 
     // ── persistence opt-ins (M8) ─────────────────────────────────────────────
     if (m.type === 'GET_STORAGE_PREFS') {
-      return { prefs: await readStoragePrefs() };
+      // Keep the preference snapshot on one side of toggle migrations and Delete all. Besides
+      // accurate checkbox reflection, this prevents a cross-tab clear from briefly restoring
+      // stale consent state while its session/local removals are still in flight.
+      return { prefs: await serialWrite(() => readStoragePrefs()) };
     }
 
     if (m.type === 'GET_RUN_METADATA') {
@@ -863,9 +871,44 @@ browser.runtime.onMessage.addListener(
       return { metadata };
     }
 
+    if (m.type === 'GET_STORAGE_PROMPTS_SEEN') {
+      return serialWrite(async () => ({
+        seen: await readStoragePromptsSeen(),
+        epoch: await readStoragePromptEpoch(),
+      }));
+    }
+
+    if (m.type === 'MARK_STORAGE_PROMPT_SEEN') {
+      const prompt = m.prompt;
+      const epoch = m.epoch;
+      if (
+        !isStoragePromptId(prompt)
+        || typeof epoch !== 'number'
+        || !Number.isSafeInteger(epoch)
+      ) {
+        return { ok: false };
+      }
+      return serialWrite(async () => {
+        // Re-check inside the queue: Delete all may have been queued between validation and this
+        // callback. A stale rendered offer must never recreate the just-cleared durable key.
+        if (epoch !== await readStoragePromptEpoch()) return { ok: false };
+        try {
+          const seen = await markStoredStoragePromptSeen(prompt);
+          return { ok: true, seen };
+        } catch (error) {
+          // Prompt bookkeeping is ancillary and never touches run/profile state.
+          console.warn('[expurge] could not mark storage prompt seen', error);
+          return { ok: false };
+        }
+      });
+    }
+
     if (m.type === 'SET_STORAGE_OPTIN') {
-      const key = m.key as keyof StoragePrefs;
-      const on = m.on as boolean;
+      if (!isStoragePrefKey(m.key) || typeof m.on !== 'boolean') {
+        return { ok: false, prefs: await readStoragePrefs() };
+      }
+      const key = m.key;
+      const on = m.on;
       let prefs!: StoragePrefs;
       await serialWrite(async () => {
         // A migration may purge an old/ineligible area, so it must not interpret a transient
@@ -902,18 +945,28 @@ browser.runtime.onMessage.addListener(
     }
 
     if (m.type === 'DELETE_ALL') {
+      let promptEpoch!: number;
       const wid = await serialWrite(async () => {
+        const previousPromptEpoch = await readStoragePromptEpoch();
+        promptEpoch = previousPromptEpoch === null
+          || previousPromptEpoch >= Number.MAX_SAFE_INTEGER
+          ? Date.now()
+          : previousPromptEpoch + 1;
         // Capture the run's window on the same side of queued mutations as the wipe, so a
         // concurrent start cannot leave its sidebar showing a run that Delete all removed.
         const windowId = (await loadRun())?.windowId;
         // Both clears inside the serial section: post-M8 the run can live in storage.local, so a
-        // queued saveRun must not re-populate local between the two clears.
+        // queued saveRun must not re-populate local between the two clears. Restore only the
+        // non-sensitive session fence between them so a pre-clear prompt ACK cannot race back in.
         await browser.storage.session.clear();
+        await writeStoragePromptEpoch(promptEpoch).catch(error => {
+          console.warn('[expurge] could not restore storage prompt deletion fence', error);
+        });
         await browser.storage.local.clear();
         return windowId;
       });
       if (wid !== undefined) await pushView(wid, { view: 'no-run' });
-      return { ok: true };
+      return { ok: true, promptEpoch };
     }
 
     return undefined;

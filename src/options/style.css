@@ -637,10 +637,56 @@ textarea {
   transition: border-color 0.12s;
 }
 .radio-item:has(input:checked) { border-color: var(--primary); background: var(--fill); }
+.radio-item:has(input:focus-visible) {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--focus-ring-shadow);
+  border-color: var(--focus-ring);
+}
+.radio-item.is-disabled {
+  cursor: not-allowed;
+}
 .radio-item input { margin-top: 2px; accent-color: var(--primary); flex-shrink: 0; }
 .radio-text { display: flex; flex-direction: column; gap: 2px; }
 .radio-label { font-size: var(--fs-small); font-weight: var(--fw-medium); color: var(--text); }
 .radio-desc { font-size: 11px; color: var(--text-faint); line-height: var(--lh-small); }
+.radio-dependency {
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: var(--lh-small);
+  font-weight: var(--fw-medium);
+}
+
+/* ── one-time storage offers ─────────────────────────────── */
+
+.storage-banner {
+  padding: var(--s-4);
+  margin: var(--s-4) 0;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--primary);
+  border-radius: var(--r-card);
+  background: var(--surface);
+}
+
+.storage-banner-copy {
+  color: var(--text-muted);
+  font-size: var(--fs-small);
+  line-height: var(--lh-small);
+}
+.storage-banner-copy strong {
+  color: var(--text);
+  font-weight: var(--fw-semibold);
+}
+
+.storage-banner-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-3);
+  margin-top: var(--s-3);
+}
+.storage-banner-actions .btn-secondary {
+  min-height: 44px;
+  min-width: 112px;
+}
 
 .broker-coverage-row {
   display: flex;

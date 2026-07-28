@@ -4,8 +4,18 @@
 // (imports the polyfill, touches storage.local) and is coverage-excluded like dataset-store.ts.
 
 import browser from 'webextension-polyfill';
-import type { RunMetadata, StoragePrefs } from '../shared/types';
-import { coerceRunMetadata, mergeRunMetadata } from '../shared/persistence';
+import type {
+  RunMetadata,
+  StoragePrefs,
+  StoragePromptId,
+  StoragePromptsSeen,
+} from '../shared/types';
+import {
+  coerceRunMetadata,
+  markStoragePromptSeen,
+  mergeRunMetadata,
+  mergeStoragePromptsSeen,
+} from '../shared/persistence';
 import { mergeStoragePrefs, DEFAULT_STORAGE_PREFS } from '../shared/storage-prefs';
 
 // storage.local (durable). Kept separate from the options page's `expurge_prefs` (send-method),
@@ -13,6 +23,8 @@ import { mergeStoragePrefs, DEFAULT_STORAGE_PREFS } from '../shared/storage-pref
 // A missing key coerces to all-OFF (ephemeral), so DELETE_ALL's local.clear() resets for free.
 const KEY_STORAGE_PREFS = 'expurge_storage_prefs';
 const KEY_RUN_METADATA = 'expurge_run_metadata'; // per-broker last-checked + result, no PII (Phase 2 writes it)
+const KEY_STORAGE_PROMPTS_SEEN = 'expurge_storage_prompts_seen'; // exactly 3 non-sensitive booleans
+const KEY_STORAGE_PROMPT_EPOCH = 'expurge_storage_prompt_epoch'; // session-only Delete-all fence
 const KEY_HISTORY = 'expurge_history';           // rejected archive placeholder; cleanup only
 
 export async function readStoragePrefs(): Promise<StoragePrefs> {
@@ -65,6 +77,56 @@ export async function mergeStoredRunMetadata(newest: RunMetadata): Promise<RunMe
   const merged = mergeRunMetadata(stored[KEY_RUN_METADATA], newest);
   await writeRunMetadata(merged);
   return merged;
+}
+
+export async function readStoragePromptsSeen(): Promise<StoragePromptsSeen | null> {
+  try {
+    return await readStoragePromptsSeenStrict();
+  } catch {
+    // Callers must distinguish a real absent key (strict read → all false) from a read failure.
+    // Treating failure as unseen would nag the user again.
+    return null;
+  }
+}
+
+async function readStoragePromptsSeenStrict(): Promise<StoragePromptsSeen> {
+  const stored = await browser.storage.local.get(KEY_STORAGE_PROMPTS_SEEN);
+  return mergeStoragePromptsSeen(stored[KEY_STORAGE_PROMPTS_SEEN]);
+}
+
+async function writeStoragePromptsSeen(seen: StoragePromptsSeen): Promise<void> {
+  await browser.storage.local.set({
+    [KEY_STORAGE_PROMPTS_SEEN]: mergeStoragePromptsSeen(seen),
+  });
+}
+
+// Strict read-modify-write: a read error must not replace true flags with all-false. The
+// background validates prompt before calling, and the pure reducer guarantees exactly 3 fields.
+export async function markStoredStoragePromptSeen(
+  prompt: StoragePromptId,
+): Promise<StoragePromptsSeen> {
+  const current = await readStoragePromptsSeenStrict();
+  const next = markStoragePromptSeen(current, prompt);
+  await writeStoragePromptsSeen(next);
+  return next;
+}
+
+// Session-scoped fence survives background event-page spindown but disappears with the browser.
+// It is not part of the durable seen schema and carries no user/context value.
+export async function readStoragePromptEpoch(): Promise<number | null> {
+  try {
+    const stored = await browser.storage.session.get(KEY_STORAGE_PROMPT_EPOCH);
+    const epoch = stored[KEY_STORAGE_PROMPT_EPOCH];
+    return typeof epoch === 'number' && Number.isSafeInteger(epoch) && epoch >= 0
+      ? epoch
+      : 0;
+  } catch {
+    return null;
+  }
+}
+
+export async function writeStoragePromptEpoch(epoch: number): Promise<void> {
+  await browser.storage.session.set({ [KEY_STORAGE_PROMPT_EPOCH]: epoch });
 }
 
 // Drop the durable slices when their opt-in is turned off. Removing an absent key is a no-op,

@@ -37,3 +37,7 @@ export function mergeStoragePrefs(raw: unknown): StoragePrefs {
 export function applyStorageOptIn(prev: StoragePrefs, key: keyof StoragePrefs, on: boolean): StoragePrefs {
   return normalize({ ...prev, [key]: on });
 }
+
+export function isStoragePrefKey(raw: unknown): raw is keyof StoragePrefs {
+  return raw === 'profileStorage' || raw === 'runMetadata' || raw === 'richHistory';
+}

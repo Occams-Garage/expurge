@@ -1,10 +1,25 @@
 import browser from 'webextension-polyfill';
-import type { Profile, RunMetadata, RunState, WorkItem, StoragePrefs } from '../shared/types';
+import type {
+  Profile,
+  RunMetadata,
+  RunState,
+  StoragePrefs,
+  StoragePromptId,
+  StoragePromptsSeen,
+  WorkItem,
+} from '../shared/types';
 import type { Draft, EmailDraft, FormDraft } from '../shared/templates';
 import { mailtoUrl, toEml, toCopyText } from '../shared/templates';
 import { normalizeAkas } from '../shared/transforms';
 import { parseSessionImport } from '../shared/import-export';
-import { DEFAULT_STORAGE_PREFS } from '../shared/storage-prefs';
+import { DEFAULT_STORAGE_PREFS, mergeStoragePrefs } from '../shared/storage-prefs';
+import {
+  DEFAULT_STORAGE_PROMPTS_SEEN,
+  coerceRunMetadata,
+  isStoragePromptId,
+  isStoragePromptEligible,
+  mergeStoragePromptsSeen,
+} from '../shared/persistence';
 import { BROKERS, getBroker } from '../shared/brokers';
 import { DATASET_HOST_PATTERN, type DatasetStatus, type CheckResult } from '../shared/dataset';
 import { formatRunMetadataLine } from '../shared/run-metadata-display';
@@ -32,7 +47,32 @@ let pollHandle: number | null = null;
 let lastResultsSig = ''; // results view signature of the last render — gates the 2s poll
 let storagePrefs: StoragePrefs = { ...DEFAULT_STORAGE_PREFS };
 let runMetadata: RunMetadata = {};
+let storagePromptsSeen: StoragePromptsSeen = { ...DEFAULT_STORAGE_PROMPTS_SEEN };
+let storagePromptEpoch: number | null = null;
+let storagePromptStateLoaded = false;
+let storageRefreshGeneration = 0;
+let contextRefreshGeneration = 0;
+let removalConvergenceGeneration = 0;
+let suppressStorageBannerRendering = false;
+let storedContextRemovalPending = false;
+let storageTogglePending = false;
+const activeStorageBanners = new Set<StoragePromptId>();
+const renderedStoragePrompts = new Set<StoragePromptId>();
 let pendingImportProfile: Profile | null = null; // stashed between file-read and warn-and-overwrite confirm
+
+const STORAGE_PROMPTS: readonly StoragePromptId[] = [
+  'profileStorage',
+  'runMetadata',
+  'richHistory',
+];
+
+// A prompt-bookkeeping read failure is not evidence that the user has never seen an offer.
+// Suppress all offers for this page lifetime rather than risk nagging.
+const SUPPRESS_STORAGE_PROMPTS: StoragePromptsSeen = {
+  profileStorage: true,
+  runMetadata: true,
+  richHistory: true,
+};
 
 // ── section routing ──────────────────────────────────────────────────────────
 
@@ -47,6 +87,7 @@ function showSection(id: Section): void {
   // resolves (or after an out-of-band change), guarantee the ≥1-row floor. Additive
   // only, so it never clobbers real rows or in-progress typing.
   if (id === 'profile') ensureOneAkaRow();
+  renderStorageBanners();
 }
 
 // ── html escape ──────────────────────────────────────────────────────────────
@@ -143,6 +184,7 @@ function showRunDisplayState(state: RunDisplayState, run?: RunState | null): voi
       break;
     }
   }
+  renderStorageBanners();
 }
 
 function renderRunActive(run: RunState): void {
@@ -295,6 +337,9 @@ function updateGroupHeader(groupEl: HTMLElement, items: WorkItem[]): void {
 function renderResults(run: RunState): void {
   document.getElementById('results-empty')!.classList.add('hidden');
   document.getElementById('results-content')!.classList.remove('hidden');
+  // Offers are contextual to the visible Results screen. Reconcile before the result-signature
+  // early-out so the polling fast path cannot skip a newly eligible one-time offer.
+  renderStorageBanners();
 
   const inRun = new Set(run.items.map(i => i.brokerId));
   const notInRun = BROKERS.filter(b => !inRun.has(b.id));
@@ -835,6 +880,7 @@ async function handleProfileSave(e: Event): Promise<void> {
   await browser.runtime.sendMessage({ type: 'SAVE_PROFILE', profile });
   currentProfile = profile;
   invalidateDraftPanels(); // drafts are built from the profile — drop stale cached panels
+  renderStorageBanners();
   btn.disabled = false;
   savedEl.classList.remove('hidden');
   setTimeout(() => savedEl.classList.add('hidden'), 3000);
@@ -864,35 +910,51 @@ async function saveSendMethod(method: SendMethod): Promise<void> {
 // The flags live in the background (it routes run/profile storage + owns the migration side
 // effects), so the options page reads/writes them via messages, not storage.local directly.
 
-async function loadStoragePrefs(): Promise<void> {
-  const res = (await browser.runtime.sendMessage({ type: 'GET_STORAGE_PREFS' })) as { prefs: StoragePrefs };
-  storagePrefs = res.prefs;
-  reflectStoragePrefs();
-}
-
-async function loadRunMetadata(): Promise<void> {
-  const res = (await browser.runtime.sendMessage({ type: 'GET_RUN_METADATA' })) as {
-    metadata?: RunMetadata;
-  };
-  runMetadata = res.metadata ?? {};
-}
-
 function reflectStoragePrefs(): void {
-  (document.getElementById('optin-profile-storage') as HTMLInputElement).checked = storagePrefs.profileStorage;
+  const profile = document.getElementById('optin-profile-storage') as HTMLInputElement;
+  const metadata = document.getElementById('optin-run-metadata') as HTMLInputElement;
+  const rich = document.getElementById('optin-rich-history') as HTMLInputElement;
+  const richChoice = document.getElementById('rich-history-choice')!;
+  const dependency = document.getElementById('rich-history-dependency')!;
+
+  profile.checked = storagePrefs.profileStorage;
+  metadata.checked = storagePrefs.runMetadata;
+  rich.checked = storagePrefs.richHistory;
+
+  // Keep the dependent control keyboard-focusable so a banner CTA can land on it and explain
+  // why it cannot be changed. Only an in-flight write uses native disabled state.
+  profile.disabled = storageTogglePending;
+  metadata.disabled = storageTogglePending;
+  rich.disabled = storageTogglePending;
+  rich.setAttribute('aria-disabled', String(!storagePrefs.profileStorage || storageTogglePending));
+  richChoice.classList.toggle('is-disabled', !storagePrefs.profileStorage || storageTogglePending);
+  dependency.classList.toggle('hidden', storagePrefs.profileStorage);
 }
 
 async function handleStorageOptIn(key: keyof StoragePrefs, on: boolean): Promise<void> {
+  if (storageTogglePending) return;
+  storageTogglePending = true;
+  reflectStoragePrefs();
   try {
     // Background returns the NORMALIZED prefs (e.g. turning profileStorage off forces richHistory
     // off too), so reflect what actually took effect rather than the raw checkbox value.
-    const res = (await browser.runtime.sendMessage({ type: 'SET_STORAGE_OPTIN', key, on })) as { prefs: StoragePrefs };
-    storagePrefs = res.prefs;
+    const res = (await browser.runtime.sendMessage({ type: 'SET_STORAGE_OPTIN', key, on })) as {
+      ok?: boolean;
+      prefs?: StoragePrefs;
+    };
+    if (res.ok !== true || !res.prefs) throw new Error('Storage preference was not applied');
+    storagePrefs = mergeStoragePrefs(res.prefs);
+    await refreshStorageSettings();
   } catch (e) {
     // The write never landed — leave storagePrefs at its last-known-good so reflect reverts the
     // natively-toggled checkbox, rather than leaving it showing a state the background never applied.
     console.error(e);
+  } finally {
+    storageTogglePending = false;
+    reflectStoragePrefs();
+    renderBrokerCoverage();
+    renderStorageBanners();
   }
-  reflectStoragePrefs();
 }
 
 // ── import (M8) ─────────────────────────────────────────────────────────────────
@@ -933,6 +995,7 @@ async function applyImportedProfile(profile: Profile): Promise<void> {
   const msg = document.getElementById('import-msg')!;
   msg.textContent = 'Profile imported — open the Profile tab to review it.';
   msg.classList.remove('hidden');
+  renderStorageBanners();
 }
 
 // Broker host match-patterns for the run's optional-permission request. Shared by Start and
@@ -993,17 +1056,252 @@ function renderBrokerCoverage(): void {
   document.getElementById('broker-list')!.replaceChildren(rows);
 }
 
-async function refreshBrokerCoverage(): Promise<void> {
-  // Fail closed while refreshing: another options tab may have turned the opt-in off, and a
-  // failed/slow message must not leave an old saved scan visible under a stale in-memory pref.
-  runMetadata = {};
-  renderBrokerCoverage();
-  try {
-    await loadRunMetadata();
-  } catch (error) {
-    console.error('[expurge] could not refresh run metadata', error);
+function storagePromptContextVisible(prompt: StoragePromptId): boolean {
+  switch (prompt) {
+    case 'profileStorage':
+      return !document.getElementById('section-profile')!.classList.contains('hidden');
+    case 'runMetadata':
+      return !document.getElementById('section-run')!.classList.contains('hidden')
+        && !document.getElementById('run-done')!.classList.contains('hidden');
+    case 'richHistory':
+      return currentRun !== null
+        && !document.getElementById('section-results')!.classList.contains('hidden')
+        && !document.getElementById('results-content')!.classList.contains('hidden');
   }
+}
+
+function hideStorageBanner(prompt: StoragePromptId): void {
+  document.getElementById(`storage-banner-${prompt}`)!.classList.add('hidden');
+  activeStorageBanners.delete(prompt);
+}
+
+function markRenderedStoragePrompt(prompt: StoragePromptId): void {
+  // The memory guard moves first, before any asynchronous message can yield to a poll, navigation,
+  // or storage.onChanged refresh. That makes actual visible render the one-and-only mark trigger.
+  storagePromptsSeen = { ...storagePromptsSeen, [prompt]: true };
+  renderedStoragePrompts.add(prompt);
+  activeStorageBanners.add(prompt);
+  document.getElementById(`storage-banner-${prompt}`)!.classList.remove('hidden');
+  const epoch = storagePromptEpoch;
+  if (epoch === null) return;
+  browser.runtime
+    .sendMessage({ type: 'MARK_STORAGE_PROMPT_SEEN', prompt, epoch })
+    .then(response => {
+      if ((response as { ok?: boolean }).ok !== true) {
+        console.warn('[expurge] could not persist storage prompt acknowledgement');
+      }
+    })
+    .catch(error => {
+      console.warn('[expurge] could not persist storage prompt acknowledgement', error);
+    });
+}
+
+function renderStorageBanners(): void {
+  if (suppressStorageBannerRendering) {
+    // A source-area removal can be a lifecycle migration or Delete all. Do not create, mark, or
+    // reconcile offers until the serialized authoritative reads identify which one; an already
+    // visible, non-sensitive offer can remain steady during that short refresh.
+    return;
+  }
+  if (!storagePromptStateLoaded) return;
+
+  const context = { profileExists: currentProfile !== null, run: currentRun };
+  for (const prompt of STORAGE_PROMPTS) {
+    const contextVisible = storagePromptContextVisible(prompt);
+    // Once a banner is actually on screen, its just-written seen bit must not immediately hide it.
+    // Re-evaluate the remaining context and preference by temporarily treating only that prompt
+    // as unseen. Navigation or an enabled preference still closes it.
+    const eligibilitySeen = activeStorageBanners.has(prompt)
+      ? { ...storagePromptsSeen, [prompt]: false }
+      : storagePromptsSeen;
+    const eligible = contextVisible
+      && isStoragePromptEligible(prompt, storagePrefs, eligibilitySeen, context);
+
+    if (!eligible) {
+      hideStorageBanner(prompt);
+    } else if (!activeStorageBanners.has(prompt)) {
+      markRenderedStoragePrompt(prompt);
+    }
+  }
+}
+
+async function refreshStorageSettings(preserveRenderedPrompts = true): Promise<void> {
+  const generation = ++storageRefreshGeneration;
+  const [prefsResult, metadataResult, promptResult] = await Promise.all([
+    browser.runtime
+      .sendMessage({ type: 'GET_STORAGE_PREFS' })
+      .catch(error => {
+        console.error('[expurge] could not refresh storage preferences', error);
+        return null;
+      }),
+    browser.runtime
+      .sendMessage({ type: 'GET_RUN_METADATA' })
+      .catch(error => {
+        console.error('[expurge] could not refresh run metadata', error);
+        return null;
+      }),
+    browser.runtime
+      .sendMessage({ type: 'GET_STORAGE_PROMPTS_SEEN' })
+      .catch(error => {
+        console.error('[expurge] could not refresh storage prompt state', error);
+        return null;
+      }),
+  ]);
+
+  // Older, slower reads must never overwrite a newer toggle or another tab's update.
+  if (generation !== storageRefreshGeneration) return;
+
+  const prefs = (prefsResult as { prefs?: unknown } | null)?.prefs;
+  if (prefs !== undefined) storagePrefs = mergeStoragePrefs(prefs);
+
+  // Coverage fails closed: never retain old durable scan summaries after an opt-out or read error.
+  runMetadata = coerceRunMetadata(
+    (metadataResult as { metadata?: unknown } | null)?.metadata,
+  );
+
+  const promptPayload = promptResult as { seen?: unknown; epoch?: unknown } | null;
+  const seen = promptPayload?.seen;
+  const epoch = promptPayload?.epoch;
+  const validEpoch = typeof epoch === 'number' && Number.isSafeInteger(epoch);
+  const refreshedSeen = seen === null || seen === undefined || !validEpoch
+    ? { ...SUPPRESS_STORAGE_PROMPTS }
+    : mergeStoragePromptsSeen(seen);
+  storagePromptEpoch = validEpoch ? epoch : null;
+  storagePromptStateLoaded = true;
+  // A stale read racing the fire-and-forget MARK response must not undo this page lifetime's
+  // synchronous render guard and cause a second send after navigation.
+  if (preserveRenderedPrompts) {
+    for (const prompt of renderedStoragePrompts) refreshedSeen[prompt] = true;
+  }
+  storagePromptsSeen = refreshedSeen;
+
+  reflectStoragePrefs();
   renderBrokerCoverage();
+  renderStorageBanners();
+}
+
+function sameStoredValue(a: unknown, b: unknown): boolean {
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
+async function refreshCurrentContext(): Promise<boolean> {
+  const generation = ++contextRefreshGeneration;
+  const [profileResult, runResult] = await Promise.all([
+    browser.runtime
+      .sendMessage({ type: 'GET_PROFILE' })
+      .catch(error => {
+        console.error('[expurge] could not refresh the current profile', error);
+        return null;
+      }),
+    browser.runtime
+      .sendMessage({ type: 'GET_RUN_STATE' })
+      .catch(error => {
+        console.error('[expurge] could not refresh the current run', error);
+        return null;
+      }),
+  ]);
+  if (generation !== contextRefreshGeneration) return false;
+  if (profileResult === null || runResult === null) return false;
+
+  const previousProfile = currentProfile;
+  const previousRun = currentRun;
+  currentProfile = (profileResult as { profile?: Profile | null }).profile ?? null;
+  currentRun = (runResult as { run?: RunState | null }).run ?? null;
+
+  if (!sameStoredValue(previousProfile, currentProfile)) {
+    invalidateDraftPanels();
+    if (currentProfile) {
+      populateProfileForm(currentProfile);
+    } else {
+      (document.getElementById('profile-form') as HTMLFormElement).reset();
+      resetAkaRows([]);
+    }
+  }
+
+  if (!sameStoredValue(previousRun, currentRun)) {
+    lastResultsSig = '';
+    if (!currentRun) stopPolling();
+  }
+
+  if (!document.getElementById('section-run')!.classList.contains('hidden')) {
+    showRunDisplayState(runDisplayState(currentProfile, currentRun), currentRun);
+  }
+  if (!document.getElementById('section-results')!.classList.contains('hidden')) {
+    if (currentRun) {
+      renderResults(currentRun);
+    } else {
+      document.getElementById('results-empty')!.classList.remove('hidden');
+      document.getElementById('results-content')!.classList.add('hidden');
+      document.getElementById('results-groups')!.replaceChildren();
+    }
+  }
+  renderStorageBanners();
+  return true;
+}
+
+function resetPagePromptState(): void {
+  storagePromptsSeen = { ...DEFAULT_STORAGE_PROMPTS_SEEN };
+  activeStorageBanners.clear();
+  renderedStoragePrompts.clear();
+  for (const prompt of STORAGE_PROMPTS) {
+    document.getElementById(`storage-banner-${prompt}`)!.classList.add('hidden');
+  }
+}
+
+async function convergeStoredContext(failClosedOnReadFailure: boolean): Promise<void> {
+  const generation = ++removalConvergenceGeneration;
+  if (failClosedOnReadFailure) storedContextRemovalPending = true;
+  suppressStorageBannerRendering = true;
+  let contextRefreshed: boolean;
+  try {
+    [, contextRefreshed] = await Promise.all([
+      refreshStorageSettings(false),
+      refreshCurrentContext(),
+    ]);
+  } catch (error) {
+    if (generation === removalConvergenceGeneration) {
+      suppressStorageBannerRendering = false;
+      storedContextRemovalPending = false;
+      renderStorageBanners();
+    }
+    throw error;
+  }
+  if (generation !== removalConvergenceGeneration) return;
+
+  if (!contextRefreshed && storedContextRemovalPending) {
+    // A source-area removal may be a migration or Delete all. If its authoritative context cannot
+    // be read, fail closed in this tab rather than leave removed profile/run PII rendered.
+    currentProfile = null;
+    currentRun = null;
+    lastResultsSig = '';
+    stopPolling();
+    invalidateDraftPanels();
+    (document.getElementById('profile-form') as HTMLFormElement).reset();
+    resetAkaRows([]);
+    document.getElementById('results-empty')!.classList.remove('hidden');
+    document.getElementById('results-content')!.classList.add('hidden');
+    document.getElementById('results-groups')!.replaceChildren();
+    if (!document.getElementById('section-run')!.classList.contains('hidden')) {
+      showRunDisplayState('welcome');
+    }
+  }
+
+  // DELETE_ALL is the only normal path that leaves both contexts, all preferences, and the
+  // exact seen record empty. Reset page-lifetime guards too, or this tab would carry "seen"
+  // state past a clear and suppress a legitimate future offer.
+  const prefsOff = !storagePrefs.profileStorage
+    && !storagePrefs.runMetadata
+    && !storagePrefs.richHistory;
+  const promptsUnseen = STORAGE_PROMPTS.every(prompt => !storagePromptsSeen[prompt]);
+  if (!currentProfile && !currentRun && prefsOff && promptsUnseen) {
+    resetPagePromptState();
+  }
+
+  suppressStorageBannerRendering = false;
+  storedContextRemovalPending = false;
+  reflectStoragePrefs();
+  renderBrokerCoverage();
+  renderStorageBanners();
 }
 
 // ── signed dataset updates (M7) ────────────────────────────────────────────────
@@ -1129,7 +1427,15 @@ async function handleExport(): Promise<void> {
 }
 
 async function handleDeleteAll(): Promise<void> {
-  await browser.runtime.sendMessage({ type: 'DELETE_ALL' });
+  const response = await browser.runtime.sendMessage({ type: 'DELETE_ALL' }) as {
+    promptEpoch?: unknown;
+  };
+  // Invalidate any settings reads that began before the clear and reset every page-local mirror.
+  storageRefreshGeneration++;
+  contextRefreshGeneration++;
+  removalConvergenceGeneration++;
+  suppressStorageBannerRendering = false;
+  storedContextRemovalPending = false;
   currentProfile = null;
   currentRun = null;
   // DELETE_ALL's storage.local.clear() also wiped the opt-in flags → the background is back to the
@@ -1137,6 +1443,12 @@ async function handleDeleteAll(): Promise<void> {
   // stale ON (which would route a re-entered profile to storage.session and lose it on close).
   storagePrefs = { ...DEFAULT_STORAGE_PREFS };
   runMetadata = {};
+  resetPagePromptState();
+  storagePromptEpoch = typeof response.promptEpoch === 'number'
+    && Number.isSafeInteger(response.promptEpoch)
+    ? response.promptEpoch
+    : null;
+  storagePromptStateLoaded = storagePromptEpoch !== null;
   reflectStoragePrefs();
   renderBrokerCoverage();
   lastResultsSig = ''; // run cleared — drop the early-out cache so the next render rebuilds
@@ -1238,17 +1550,21 @@ async function handleResume(): Promise<void> {
 // ── init ──────────────────────────────────────────────────────────────────────
 
 async function init(): Promise<void> {
+  const contextGeneration = ++contextRefreshGeneration;
   const [profileRes, runRes] = await Promise.all([
     browser.runtime.sendMessage({ type: 'GET_PROFILE' }),
     browser.runtime.sendMessage({ type: 'GET_RUN_STATE' }),
   ]) as [{ profile?: Profile }, { run?: RunState }];
 
-  currentProfile = profileRes.profile ?? null;
-  currentRun     = runRes.run ?? null;
+  // A storage.onChanged convergence may have started while these initial reads were in flight.
+  // Never let the older init snapshot overwrite that newer context.
+  if (contextGeneration === contextRefreshGeneration) {
+    currentProfile = profileRes.profile ?? null;
+    currentRun     = runRes.run ?? null;
+  }
 
   await loadPrefs();
-  await loadStoragePrefs();
-  await refreshBrokerCoverage();
+  await refreshStorageSettings();
 
   // Dataset update panel. If a weekly auto-fetch is due (opted in + permitted + configured), run
   // it now — this page opening IS the lazy trigger (plan §6.1) — then re-render the status line.
@@ -1281,7 +1597,7 @@ document.querySelectorAll<HTMLElement>('.nav-btn').forEach(btn => {
     showSection(section);
     if (section === 'run') showRunDisplayState(runDisplayState(currentProfile, currentRun), currentRun);
     if (section === 'results' && currentRun) renderResults(currentRun);
-    if (section === 'settings') refreshBrokerCoverage().catch(console.error);
+    if (section === 'settings') refreshStorageSettings().catch(console.error);
   });
 });
 
@@ -1341,6 +1657,85 @@ document.getElementById('send-method-group')!.addEventListener('change', e => {
 // Persistence opt-ins (M8)
 document.getElementById('optin-profile-storage')!.addEventListener('change', e => {
   handleStorageOptIn('profileStorage', (e.target as HTMLInputElement).checked).catch(console.error);
+});
+document.getElementById('optin-run-metadata')!.addEventListener('change', e => {
+  handleStorageOptIn('runMetadata', (e.target as HTMLInputElement).checked).catch(console.error);
+});
+document.getElementById('optin-rich-history')!.addEventListener('click', e => {
+  if (storageTogglePending || storagePrefs.profileStorage) return;
+  // aria-disabled keeps the dependency discoverable and focusable; cancel activation until the
+  // prerequisite is enabled rather than allowing a transient checked state.
+  e.preventDefault();
+  reflectStoragePrefs();
+});
+document.getElementById('optin-rich-history')!.addEventListener('change', e => {
+  if (!storagePrefs.profileStorage) {
+    reflectStoragePrefs();
+    return;
+  }
+  handleStorageOptIn('richHistory', (e.target as HTMLInputElement).checked).catch(console.error);
+});
+
+document.querySelectorAll<HTMLElement>('.storage-banner-dismiss').forEach(button => {
+  button.addEventListener('click', () => {
+    const prompt = button.dataset['storagePrompt'];
+    if (!isStoragePromptId(prompt)) return;
+    hideStorageBanner(prompt);
+    const nextFocus: Record<StoragePromptId, () => HTMLElement | null> = {
+      profileStorage: () => document.getElementById('p-first'),
+      runMetadata: () => document.getElementById('btn-view-results'),
+      richHistory: () => document.querySelector('#results-groups .broker-group-header')
+        ?? document.querySelector('.nav-btn[data-section="results"]'),
+    };
+    nextFocus[prompt]()?.focus();
+  });
+});
+
+document.querySelectorAll<HTMLElement>('.storage-banner-cta').forEach(button => {
+  button.addEventListener('click', () => {
+    const prompt = button.dataset['storagePrompt'];
+    if (!isStoragePromptId(prompt)) return;
+    hideStorageBanner(prompt);
+    showSection('settings');
+    const inputIds: Record<StoragePromptId, string> = {
+      profileStorage: 'optin-profile-storage',
+      runMetadata: 'optin-run-metadata',
+      richHistory: 'optin-rich-history',
+    };
+    const input = document.getElementById(inputIds[prompt]) as HTMLInputElement;
+    input.focus();
+    input.scrollIntoView({ block: 'center' });
+    refreshStorageSettings().catch(console.error);
+  });
+});
+
+const STORAGE_CONVERGENCE_KEYS = new Set([
+  'expurge_storage_prefs',
+  'expurge_run_metadata',
+  'expurge_storage_prompts_seen',
+]);
+const STORED_CONTEXT_KEYS = new Set([
+  'expurge_profile',
+  'expurge_run',
+]);
+browser.storage.onChanged.addListener((changes, areaName) => {
+  const changedKeys = Object.keys(changes);
+  const settingsChanged = areaName === 'local'
+    && changedKeys.some(key => STORAGE_CONVERGENCE_KEYS.has(key));
+  const contextChanged = (areaName === 'local' || areaName === 'session')
+    && changedKeys.some(key => STORED_CONTEXT_KEYS.has(key));
+  if (!settingsChanged && !contextChanged) return;
+
+  const contextRemoved = contextChanged && changedKeys.some(
+    key => STORED_CONTEXT_KEYS.has(key) && changes[key]?.newValue === undefined,
+  );
+  if (contextChanged || suppressStorageBannerRendering) {
+    convergeStoredContext(contextRemoved).catch(error => {
+      console.error('[expurge] could not converge stored context', error);
+    });
+    return;
+  }
+  if (settingsChanged) refreshStorageSettings().catch(console.error);
 });
 
 // Resume a persisted run (M8)

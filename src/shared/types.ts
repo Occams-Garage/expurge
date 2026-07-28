@@ -124,6 +124,9 @@ export interface GetStoragePromptsSeenMsg { type: 'GET_STORAGE_PROMPTS_SEEN' }
 export interface MarkStoragePromptSeenMsg {
   type: 'MARK_STORAGE_PROMPT_SEEN';
   prompt: StoragePromptId;
+  // Session-lifetime deletion fence. DELETE_ALL advances it so an offer rendered just before a
+  // cross-tab clear cannot race in afterward and recreate the seen key.
+  epoch: number;
 }
 // Re-open a persisted run's in-flight tabs after a browser restart (user-gestured, since
 // it opens broker tabs and needs a window to pin to). windowId is the resume-click's window.

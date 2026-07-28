@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { DEFAULT_STORAGE_PREFS, mergeStoragePrefs, applyStorageOptIn } from './storage-prefs';
+import {
+  DEFAULT_STORAGE_PREFS,
+  mergeStoragePrefs,
+  applyStorageOptIn,
+  isStoragePrefKey,
+} from './storage-prefs';
 
 describe('mergeStoragePrefs', () => {
   it('absent / nullish → all-OFF ephemeral default', () => {
@@ -65,5 +70,15 @@ describe('applyStorageOptIn', () => {
     const prev = { ...base };
     applyStorageOptIn(prev, 'profileStorage', true);
     expect(prev).toEqual(base);
+  });
+});
+
+describe('isStoragePrefKey', () => {
+  it.each(['profileStorage', 'runMetadata', 'richHistory'])('accepts %s', key => {
+    expect(isStoragePrefKey(key)).toBe(true);
+  });
+
+  it.each(['__proto__', 'profile', '', null, true])('rejects malformed key %j', key => {
+    expect(isStoragePrefKey(key)).toBe(false);
   });
 });

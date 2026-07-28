@@ -64,6 +64,13 @@
           <div id="run-done" class="hidden">
             <h2>Scan complete</h2>
             <p id="run-done-desc" class="body-text"></p>
+            <div id="storage-banner-runMetadata" class="storage-banner hidden" role="region" aria-label="Run summary storage choice">
+              <p class="storage-banner-copy"><strong>Remember just the scan summary?</strong> You can save each broker’s last-checked date and result without saving your profile, names, or URLs.</p>
+              <div class="storage-banner-actions">
+                <button type="button" class="btn-secondary storage-banner-cta" data-storage-prompt="runMetadata">Review setting</button>
+                <button type="button" class="btn-secondary storage-banner-dismiss" data-storage-prompt="runMetadata">Dismiss</button>
+              </div>
+            </div>
             <div class="action-row">
               <button id="btn-view-results" class="btn-primary">View results</button>
               <button id="btn-run-again" class="btn-secondary">Run again</button>
@@ -82,6 +89,13 @@
 
           <div id="results-content" class="hidden">
             <h2>Results</h2>
+            <div id="storage-banner-richHistory" class="storage-banner hidden" role="region" aria-label="Results storage choice">
+              <p class="storage-banner-copy"><strong>Keep these results after the browser closes?</strong> This setting keeps the current scan’s listings and opt-out progress on this device. It requires profile storage.</p>
+              <div class="storage-banner-actions">
+                <button type="button" class="btn-secondary storage-banner-cta" data-storage-prompt="richHistory">Review setting</button>
+                <button type="button" class="btn-secondary storage-banner-dismiss" data-storage-prompt="richHistory">Dismiss</button>
+              </div>
+            </div>
             <div id="results-groups"></div>
           </div>
 
@@ -91,6 +105,13 @@
         <section id="section-profile" class="hidden">
           <h2>Your profile</h2>
           <p class="note">Kept on this device only — never uploaded. By default it's cleared when you close the browser; see Settings → Storage to keep it.</p>
+          <div id="storage-banner-profileStorage" class="storage-banner hidden" role="region" aria-label="Profile storage choice">
+            <p class="storage-banner-copy"><strong>Keep this profile for next time?</strong> You can choose to store it on this device so you don’t have to enter it again.</p>
+            <div class="storage-banner-actions">
+              <button type="button" class="btn-secondary storage-banner-cta" data-storage-prompt="profileStorage">Review setting</button>
+              <button type="button" class="btn-secondary storage-banner-dismiss" data-storage-prompt="profileStorage">Dismiss</button>
+            </div>
+          </div>
 
           <form id="profile-form" novalidate>
             <fieldset class="field-group">
@@ -173,17 +194,34 @@
           <div class="settings-block">
             <h3 class="settings-heading">Storage</h3>
             <p class="note">
-              By default nothing is kept — your profile and scan results live in memory only and
-              are cleared when you close the browser. Turn this on to keep them on this device
-              between sessions. Nothing is ever uploaded either way.
+              Storage is off by default. Choose separately whether to remember your profile,
+              a small broker-by-broker scan summary, or the current scan’s full results.
+              Each stays on this device and is never uploaded.
             </p>
-            <label class="radio-item">
-              <input type="checkbox" id="optin-profile-storage">
-              <div class="radio-text">
-                <span class="radio-label">Remember my profile on this device</span>
-                <span class="radio-desc">Saves your profile so you don't re-enter it each session, and lets an unfinished scan resume after you reopen the browser. Stored only on this device · never uploaded.</span>
-              </div>
-            </label>
+            <div class="radio-group" id="storage-optins">
+              <label class="radio-item">
+                <input type="checkbox" id="optin-profile-storage">
+                <div class="radio-text">
+                  <span class="radio-label">Remember my profile on this device</span>
+                  <span class="radio-desc">Saves your profile and lets an unfinished scan resume after you reopen the browser. This includes the personal details you entered above.</span>
+                </div>
+              </label>
+              <label class="radio-item">
+                <input type="checkbox" id="optin-run-metadata">
+                <div class="radio-text">
+                  <span class="radio-label">Remember my last scan for each broker</span>
+                  <span class="radio-desc">Stores only the broker, last-checked date, and result. It stores no profile fields, names, search URLs, listing URLs, or opt-out dates, and works without profile storage.</span>
+                </div>
+              </label>
+              <label class="radio-item" id="rich-history-choice">
+                <input type="checkbox" id="optin-rich-history" aria-describedby="rich-history-dependency">
+                <div class="radio-text">
+                  <span class="radio-label">Remember this scan’s full results</span>
+                  <span class="radio-desc">Keeps the current scan’s listings and opt-out progress on this device. Starting a new scan replaces it.</span>
+                  <span class="radio-dependency" id="rich-history-dependency">Requires profile storage above.</span>
+                </div>
+              </label>
+            </div>
           </div>
 
           <div class="settings-block">
