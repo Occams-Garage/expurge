@@ -30,6 +30,7 @@ Phase 1 (done):
 - [x] Green-bar: `npm run typecheck && npm test && npm run build` + `npm run coverage`, plus an xhigh code review + fixes
 
 Phase 2 (remaining):
+- Implementation plan: `plan/m8-persistence-phase2.md`.
 - [ ] Run metadata: per-broker last-checked date + result, no PII; wire the #2 toggle + its persistence (independent of profile storage)
 - [ ] Rich hits/drafts history (current-run-only): wire the #3 toggle (rides the profile-storage opt-in) + its persistence + purge-on-opt-out
 - [ ] Contextual first-exposure banners: Run-done -> run-metadata; Results -> rich-history; Profile -> profile-storage
