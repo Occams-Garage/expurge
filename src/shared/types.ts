@@ -29,6 +29,7 @@ export interface WorkItem {
 export interface RunState {
   runId: string;           // UUID
   createdAt: string;       // ISO timestamp
+  completedAt?: string;    // stable ISO timestamp, written once when every item is terminal
   items: WorkItem[];
   windowId?: number;       // window the run is pinned to (§Decision 7). Session-only, but —
                            // unlike tabId — a windowId isn't a recycled-id hazard, so it's
@@ -73,6 +74,24 @@ export interface StoragePrefs {
   richHistory: boolean;     // current-run hits/drafts history; rides profileStorage
 }
 
+// The durable, PII-free summary of the latest completed check for each broker. Deliberately
+// excludes run/profile identifiers, variants, URLs, skip reasons, and opt-out timestamps.
+export type BrokerRunResult = 'hit' | 'clear' | 'unknown' | 'skipped';
+
+export interface BrokerRunMetadata {
+  checkedAt: string;
+  result: BrokerRunResult;
+}
+
+export type RunMetadata = Record<string, BrokerRunMetadata>;
+
+// Contextual storage offers are keyed by the preference they introduce. Keep this union
+// explicit instead of coupling it to every future StoragePrefs key: adding a preference must
+// not silently add a new durable prompt field without its own product decision.
+export type StoragePromptId = 'profileStorage' | 'runMetadata' | 'richHistory';
+// The seen record is durable but non-sensitive: exactly these booleans, no context payload.
+export type StoragePromptsSeen = Record<StoragePromptId, boolean>;
+
 // ── messages popup/content → background ─────────────────────────────────────
 
 export interface StartRunMsg    { type: 'START_RUN';    profile: Profile; windowId?: number }
@@ -100,6 +119,12 @@ export interface SetDatasetAutoFetchMsg { type: 'SET_DATASET_AUTOFETCH'; on: boo
 // so the options page routes through these rather than writing the pref key itself.
 export interface GetStoragePrefsMsg { type: 'GET_STORAGE_PREFS' }
 export interface SetStorageOptInMsg { type: 'SET_STORAGE_OPTIN'; key: keyof StoragePrefs; on: boolean }
+export interface GetRunMetadataMsg   { type: 'GET_RUN_METADATA' }
+export interface GetStoragePromptsSeenMsg { type: 'GET_STORAGE_PROMPTS_SEEN' }
+export interface MarkStoragePromptSeenMsg {
+  type: 'MARK_STORAGE_PROMPT_SEEN';
+  prompt: StoragePromptId;
+}
 // Re-open a persisted run's in-flight tabs after a browser restart (user-gestured, since
 // it opens broker tabs and needs a window to pin to). windowId is the resume-click's window.
 export interface ResumeRunMsg       { type: 'RESUME_RUN'; windowId?: number }
@@ -143,7 +168,8 @@ export type ToBackground =
   | StopRunMsg | SaveProfileMsg | GetProfileMsg | MarkSentMsg | DeleteAllMsg | CloseTabMsg
   | SidebarGetStateMsg | DeferMsg | FocusItemMsg | NavigateBrokerTabMsg | ChallengeDetectedMsg | ChallengeResolvedMsg
   | CheckDatasetUpdateMsg | GetDatasetStatusMsg | SetDatasetAutoFetchMsg
-  | GetStoragePrefsMsg | SetStorageOptInMsg | ResumeRunMsg;
+  | GetStoragePrefsMsg | SetStorageOptInMsg | GetRunMetadataMsg
+  | GetStoragePromptsSeenMsg | MarkStoragePromptSeenMsg | ResumeRunMsg;
 
 // ── sidebar view model ──────────────────────────────────────────────────────
 // The sidebar's display is derived purely from run state + focus (src/sidebar/state.ts).
