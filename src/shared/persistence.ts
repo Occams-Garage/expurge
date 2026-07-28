@@ -15,6 +15,11 @@ import { isComplete } from '../background/coordinator';
 
 export type RunStorageDestination = 'local' | 'session';
 
+export interface StoredRunCopies {
+  local: RunState | null;
+  session: RunState | null;
+}
+
 export const DEFAULT_STORAGE_PROMPTS_SEEN: StoragePromptsSeen = {
   profileStorage: false,
   runMetadata: false,
@@ -28,6 +33,16 @@ export function stampCompletedAt(run: RunState, nowIso: string): RunState {
   return { ...run, completedAt: nowIso };
 }
 
+// Lifecycle callers pass both snapshots so a legacy completed run that predates completedAt is
+// not falsely dated by a later re-verdict or mark-sent edit.
+export function stampCompletionTransition(
+  before: RunState,
+  after: RunState,
+  nowIso: string,
+): RunState {
+  return isComplete(before) ? after : stampCompletedAt(after, nowIso);
+}
+
 // Profile storage owns incomplete cross-session checkpoints. A completed run is durable only
 // when rich history is also enabled; otherwise it remains session-scoped.
 export function runStorageDestination(
@@ -37,6 +52,35 @@ export function runStorageDestination(
   if (!prefs.profileStorage) return 'session';
   if (prefs.richHistory || !isComplete(run)) return 'local';
   return 'session';
+}
+
+// Select only a copy whose area is allowed by the current preferences and run lifecycle.
+// During the incomplete→complete move, a crash may leave both snapshots: the terminal session
+// copy wins for the same run. Different runs can coexist if a new-run replacement was interrupted;
+// in that case createdAt identifies the current one (ties fail closed to the session copy).
+export function selectRunForLoad(
+  prefs: StoragePrefs,
+  copies: StoredRunCopies,
+): RunState | null {
+  const local = copies.local
+    && runStorageDestination(prefs, copies.local) === 'local'
+    ? copies.local
+    : null;
+  const session = copies.session
+    && runStorageDestination(prefs, copies.session) === 'session'
+    ? copies.session
+    : null;
+
+  if (!local) return session;
+  if (!session) return local;
+  if (local.runId === session.runId) return session;
+
+  const localCreatedAt = Date.parse(local.createdAt);
+  const sessionCreatedAt = Date.parse(session.createdAt);
+  return Number.isFinite(localCreatedAt)
+    && (!Number.isFinite(sessionCreatedAt) || localCreatedAt > sessionCreatedAt)
+    ? local
+    : session;
 }
 
 const RESULT_RANK: Record<BrokerRunResult, number> = {

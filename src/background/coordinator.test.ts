@@ -90,6 +90,45 @@ describe('withVerdict', () => {
     expect(r.items[0].matchedAs).toBeUndefined();
   });
 
+  it('a non-skipped re-verdict drops a stale skipReason', () => {
+    const r = withVerdict(
+      run([item({
+        status: 'verdicted',
+        verdict: 'skipped',
+        skipReason: 'permission_denied',
+      })]),
+      'b:primary',
+      'hit',
+    );
+    expect(r.items[0]).toMatchObject({ verdict: 'hit', matchedAs: 'primary' });
+    expect(r.items[0].skipReason).toBeUndefined();
+  });
+
+  it('a skipped re-verdict preserves its existing skipReason', () => {
+    const r = withVerdict(
+      run([item({
+        status: 'verdicted',
+        verdict: 'skipped',
+        skipReason: 'challenge',
+      })]),
+      'b:primary',
+      'skipped',
+    );
+    expect(r.items[0]).toMatchObject({ verdict: 'skipped', skipReason: 'challenge' });
+  });
+
+  it('preserves sent state only while the item remains a hit', () => {
+    const sentHit = run([item({
+      status: 'verdicted',
+      verdict: 'hit',
+      optedOutAt: '2026-07-01T00:00:00.000Z',
+    })]);
+    expect(withVerdict(sentHit, 'b:primary', 'hit').items[0].optedOutAt)
+      .toBe('2026-07-01T00:00:00.000Z');
+    expect(withVerdict(sentHit, 'b:primary', 'clear').items[0].optedOutAt)
+      .toBeUndefined();
+  });
+
   it('sets listingUrl only when provided and leaves other items untouched', () => {
     const two = run([item({ id: 'b:primary' }), item({ id: 'b:aka_0', nameVariant: 'aka_0' })]);
     const r = withVerdict(two, 'b:primary', 'hit', 'https://p/1');
@@ -437,9 +476,14 @@ describe('rehydrateForResume', () => {
   });
 
   it('preserves runId and createdAt', () => {
-    const out = rehydrateForResume({ ...run([item({ status: 'open' })]), windowId: 1 });
+    const out = rehydrateForResume({
+      ...run([item({ status: 'open' })]),
+      completedAt: '2026-01-02T00:00:00.000Z',
+      windowId: 1,
+    });
     expect(out.runId).toBe('r');
     expect(out.createdAt).toBe('2026-01-01T00:00:00Z');
+    expect(out.completedAt).toBe('2026-01-02T00:00:00.000Z');
   });
 
   it('is idempotent (re-applying on the resume click after onStartup is a no-op)', () => {

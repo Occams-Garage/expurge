@@ -67,21 +67,31 @@ export function buildItems(profile: Profile, brokers: readonly Broker[] = BROKER
   return items;
 }
 
-// Return a run with the given item's verdict applied. Drops matchedAs first, then
-// re-adds it only for a hit — so a hit→non-hit re-verdict can't leave a stale match.
-// Keeps the existing listingUrl unless a new one is supplied.
+// Return a run with the given item's verdict applied. Drops hit/skip-only state first, then
+// re-adds matchedAs only for a hit and preserves skipReason only for another skipped verdict.
+// That prevents a skip→hit/clear re-verdict from retaining a stale non-attempt reason. Keeps the
+// existing listingUrl unless a new one is supplied.
 export function withVerdict(run: RunState, itemId: string, verdict: Verdict, listingUrl?: string): RunState {
   return {
     ...run,
     items: run.items.map(i => {
       if (i.id !== itemId) return i;
-      const { matchedAs: _drop, ...rest } = i;
+      const {
+        matchedAs: _matchedAs,
+        skipReason,
+        optedOutAt,
+        ...rest
+      } = i;
       return {
         ...rest,
         status: 'verdicted' as WorkItemStatus,
         verdict,
         ...(listingUrl !== undefined ? { listingUrl } : {}),
-        ...(verdict === 'hit' ? { matchedAs: i.nameVariant } : {}),
+        ...(verdict === 'skipped' && skipReason !== undefined ? { skipReason } : {}),
+        ...(verdict === 'hit' ? {
+          matchedAs: i.nameVariant,
+          ...(optedOutAt !== undefined ? { optedOutAt } : {}),
+        } : {}),
       };
     }),
   };

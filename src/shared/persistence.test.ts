@@ -18,7 +18,9 @@ import {
   mergeRunMetadata,
   mergeStoragePromptsSeen,
   runStorageDestination,
+  selectRunForLoad,
   stampCompletedAt,
+  stampCompletionTransition,
   type StoragePromptContext,
 } from './persistence';
 
@@ -73,6 +75,36 @@ describe('stampCompletedAt', () => {
   });
 });
 
+describe('stampCompletionTransition', () => {
+  it('stamps only when an incomplete run becomes complete', () => {
+    const before = makeRun([makeItem({ status: 'open' })]);
+    const after = {
+      ...before,
+      items: [completeItem({ verdict: 'hit' })],
+    };
+    expect(stampCompletionTransition(before, after, COMPLETE_AT)).toEqual({
+      ...after,
+      completedAt: COMPLETE_AT,
+    });
+  });
+
+  it('does not date a legacy complete run during a later re-verdict or mark-sent edit', () => {
+    const legacy = makeRun([completeItem({ verdict: 'hit' })]);
+    const reverdict = {
+      ...legacy,
+      items: [completeItem({ verdict: 'clear' })],
+    };
+    const markedSent = {
+      ...legacy,
+      items: [completeItem({ verdict: 'hit', optedOutAt: COMPLETE_AT })],
+    };
+    expect(stampCompletionTransition(legacy, reverdict, COMPLETE_AT)).toBe(reverdict);
+    expect(stampCompletionTransition(legacy, markedSent, COMPLETE_AT)).toBe(markedSent);
+    expect(reverdict).not.toHaveProperty('completedAt');
+    expect(markedSent).not.toHaveProperty('completedAt');
+  });
+});
+
 describe('runStorageDestination', () => {
   const incomplete = makeRun([makeItem({ status: 'pending' })]);
   const complete = makeRun([completeItem()]);
@@ -116,6 +148,108 @@ describe('runStorageDestination', () => {
       richHistory: true,
     };
     expect(runStorageDestination(inconsistentPrefs, complete)).toBe('session');
+  });
+});
+
+describe('selectRunForLoad', () => {
+  const incomplete = (runId: string, createdAt: string) => ({
+    ...makeRun([makeItem({ status: 'pending' })]),
+    runId,
+    createdAt,
+  });
+  const complete = (runId: string, createdAt: string) => ({
+    ...makeRun([completeItem()]),
+    runId,
+    createdAt,
+    completedAt: COMPLETE_AT,
+  });
+  const prefs = (
+    profileStorage: boolean,
+    richHistory: boolean,
+  ): StoragePrefs => ({ profileStorage, runMetadata: false, richHistory });
+
+  it('profile storage off reads session only and never resurrects a local copy', () => {
+    const session = incomplete('session', '2026-07-01T00:00:00Z');
+    expect(selectRunForLoad(prefs(false, false), {
+      local: complete('local-newer', '2026-07-28T00:00:00Z'),
+      session,
+    })).toBe(session);
+    expect(selectRunForLoad(prefs(false, false), {
+      local: incomplete('local-only', '2026-07-28T00:00:00Z'),
+      session: null,
+    })).toBeNull();
+  });
+
+  it('profile and rich history on read local only', () => {
+    const local = complete('local', '2026-07-01T00:00:00Z');
+    expect(selectRunForLoad(prefs(true, true), {
+      local,
+      session: complete('session-newer', '2026-07-28T00:00:00Z'),
+    })).toBe(local);
+    expect(selectRunForLoad(prefs(true, true), {
+      local: null,
+      session: complete('session-only', '2026-07-28T00:00:00Z'),
+    })).toBeNull();
+  });
+
+  it('profile on and rich history off accepts a local incomplete checkpoint', () => {
+    const local = incomplete('local', '2026-07-28T00:00:00Z');
+    expect(selectRunForLoad(prefs(true, false), { local, session: null })).toBe(local);
+  });
+
+  it('profile on and rich history off accepts a completed session run', () => {
+    const session = complete('session', '2026-07-28T00:00:00Z');
+    expect(selectRunForLoad(prefs(true, false), { local: null, session })).toBe(session);
+  });
+
+  it('never resurrects a completed local run while rich history is off', () => {
+    expect(selectRunForLoad(prefs(true, false), {
+      local: complete('forbidden', '2026-07-28T00:00:00Z'),
+      session: null,
+    })).toBeNull();
+  });
+
+  it('never accepts an incomplete session run while profile storage is on', () => {
+    expect(selectRunForLoad(prefs(true, false), {
+      local: null,
+      session: incomplete('wrong-area', '2026-07-28T00:00:00Z'),
+    })).toBeNull();
+  });
+
+  it('prefers the completed destination copy left by an interrupted same-run move', () => {
+    const local = incomplete('same', '2026-07-01T00:00:00Z');
+    const session = complete('same', '2026-07-01T00:00:00Z');
+    expect(selectRunForLoad(prefs(true, false), { local, session })).toBe(session);
+  });
+
+  it('uses createdAt to resolve valid copies from different runs after an interrupted replacement', () => {
+    const oldSession = complete('old', '2026-07-01T00:00:00Z');
+    const newLocal = incomplete('new', '2026-07-28T00:00:00Z');
+    expect(selectRunForLoad(prefs(true, false), {
+      local: newLocal,
+      session: oldSession,
+    })).toBe(newLocal);
+
+    const newerSession = complete('newest', '2026-07-29T00:00:00Z');
+    expect(selectRunForLoad(prefs(true, false), {
+      local: newLocal,
+      session: newerSession,
+    })).toBe(newerSession);
+  });
+
+  it('selects a newer initially-complete run over the previous incomplete checkpoint', () => {
+    const oldLocal = incomplete('old-incomplete', '2026-07-27T00:00:00Z');
+    const newSession = complete('new-initially-complete', '2026-07-28T00:00:00Z');
+    expect(selectRunForLoad(prefs(true, false), {
+      local: oldLocal,
+      session: newSession,
+    })).toBe(newSession);
+  });
+
+  it('fails closed to the session copy on equal or malformed createdAt values', () => {
+    const local = incomplete('local', 'malformed');
+    const session = complete('session', 'also-malformed');
+    expect(selectRunForLoad(prefs(true, false), { local, session })).toBe(session);
   });
 });
 

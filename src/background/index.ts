@@ -38,11 +38,20 @@ import {
 } from './dataset-store';
 import {
   readStoragePrefs,
+  readStoragePrefsStrict,
   writeStoragePrefs,
   purgeRunMetadata,
   purgeHistory,
 } from './storage-prefs-store';
 import { applyStorageOptIn } from '../shared/storage-prefs';
+import {
+  runStorageDestination,
+  selectRunForLoad,
+  stampCompletedAt,
+  stampCompletionTransition,
+  type RunStorageDestination,
+  type StoredRunCopies,
+} from '../shared/persistence';
 
 // ── serial write queue ────────────────────────────────────────────────────────
 // Prevents TOCTOU: loadRun → mutate → saveRun is not atomic; concurrent verdicts
@@ -51,7 +60,7 @@ import { applyStorageOptIn } from '../shared/storage-prefs';
 
 let writeQueue: Promise<void> = Promise.resolve();
 
-function serialWrite(fn: () => Promise<void>): Promise<void> {
+function serialWrite<T>(fn: () => Promise<T>): Promise<T> {
   const p = writeQueue.then(
     () => fn(),
     () => fn(),
@@ -65,26 +74,32 @@ function serialWrite(fn: () => Promise<void>): Promise<void> {
 
 // ── run/profile storage keys + opt-in area routing (M8) ──────────────────────
 // Ephemeral by default: run/profile live in storage.session (survives event-page spindown,
-// cleared on browser close). The profileStorage opt-in promotes them to storage.local
-// (durable, survives browser close → cross-session resume). tab_id is NEVER written to either
-// area — writeRun strips it below.
+// cleared on browser close). Profile storage promotes the profile and an INCOMPLETE run to
+// storage.local for resume. A completed run stays durable only when rich history is also on.
+// tabId is NEVER written to either area — writeRun strips it below.
 //
-// INVARIANT: write-through with inactive-area cleanup, read-active-only, NO fallback. Data
-// lives in exactly ONE area; every write removes the key from the other area (self-heals any
-// orphan a crashed migration left behind). load* deliberately does NOT fall back to the other
-// area — falling back to local while opted-out would resurrect data the user opted out of; the
-// toggle-flip migration (SET_STORAGE_OPTIN) is what moves an existing copy to the correct home.
+// INVARIANT: destination-first write, then source purge. Profile reads remain active-area-only
+// with NO fallback. Run reads accept only copies allowed by runStorageDestination(); in
+// particular, a completed local orphan is never returned while rich history is off.
 
 const KEY_RUN     = 'expurge_run';
 const KEY_PROFILE = 'expurge_profile';
 
 type StorageArea = typeof browser.storage.session;
 
-function areasFor(prefs: StoragePrefs): { active: StorageArea; inactive: StorageArea } {
+function profileAreasFor(prefs: StoragePrefs): { active: StorageArea; inactive: StorageArea } {
   const { local, session } = browser.storage;
   return prefs.profileStorage
     ? { active: local, inactive: session }
     : { active: session, inactive: local };
+}
+
+function runArea(destination: RunStorageDestination): StorageArea {
+  return browser.storage[destination];
+}
+
+function otherRunDestination(destination: RunStorageDestination): RunStorageDestination {
+  return destination === 'local' ? 'session' : 'local';
 }
 
 // Persist a run to a specific area, stripping live-session tabIds first (structural
@@ -101,27 +116,128 @@ async function writeRun(area: StorageArea, run: RunState): Promise<void> {
   await area.set({ [KEY_RUN]: safe });
 }
 
-async function loadRun(): Promise<RunState | null> {
-  const { active } = areasFor(await readStoragePrefs());
-  const r = await active.get(KEY_RUN);
-  return (r[KEY_RUN] as RunState) ?? null;
+async function readRun(area: StorageArea): Promise<RunState | null> {
+  const stored = await area.get(KEY_RUN);
+  return (stored[KEY_RUN] as RunState | undefined) ?? null;
 }
 
-async function saveRun(run: RunState): Promise<void> {
-  const { active, inactive } = areasFor(await readStoragePrefs());
-  // Write-to-active and remove-from-inactive touch different areas → run them in parallel.
-  await Promise.all([writeRun(active, run), inactive.remove(KEY_RUN)]);
+async function readRunCopies(prefs: StoragePrefs): Promise<StoredRunCopies> {
+  // Do not even read an area that cannot contain an active copy when one preference combination
+  // has a single destination. The split case must inspect both because lifecycle chooses the area.
+  if (!prefs.profileStorage) {
+    return { local: null, session: await readRun(browser.storage.session) };
+  }
+  if (prefs.richHistory) {
+    return { local: await readRun(browser.storage.local), session: null };
+  }
+  const [local, session] = await Promise.all([
+    readRun(browser.storage.local),
+    readRun(browser.storage.session),
+  ]);
+  return { local, session };
+}
+
+async function readAllRunCopies(): Promise<StoredRunCopies> {
+  const [local, session] = await Promise.all([
+    readRun(browser.storage.local),
+    readRun(browser.storage.session),
+  ]);
+  return { local, session };
+}
+
+async function loadRunForPrefs(prefs: StoragePrefs): Promise<RunState | null> {
+  return selectRunForLoad(prefs, await readRunCopies(prefs));
+}
+
+async function loadRun(): Promise<RunState | null> {
+  return loadRunForPrefs(await readStoragePrefs());
+}
+
+async function saveRun(run: RunState): Promise<RunState> {
+  return saveRunForPrefs(run, await readStoragePrefs());
+}
+
+async function saveRunForPrefs(run: RunState, prefs: StoragePrefs): Promise<RunState> {
+  const destination = runStorageDestination(prefs, run);
+  // Destination first: an interruption before cleanup leaves at least one intact current copy.
+  await writeRun(runArea(destination), run);
+  await runArea(otherRunDestination(destination)).remove(KEY_RUN);
+  return run;
 }
 
 async function loadProfile(): Promise<Profile | null> {
-  const { active } = areasFor(await readStoragePrefs());
+  const { active } = profileAreasFor(await readStoragePrefs());
   const r = await active.get(KEY_PROFILE);
   return (r[KEY_PROFILE] as Profile) ?? null;
 }
 
 async function saveProfile(profile: Profile): Promise<void> {
-  const { active, inactive } = areasFor(await readStoragePrefs());
-  await Promise.all([active.set({ [KEY_PROFILE]: profile }), inactive.remove(KEY_PROFILE)]);
+  const { active, inactive } = profileAreasFor(await readStoragePrefs());
+  await active.set({ [KEY_PROFILE]: profile });
+  await inactive.remove(KEY_PROFILE);
+}
+
+async function readProfile(area: StorageArea): Promise<Profile | null> {
+  const stored = await area.get(KEY_PROFILE);
+  return (stored[KEY_PROFILE] as Profile | undefined) ?? null;
+}
+
+// Stage every value in its destination under `next`, flip the preference only after staging,
+// then purge the source/inactive copy. This is called inside serialWrite. Re-running a no-op
+// profile/rich request also repairs leftovers from a prior source-purge failure.
+async function migrateStorageOptIn(
+  prev: StoragePrefs,
+  next: StoragePrefs,
+  key: keyof StoragePrefs,
+): Promise<void> {
+  const migrateRun = key === 'profileStorage' || key === 'richHistory';
+  const migrateProfile = key === 'profileStorage';
+
+  let currentRun: RunState | null = null;
+  let runDestination: RunStorageDestination | null = null;
+  if (migrateRun) {
+    currentRun = selectRunForLoad(prev, await readAllRunCopies());
+    if (currentRun) {
+      runDestination = runStorageDestination(next, currentRun);
+      await writeRun(runArea(runDestination), currentRun);
+    } else {
+      // Neither copy is active under the old preferences. Clear wrong-area/crash orphans before
+      // the flip so they cannot become newly eligible under `next`.
+      await browser.storage.local.remove(KEY_RUN);
+      await browser.storage.session.remove(KEY_RUN);
+    }
+  }
+
+  let profileDestination: StorageArea | null = null;
+  let profileInactive: StorageArea | null = null;
+  let profileSource: StorageArea | null = null;
+  if (migrateProfile) {
+    profileSource = profileAreasFor(prev).active;
+    const nextAreas = profileAreasFor(next);
+    profileDestination = nextAreas.active;
+    profileInactive = nextAreas.inactive;
+    const profile = await readProfile(profileSource);
+    if (profile) {
+      await profileDestination.set({ [KEY_PROFILE]: profile });
+    } else {
+      // Prevent an inactive orphan from becoming visible after the preference flip.
+      await profileDestination.remove(KEY_PROFILE);
+    }
+  }
+
+  await writeStoragePrefs(next);
+
+  if (migrateRun && currentRun && runDestination) {
+    await runArea(otherRunDestination(runDestination)).remove(KEY_RUN);
+  }
+  if (migrateProfile && profileDestination && profileSource && profileInactive) {
+    await profileInactive.remove(KEY_PROFILE);
+  }
+
+  // expurge_history was a Phase 1 placeholder for a separate archive that Phase 2 rejected.
+  // Remove it defensively on every preference mutation; the current-run record is the only rich
+  // data model.
+  await purgeHistory();
 }
 
 // ── badge ─────────────────────────────────────────────────────────────────────
@@ -182,11 +298,15 @@ async function handleStartRun(profile: Profile, windowId?: number): Promise<void
     // in the sidebar/options still read the compile-time BROKERS list — that migration is an M9
     // follow-up; with only the bundled dataset today the two are identical.)
     const items = buildItems(profile, await getActiveBrokers());
-    const run: RunState = { runId, createdAt: new Date().toISOString(), items, windowId: resolvedWindowId };
+    const createdAt = new Date().toISOString();
+    const run = stampCompletedAt(
+      { runId, createdAt, items, windowId: resolvedWindowId },
+      createdAt,
+    );
     // Persist before opening tabs so content scripts can find their items on load.
-    await saveRun(run);
-    await updateBadge(run);
-    const afterBatch = await openNextBatch(run, true);
+    const storedRun = await saveRun(run);
+    await updateBadge(storedRun);
+    const afterBatch = await openNextBatch(storedRun, true);
     // Init-race insurance (Slice-5 review): a sidebar that opened on the Start click may have
     // sent SIDEBAR_GET_STATE before the run was saved (→ got no-run). Push the real view now
     // that the first batch is open so it corrects itself without waiting for a focus change.
@@ -206,9 +326,9 @@ async function handleResumeRun(windowId?: number): Promise<void> {
     if (!existing) return;
     const resolvedWindowId = await resolveWindowId(windowId, 'RESUME_RUN');
     const run: RunState = { ...rehydrateForResume(existing), windowId: resolvedWindowId };
-    await saveRun(run);
-    await updateBadge(run);
-    const afterBatch = await openNextBatch(run, true);
+    const storedRun = await saveRun(run);
+    await updateBadge(storedRun);
+    const afterBatch = await openNextBatch(storedRun, true);
     await pushActiveView(afterBatch);
   });
 }
@@ -225,16 +345,28 @@ async function handleVerdict(itemId: string, verdict: Verdict, explicitListingUr
     // No-wedge: an already-recorded verdict wins over a later duplicate — a retry of a
     // landed-but-ack-lost verdict, or a fast second click (Yes then No) clobbering a recorded
     // hit. The message listener still returns {type:'ACK'}, so the retry is idempotent (it
-    // re-ACKs without re-recording, re-advancing, or re-closing the tab). The guard lives here,
-    // NOT in withVerdict — handleReverdict deliberately re-verdicts already-verdicted items.
+    // re-ACKs without re-recording, re-advancing, or re-closing the tab). Re-save the selected
+    // terminal snapshot first: if its destination write landed but old-area purge failed, this
+    // retry repairs the orphan before ACK so it cannot resurrect after session storage clears.
+    // The guard lives here, NOT in withVerdict — handleReverdict deliberately re-verdicts
+    // already-verdicted items.
     const target = run.items.find(i => i.id === itemId);
-    if (!target || target.status === 'verdicted') return;
+    if (!target) return;
+    if (target.status === 'verdicted') {
+      await saveRun(run);
+      return;
+    }
 
     const brokerTabId = await findTabForItem(itemId);
     const listingUrl = await captureListingUrl(run, itemId, brokerTabId, explicitListingUrl);
 
-    const updated = withVerdict(run, itemId, verdict, listingUrl);
-    await saveRun(updated);
+    const updated = await saveRun(
+      stampCompletionTransition(
+        run,
+        withVerdict(run, itemId, verdict, listingUrl),
+        new Date().toISOString(),
+      ),
+    );
     await updateBadge(updated);
 
     if (brokerTabId !== null) {
@@ -301,8 +433,7 @@ async function handleReverdict(itemId: string, verdict: Verdict, listingUrl?: st
     const target = run.items.find(i => i.id === itemId);
     if (!target || target.status !== 'verdicted') return;
 
-    const updated = withVerdict(run, itemId, verdict, listingUrl);
-    await saveRun(updated);
+    const updated = await saveRun(withVerdict(run, itemId, verdict, listingUrl));
     await updateBadge(updated);
 
     // Refresh the sidebar's resting done/stopped summary ONLY when the run is complete: a
@@ -321,8 +452,11 @@ async function handleSkip(itemId: string, skipReason: SkipReason, tabId?: number
     const run = await loadRun();
     if (!run) return;
 
-    const updated = applySkip(run, itemId, skipReason);
-    await saveRun(updated);
+    const updated = await saveRun(stampCompletionTransition(
+      run,
+      applySkip(run, itemId, skipReason),
+      new Date().toISOString(),
+    ));
 
     if (tabId !== undefined) {
       await removeTab(tabId);
@@ -337,8 +471,11 @@ async function handleStopRun(): Promise<void> {
     const run = await loadRun();
     if (!run) return;
 
-    const updated = applyStop(run);
-    await saveRun(updated);
+    const updated = await saveRun(stampCompletionTransition(
+      run,
+      applyStop(run),
+      new Date().toISOString(),
+    ));
 
     // Drop all per-tab state (both tab keys AND challenge keys) so tabs.onRemoved can't fire
     // after stop and overwrite run_stopped → tab_closed for each still-open broker tab, and no
@@ -495,8 +632,7 @@ browser.runtime.onMessage.addListener(
       // between them the run transiently has 0 open/deferred + pending items, which the options
       // page would misread as a "resumable" (restart) run and get stuck on. Reading after writes
       // settle collapses that window.
-      let run: RunState | null = null;
-      await serialWrite(async () => { run = await loadRun(); });
+      const run = await serialWrite(() => loadRun());
       return { run };
     }
 
@@ -575,8 +711,11 @@ browser.runtime.onMessage.addListener(
     }
 
     if (m.type === 'GET_DRAFT') {
-      const run     = await loadRun();
-      const profile = await loadProfile();
+      // The draft combines both area-routed records, so read them on one side of any migration.
+      const { run, profile } = await serialWrite(async () => ({
+        run: await loadRun(),
+        profile: await loadProfile(),
+      }));
       if (!run || !profile) return { draft: null, reason: 'no_state' };
 
       const hitItem = run.items.find(
@@ -609,7 +748,9 @@ browser.runtime.onMessage.addListener(
     }
 
     if (m.type === 'GET_PROFILE') {
-      const profile = await loadProfile();
+      // Keep the preference read + active-area read on the same side of a toggle migration.
+      // Otherwise GET_PROFILE could read the old preference, then the just-purged old source.
+      const profile = await serialWrite(() => loadProfile());
       return { profile };
     }
 
@@ -617,8 +758,9 @@ browser.runtime.onMessage.addListener(
       await serialWrite(async () => {
         const run = await loadRun();
         if (!run) return;
-        const updated = applyMarkSent(run, m.itemId as string, new Date().toISOString());
-        await saveRun(updated);
+        const updated = await saveRun(
+          applyMarkSent(run, m.itemId as string, new Date().toISOString()),
+        );
         // Refresh the resting sidebar view for parity with REVERDICT, gated on isComplete so a
         // resting view never clobbers a mid-run active-tab view. Mark-sent is effectively always
         // post-run and doesn't move the hit count, so this is a harmless no-op push today — the
@@ -669,34 +811,18 @@ browser.runtime.onMessage.addListener(
       const on = m.on as boolean;
       let prefs!: StoragePrefs;
       await serialWrite(async () => {
-        const prev = await readStoragePrefs();
+        // A migration may purge an old/ineligible area, so it must not interpret a transient
+        // storage.local read failure as the all-off default and delete opted-in durable data.
+        const prev = await readStoragePrefsStrict();
         const next = applyStorageOptIn(prev, key, on);
-        // Only profileStorage changes where run/profile live, and only when it actually flips.
-        const areaChanged = key === 'profileStorage' && prev.profileStorage !== next.profileStorage;
-        if (areaChanged) {
-          // Migrate run + profile between areas. Order: populate NEW home → flip pref LAST →
-          // purge OLD home, addressing areas explicitly (never the pref-routed saveRun, which
-          // would read a half-flipped pref). Flip-last is crash-safe: a kill before the flip
-          // leaves the pref pointing at the intact old home, and the orphan in the new home is
-          // swept by the next saveRun's inactive.remove.
-          const { local, session } = browser.storage;
-          const from = prev.profileStorage ? local : session;
-          const to   = next.profileStorage ? local : session;
-          const run  = (await from.get(KEY_RUN))[KEY_RUN] as RunState | undefined;
-          const prof = (await from.get(KEY_PROFILE))[KEY_PROFILE] as Profile | undefined;
-          if (run)  await writeRun(to, run);
-          if (prof) await to.set({ [KEY_PROFILE]: prof });
-          await writeStoragePrefs(next);               // flip LAST
-          await from.remove([KEY_RUN, KEY_PROFILE]);
-          // richHistory rode profileStorage → its durable slice must die with the opt-out.
-          if (!next.profileStorage) await purgeHistory();
+        if (key === 'profileStorage' || key === 'richHistory') {
+          await migrateStorageOptIn(prev, next, key);
         } else {
-          // runMetadata / richHistory (or a no-op profileStorage set): just persist the flag and
-          // drop the durable slice when its opt-in goes off. `next` already reflects the
-          // richHistory ride-along (forced off when profileStorage is off).
+          // Run metadata is area-independent. Slice 3 owns writes/backfill; Phase 1 already
+          // guarantees immediate purge when the user turns it off.
           await writeStoragePrefs(next);
-          if (key === 'runMetadata' && !next.runMetadata) await purgeRunMetadata();
-          if (key === 'richHistory' && !next.richHistory) await purgeHistory();
+          if (!next.runMetadata) await purgeRunMetadata();
+          await purgeHistory();
         }
         prefs = next;
       });
@@ -710,14 +836,15 @@ browser.runtime.onMessage.addListener(
     }
 
     if (m.type === 'DELETE_ALL') {
-      // Capture the run's window before wiping storage so we can send the sidebar back to no-run
-      // (delete-all can come from the options page, not the sidebar).
-      const wid = (await loadRun())?.windowId;
-      await serialWrite(async () => {
+      const wid = await serialWrite(async () => {
+        // Capture the run's window on the same side of queued mutations as the wipe, so a
+        // concurrent start cannot leave its sidebar showing a run that Delete all removed.
+        const windowId = (await loadRun())?.windowId;
         // Both clears inside the serial section: post-M8 the run can live in storage.local, so a
         // queued saveRun must not re-populate local between the two clears.
         await browser.storage.session.clear();
         await browser.storage.local.clear();
+        return windowId;
       });
       if (wid !== undefined) await pushView(wid, { view: 'no-run' });
       return { ok: true };
@@ -759,14 +886,34 @@ browser.tabs.onActivated.addListener(async ({ windowId }) => {
 // if opted out, sweep any run/profile orphan a mid-flip crash left. The user re-opens the tabs via
 // the Run panel's Resume control (RESUME_RUN), which needs a gesture + a window to pin to.
 async function rehydratePersistedRunOnWake(): Promise<void> {
-  const prefs = await readStoragePrefs();
-  if (!prefs.profileStorage) {
-    await browser.storage.local.remove([KEY_RUN, KEY_PROFILE]);
-    return;
-  }
   await serialWrite(async () => {
-    const run = await loadRun();
-    if (run) await saveRun(rehydrateForResume(run));
+    // Unlike a verdict read, wake repair is destructive. If preferences cannot be read, abort
+    // and retain every durable copy rather than treating the failure as an opt-out.
+    const prefs = await readStoragePrefsStrict();
+    // The rejected archive key is cleanup-only and was never a production data path. A failure
+    // to remove it must not strand an otherwise resumable current run during browser startup.
+    await purgeHistory().catch(error => {
+      console.warn('[expurge] could not remove legacy history placeholder during wake', error);
+    });
+    if (!prefs.profileStorage) {
+      // The session copy remains authoritative while the browser is open. Only durable orphans
+      // are forbidden in the opted-out state.
+      await browser.storage.local.remove([KEY_RUN, KEY_PROFILE]);
+      return;
+    }
+
+    const run = selectRunForLoad(prefs, await readAllRunCopies());
+    if (!run) {
+      // In particular, this removes a completed local orphan while rich history is off. loadRun
+      // never returned it; wake repair is serialized so cleanup cannot race a toggle/save.
+      await browser.storage.local.remove(KEY_RUN);
+      await browser.storage.session.remove(KEY_RUN);
+      return;
+    }
+
+    // Use the locked preference snapshot. Re-reading through the fail-safe path here could route
+    // an opted-in checkpoint to session and purge local after a transient local-read failure.
+    await saveRunForPrefs(rehydrateForResume(run), prefs);
   });
 }
 

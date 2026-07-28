@@ -12,12 +12,11 @@ import { mergeStoragePrefs, DEFAULT_STORAGE_PREFS } from '../shared/storage-pref
 // A missing key coerces to all-OFF (ephemeral), so DELETE_ALL's local.clear() resets for free.
 const KEY_STORAGE_PREFS = 'expurge_storage_prefs';
 const KEY_RUN_METADATA = 'expurge_run_metadata'; // per-broker last-checked + result, no PII (Phase 2 writes it)
-const KEY_HISTORY = 'expurge_history';           // rich hits/drafts history (Phase 2 writes it)
+const KEY_HISTORY = 'expurge_history';           // rejected archive placeholder; cleanup only
 
 export async function readStoragePrefs(): Promise<StoragePrefs> {
   try {
-    const r = await browser.storage.local.get(KEY_STORAGE_PREFS);
-    return mergeStoragePrefs(r[KEY_STORAGE_PREFS]);
+    return await readStoragePrefsStrict();
   } catch {
     // Fail-safe: loadRun/saveRun call this on every run read/write, so a storage.local error must
     // not throw (that would reject a verdict write → no ACK → the sidebar retries forever, wedging
@@ -25,6 +24,14 @@ export async function readStoragePrefs(): Promise<StoragePrefs> {
     // fallback — rather than propagate.
     return DEFAULT_STORAGE_PREFS;
   }
+}
+
+// Destructive migrations/repair must distinguish "the user opted out" from "storage.local
+// could not be read". Those callers use the strict form so a transient read failure aborts
+// without purging durable data. Verdict/run reads use readStoragePrefs() above for no-wedge.
+export async function readStoragePrefsStrict(): Promise<StoragePrefs> {
+  const r = await browser.storage.local.get(KEY_STORAGE_PREFS);
+  return mergeStoragePrefs(r[KEY_STORAGE_PREFS]);
 }
 
 export async function writeStoragePrefs(prefs: StoragePrefs): Promise<void> {
@@ -37,6 +44,8 @@ export async function purgeRunMetadata(): Promise<void> {
   await browser.storage.local.remove(KEY_RUN_METADATA);
 }
 
+// Phase 2 keeps rich data in the lifecycle-routed expurge_run record, not a history archive.
+// Retain this cleanup for Phase 1/development builds that may have created the placeholder.
 export async function purgeHistory(): Promise<void> {
   await browser.storage.local.remove(KEY_HISTORY);
 }
