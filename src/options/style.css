@@ -645,12 +645,35 @@ textarea {
 .broker-coverage-row {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
+  gap: var(--s-4);
   padding: var(--s-2) 0;
   border-bottom: 1px solid var(--border);
   font-size: var(--fs-small);
 }
 .broker-coverage-row:last-child { border-bottom: none; }
+.broker-coverage-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.broker-coverage-name { color: var(--text); }
+.broker-last-scan {
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: var(--lh-small);
+}
+.broker-list-status {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s-2);
+  flex-shrink: 0;
+}
+.broker-list-status-label {
+  color: var(--text-faint);
+  font-size: 11px;
+}
 .broker-status-tag {
   font-family: var(--font-mono);
   font-size: var(--fs-mono);

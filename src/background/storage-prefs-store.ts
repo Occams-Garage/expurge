@@ -4,7 +4,8 @@
 // (imports the polyfill, touches storage.local) and is coverage-excluded like dataset-store.ts.
 
 import browser from 'webextension-polyfill';
-import type { StoragePrefs } from '../shared/types';
+import type { RunMetadata, StoragePrefs } from '../shared/types';
+import { coerceRunMetadata, mergeRunMetadata } from '../shared/persistence';
 import { mergeStoragePrefs, DEFAULT_STORAGE_PREFS } from '../shared/storage-prefs';
 
 // storage.local (durable). Kept separate from the options page's `expurge_prefs` (send-method),
@@ -36,6 +37,34 @@ export async function readStoragePrefsStrict(): Promise<StoragePrefs> {
 
 export async function writeStoragePrefs(prefs: StoragePrefs): Promise<void> {
   await browser.storage.local.set({ [KEY_STORAGE_PREFS]: prefs });
+}
+
+// UI reads are fail-closed: malformed values and storage errors both appear as no metadata.
+// The caller separately checks the opt-in, so a stale key is never exposed while opted out.
+export async function readRunMetadata(): Promise<RunMetadata> {
+  try {
+    const stored = await browser.storage.local.get(KEY_RUN_METADATA);
+    return coerceRunMetadata(stored[KEY_RUN_METADATA]);
+  } catch {
+    return {};
+  }
+}
+
+// Sanitize at the I/O boundary even when the caller holds a RunMetadata type. This guarantees
+// the durable key can contain only broker id → { checkedAt, result } records.
+export async function writeRunMetadata(metadata: RunMetadata): Promise<void> {
+  await browser.storage.local.set({
+    [KEY_RUN_METADATA]: coerceRunMetadata(metadata),
+  });
+}
+
+// Merge a completed run's broker summaries without discarding brokers absent from that run.
+// This strict read-modify-write may throw; background callers isolate it as ancillary I/O.
+export async function mergeStoredRunMetadata(newest: RunMetadata): Promise<RunMetadata> {
+  const stored = await browser.storage.local.get(KEY_RUN_METADATA);
+  const merged = mergeRunMetadata(stored[KEY_RUN_METADATA], newest);
+  await writeRunMetadata(merged);
+  return merged;
 }
 
 // Drop the durable slices when their opt-in is turned off. Removing an absent key is a no-op,

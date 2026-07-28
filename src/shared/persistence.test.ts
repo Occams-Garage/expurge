@@ -16,6 +16,7 @@ import {
   isStoragePromptEligible,
   markStoragePromptSeen,
   mergeRunMetadata,
+  mergeRunMetadataForRun,
   mergeStoragePromptsSeen,
   runStorageDestination,
   selectRunForLoad,
@@ -403,6 +404,44 @@ describe('run metadata coercion and merge', () => {
       refreshed: { checkedAt: COMPLETE_AT, result: 'hit' },
       new: { checkedAt: COMPLETE_AT, result: 'skipped' },
     });
+  });
+
+  it('backfills a completed run while preserving brokers absent from it', () => {
+    const run = {
+      ...makeRun([
+        completeItem({ id: 'refreshed:primary', brokerId: 'refreshed', verdict: 'hit' }),
+        completeItem({ id: 'new:primary', brokerId: 'new', verdict: 'clear' }),
+      ]),
+      completedAt: COMPLETE_AT,
+    };
+    expect(mergeRunMetadataForRun(oldMetadata, run)).toEqual({
+      old: oldMetadata.old,
+      refreshed: { checkedAt: COMPLETE_AT, result: 'hit' },
+      new: { checkedAt: COMPLETE_AT, result: 'clear' },
+    });
+  });
+
+  it('updates a re-verdict result without changing the stable checkedAt', () => {
+    const run = {
+      ...makeRun([completeItem({ brokerId: 'refreshed', verdict: 'clear' })]),
+      completedAt: COMPLETE_AT,
+    };
+    const afterReverdict = {
+      ...run,
+      items: [completeItem({ brokerId: 'refreshed', verdict: 'unknown' })],
+    };
+
+    const first = mergeRunMetadataForRun({}, run);
+    expect(mergeRunMetadataForRun(first, afterReverdict)).toEqual({
+      refreshed: { checkedAt: COMPLETE_AT, result: 'unknown' },
+    });
+  });
+
+  it('leaves stored metadata unchanged for incomplete or unstamped runs', () => {
+    const incomplete = makeRun([makeItem({ status: 'open' })]);
+    const unstamped = makeRun([completeItem({ verdict: 'hit' })]);
+    expect(mergeRunMetadataForRun(oldMetadata, incomplete)).toEqual(oldMetadata);
+    expect(mergeRunMetadataForRun(oldMetadata, unstamped)).toEqual(oldMetadata);
   });
 
   it.each([undefined, null, true, 42, 'metadata', [], new Date()] as unknown[])(

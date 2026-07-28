@@ -183,6 +183,12 @@ export function mergeRunMetadata(stored: unknown, newest: unknown): RunMetadata 
   ]);
 }
 
+// Apply one run to an unknown stored value. Incomplete, unstamped, and all-non-attempt runs
+// derive no entries, so the existing broker summaries remain unchanged.
+export function mergeRunMetadataForRun(stored: unknown, run: RunState): RunMetadata {
+  return mergeRunMetadata(stored, deriveRunMetadata(run));
+}
+
 // Missing and malformed values default independently to false. This deliberately ignores all
 // unknown keys so the normalized value contains only the three non-sensitive booleans.
 export function mergeStoragePromptsSeen(raw: unknown): StoragePromptsSeen {

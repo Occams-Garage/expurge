@@ -1,5 +1,5 @@
 import browser from 'webextension-polyfill';
-import type { Profile, RunState, WorkItem, StoragePrefs } from '../shared/types';
+import type { Profile, RunMetadata, RunState, WorkItem, StoragePrefs } from '../shared/types';
 import type { Draft, EmailDraft, FormDraft } from '../shared/templates';
 import { mailtoUrl, toEml, toCopyText } from '../shared/templates';
 import { normalizeAkas } from '../shared/transforms';
@@ -7,6 +7,7 @@ import { parseSessionImport } from '../shared/import-export';
 import { DEFAULT_STORAGE_PREFS } from '../shared/storage-prefs';
 import { BROKERS, getBroker } from '../shared/brokers';
 import { DATASET_HOST_PATTERN, type DatasetStatus, type CheckResult } from '../shared/dataset';
+import { formatRunMetadataLine } from '../shared/run-metadata-display';
 import { progressOf, isComplete, isMissingSkip } from '../background/coordinator';
 import {
   buildAkaRow,
@@ -30,6 +31,7 @@ let sendMethod: SendMethod = 'mailto';
 let pollHandle: number | null = null;
 let lastResultsSig = ''; // results view signature of the last render — gates the 2s poll
 let storagePrefs: StoragePrefs = { ...DEFAULT_STORAGE_PREFS };
+let runMetadata: RunMetadata = {};
 let pendingImportProfile: Profile | null = null; // stashed between file-read and warn-and-overwrite confirm
 
 // ── section routing ──────────────────────────────────────────────────────────
@@ -868,6 +870,13 @@ async function loadStoragePrefs(): Promise<void> {
   reflectStoragePrefs();
 }
 
+async function loadRunMetadata(): Promise<void> {
+  const res = (await browser.runtime.sendMessage({ type: 'GET_RUN_METADATA' })) as {
+    metadata?: RunMetadata;
+  };
+  runMetadata = res.metadata ?? {};
+}
+
 function reflectStoragePrefs(): void {
   (document.getElementById('optin-profile-storage') as HTMLInputElement).checked = storagePrefs.profileStorage;
 }
@@ -942,12 +951,59 @@ function brokerOrigins(): browser.Manifest.MatchPattern[] {
 }
 
 function renderBrokerCoverage(): void {
-  const rows = BROKERS.map(b => `
-    <div class="broker-coverage-row">
-      <span>${esc(b.name)}</span>
-      <span class="broker-status-tag broker-status-${b.status}">${b.status}</span>
-    </div>`).join('');
-  document.getElementById('broker-list')!.innerHTML = rows;
+  // Iterate the known broker list, not metadata keys: a stale/remote-only id never creates an
+  // untrusted row. Build with textContent so neither stored metadata nor a future remote broker
+  // name can become markup. The two lines are intentionally distinct—dataset availability is not
+  // a scan.
+  const rows = document.createDocumentFragment();
+  for (const b of BROKERS) {
+    const lastScan = storagePrefs.runMetadata && runMetadata[b.id]
+      ? formatRunMetadataLine(runMetadata[b.id])
+      : null;
+
+    const row = document.createElement('div');
+    row.className = 'broker-coverage-row';
+
+    const main = document.createElement('div');
+    main.className = 'broker-coverage-main';
+    const name = document.createElement('span');
+    name.className = 'broker-coverage-name';
+    name.textContent = b.name;
+    main.append(name);
+    if (lastScan) {
+      const scan = document.createElement('span');
+      scan.className = 'broker-last-scan';
+      scan.textContent = lastScan;
+      main.append(scan);
+    }
+
+    const listStatus = document.createElement('span');
+    listStatus.className = 'broker-list-status';
+    const listStatusLabel = document.createElement('span');
+    listStatusLabel.className = 'broker-list-status-label';
+    listStatusLabel.textContent = 'Broker list';
+    const status = document.createElement('span');
+    status.classList.add('broker-status-tag', `broker-status-${b.status}`);
+    status.textContent = b.status;
+    listStatus.append(listStatusLabel, status);
+
+    row.append(main, listStatus);
+    rows.append(row);
+  }
+  document.getElementById('broker-list')!.replaceChildren(rows);
+}
+
+async function refreshBrokerCoverage(): Promise<void> {
+  // Fail closed while refreshing: another options tab may have turned the opt-in off, and a
+  // failed/slow message must not leave an old saved scan visible under a stale in-memory pref.
+  runMetadata = {};
+  renderBrokerCoverage();
+  try {
+    await loadRunMetadata();
+  } catch (error) {
+    console.error('[expurge] could not refresh run metadata', error);
+  }
+  renderBrokerCoverage();
 }
 
 // ── signed dataset updates (M7) ────────────────────────────────────────────────
@@ -1080,7 +1136,9 @@ async function handleDeleteAll(): Promise<void> {
   // all-OFF ephemeral default. Re-sync the in-memory mirror + checkbox so they can't keep showing a
   // stale ON (which would route a re-entered profile to storage.session and lose it on close).
   storagePrefs = { ...DEFAULT_STORAGE_PREFS };
+  runMetadata = {};
   reflectStoragePrefs();
+  renderBrokerCoverage();
   lastResultsSig = ''; // run cleared — drop the early-out cache so the next render rebuilds
   stopPolling();
   (document.getElementById('profile-form') as HTMLFormElement).reset();
@@ -1190,7 +1248,7 @@ async function init(): Promise<void> {
 
   await loadPrefs();
   await loadStoragePrefs();
-  renderBrokerCoverage();
+  await refreshBrokerCoverage();
 
   // Dataset update panel. If a weekly auto-fetch is due (opted in + permitted + configured), run
   // it now — this page opening IS the lazy trigger (plan §6.1) — then re-render the status line.
@@ -1223,6 +1281,7 @@ document.querySelectorAll<HTMLElement>('.nav-btn').forEach(btn => {
     showSection(section);
     if (section === 'run') showRunDisplayState(runDisplayState(currentProfile, currentRun), currentRun);
     if (section === 'results' && currentRun) renderResults(currentRun);
+    if (section === 'settings') refreshBrokerCoverage().catch(console.error);
   });
 });
 

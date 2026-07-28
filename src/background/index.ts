@@ -37,14 +37,18 @@ import {
   setAutoFetch,
 } from './dataset-store';
 import {
+  readRunMetadata,
   readStoragePrefs,
   readStoragePrefsStrict,
+  mergeStoredRunMetadata,
+  writeRunMetadata,
   writeStoragePrefs,
   purgeRunMetadata,
   purgeHistory,
 } from './storage-prefs-store';
 import { applyStorageOptIn } from '../shared/storage-prefs';
 import {
+  deriveRunMetadata,
   runStorageDestination,
   selectRunForLoad,
   stampCompletedAt,
@@ -240,6 +244,43 @@ async function migrateStorageOptIn(
   await purgeHistory();
 }
 
+// Ancillary persistence boundary: call only after the run's critical save/cleanup and UI
+// advancement. Every preference/read/merge/write failure is swallowed here so metadata can never
+// reject a verdict ACK or wedge the run. The merge store uses a strict existing-value read, so a
+// transient read failure also cannot overwrite prior brokers with an empty fallback.
+async function persistRunMetadataBestEffort(run: RunState): Promise<void> {
+  try {
+    const newest = deriveRunMetadata(run);
+    if (Object.keys(newest).length === 0) return;
+    if (!(await readStoragePrefs()).runMetadata) return;
+    await mergeStoredRunMetadata(newest);
+  } catch (error) {
+    console.warn('[expurge] could not persist run metadata', error);
+  }
+}
+
+// Toggle-on staging is deliberately strict and runs before the preference flip: if an eligible
+// completed run cannot be backfilled, leave the old OFF preference authoritative. No createdAt
+// fallback is allowed; deriveRunMetadata requires the stable completedAt stamp.
+async function stageCurrentRunMetadataBackfill(prefs: StoragePrefs): Promise<void> {
+  const run = await loadRunForPrefs(prefs);
+  const newest = run ? deriveRunMetadata(run) : {};
+
+  if (!prefs.runMetadata) {
+    // OFF means the whole key is absent. Replace (or remove) rather than merge so an orphan left
+    // by an interrupted earlier enable can never become visible on this flip.
+    if (Object.keys(newest).length === 0) {
+      await purgeRunMetadata();
+    } else {
+      await writeRunMetadata(newest);
+    }
+    return;
+  }
+
+  // A repeated ON request is a repair/backfill and must preserve other brokers already saved.
+  if (Object.keys(newest).length > 0) await mergeStoredRunMetadata(newest);
+}
+
 // ── badge ─────────────────────────────────────────────────────────────────────
 
 async function updateBadge(run: RunState): Promise<void> {
@@ -311,6 +352,7 @@ async function handleStartRun(profile: Profile, windowId?: number): Promise<void
     // sent SIDEBAR_GET_STATE before the run was saved (→ got no-run). Push the real view now
     // that the first batch is open so it corrects itself without waiting for a focus change.
     await pushActiveView(afterBatch);
+    await persistRunMetadataBestEffort(afterBatch);
   });
 }
 
@@ -354,6 +396,7 @@ async function handleVerdict(itemId: string, verdict: Verdict, explicitListingUr
     if (!target) return;
     if (target.status === 'verdicted') {
       await saveRun(run);
+      await persistRunMetadataBestEffort(run);
       return;
     }
 
@@ -380,6 +423,7 @@ async function handleVerdict(itemId: string, verdict: Verdict, explicitListingUr
     if (brokerTabId !== null) {
       await browser.tabs.remove(brokerTabId).catch(() => {});
     }
+    await persistRunMetadataBestEffort(updated);
   });
 }
 
@@ -444,6 +488,7 @@ async function handleReverdict(itemId: string, verdict: Verdict, listingUrl?: st
     if (updated.windowId !== undefined && isComplete(updated)) {
       await pushView(updated.windowId, deriveView(updated, null, BROKERS));
     }
+    await persistRunMetadataBestEffort(updated);
   });
 }
 
@@ -463,6 +508,7 @@ async function handleSkip(itemId: string, skipReason: SkipReason, tabId?: number
     }
 
     await advance(updated);
+    await persistRunMetadataBestEffort(updated);
   });
 }
 
@@ -488,6 +534,7 @@ async function handleStopRun(): Promise<void> {
     if (updated.windowId !== undefined) {
       await pushView(updated.windowId, deriveView(updated, null, BROKERS));
     }
+    await persistRunMetadataBestEffort(updated);
   });
 }
 
@@ -806,6 +853,16 @@ browser.runtime.onMessage.addListener(
       return { prefs: await readStoragePrefs() };
     }
 
+    if (m.type === 'GET_RUN_METADATA') {
+      // Serialize the preference gate + metadata snapshot against completion writes and toggles.
+      // A stale key is deliberately invisible while the opt-in is off.
+      const metadata = await serialWrite(async () => {
+        const prefs = await readStoragePrefs();
+        return prefs.runMetadata ? readRunMetadata() : {};
+      });
+      return { metadata };
+    }
+
     if (m.type === 'SET_STORAGE_OPTIN') {
       const key = m.key as keyof StoragePrefs;
       const on = m.on as boolean;
@@ -818,11 +875,20 @@ browser.runtime.onMessage.addListener(
         if (key === 'profileStorage' || key === 'richHistory') {
           await migrateStorageOptIn(prev, next, key);
         } else {
-          // Run metadata is area-independent. Slice 3 owns writes/backfill; Phase 1 already
-          // guarantees immediate purge when the user turns it off.
-          await writeStoragePrefs(next);
-          if (!next.runMetadata) await purgeRunMetadata();
-          await purgeHistory();
+          // Run metadata is area-independent: never move profile/run. ON stages an eligible
+          // current-run backfill before flipping the preference; OFF removes the whole key first.
+          if (next.runMetadata) {
+            await stageCurrentRunMetadataBackfill(prev);
+            await writeStoragePrefs(next);
+          } else {
+            await purgeRunMetadata();
+            await writeStoragePrefs(next);
+          }
+          // Cleanup-only legacy key; failure must not make a successfully applied metadata toggle
+          // appear to have failed after its preference already landed.
+          await purgeHistory().catch(error => {
+            console.warn('[expurge] could not remove legacy history placeholder', error);
+          });
         }
         prefs = next;
       });
